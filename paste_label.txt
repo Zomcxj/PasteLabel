@@ -1,0 +1,4 @@
+barrel   锥桶
+cbarrel  圆桶
+carton   纸箱
+trisign  三角牌

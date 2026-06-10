@@ -4,17 +4,29 @@
 
 import os
 import json
-from PyQt5.QtCore import QRectF
+from typing import TYPE_CHECKING
+from PyQt5.QtCore import QRectF, pyqtSignal, QObject
+from PyQt5.QtGui import QPixmap, QPainter, QColor
+from PyQt5.QtWidgets import QMessageBox, QApplication
 from .config import LABELME_VERSION, DEFAULT_PREFIX
+from .utils import PathUtils
+
+if TYPE_CHECKING:
+    from .editor_protocol import EditorProtocol
 
 
-class SaveManager:
+class SaveManager(QObject):
     """保存管理器 - 管理贴图的保存操作"""
-    
-    def __init__(self, editor):
+
+    # 信号：保存完成后通知编辑器刷新 UI
+    save_completed = pyqtSignal()
+    label_list_changed = pyqtSignal()
+
+    def __init__(self, editor: "EditorProtocol", parent=None):
         """
-        :param editor: ImageEditor 实例引用
+        :param editor: 实现 EditorProtocol 的编辑器实例
         """
+        super().__init__(parent)
         self.editor = editor
     
     def get_save_info(self):
@@ -25,9 +37,7 @@ class SaveManager:
         original_file_path = self.editor.background_images[self.editor.current_background_index]
         original_file_name = os.path.basename(original_file_path)
         
-        background_dir = os.path.dirname(original_file_path)
-        output_dir = f"{background_dir}_paste_output"
-        os.makedirs(output_dir, exist_ok=True)
+        output_dir = PathUtils.get_output_dir(original_file_path)
         
         prefix = ""
         if hasattr(self.editor, 'prefix_checkbox') and self.editor.prefix_checkbox.isChecked():
@@ -42,8 +52,6 @@ class SaveManager:
     
     def auto_save_current_canvas(self):
         """自动保存当前画布"""
-        from PyQt5.QtGui import QPixmap, QPainter, QColor
-        
         if self.editor.current_background is None or not self.editor.canvas_items:
             return
         
@@ -68,8 +76,6 @@ class SaveManager:
     
     def save_canvas(self):
         """保存当前画布"""
-        from PyQt5.QtWidgets import QMessageBox
-        from PyQt5.QtGui import QPixmap, QPainter, QColor
         from .dialogs import SaveTipDialog
         
         if self.editor.current_background is None:
@@ -100,8 +106,6 @@ class SaveManager:
     
     def save_all_canvas(self):
         """保存所有画布"""
-        from PyQt5.QtWidgets import QMessageBox, QApplication
-        from PyQt5.QtGui import QPixmap, QPainter, QColor
         from .dialogs import ProgressDialogFactory
         
         if not self.editor.background_images:
@@ -133,9 +137,7 @@ class SaveManager:
             temp_canvas_items = self.editor.canvas_items_dict.get(i, [])
             
             original_file_name = os.path.basename(file_path)
-            background_dir = os.path.dirname(file_path)
-            output_dir = f"{background_dir}_paste_output"
-            os.makedirs(output_dir, exist_ok=True)
+            output_dir = PathUtils.get_output_dir(file_path)
             
             prefix = ""
             if hasattr(self.editor, 'prefix_checkbox') and self.editor.prefix_checkbox.isChecked():
@@ -172,7 +174,6 @@ class SaveManager:
         progress_dialog.close()
         
         # 显示保存结果
-        from PyQt5.QtWidgets import QMessageBox
         if saved_count > 0:
             QMessageBox.information(
                 self.editor, "保存完成",
@@ -188,12 +189,23 @@ class SaveManager:
             self.editor.current_background = original_background
             self.editor.current_background_index = original_index
             self.editor.canvas_items = original_canvas_items
-            self.editor.background_list.setCurrentRow(original_index)
-            self.editor.update_file_count()
-            self.editor.canvas.update()
+            self.save_completed.emit()
         
-        self.editor.update_label_list()
+        self.label_list_changed.emit()
     
+    @staticmethod
+    def _build_labelme_shape(label, x, y, w, h):
+        """构建 LabelMe 格式的 shape 字典"""
+        points = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+        return {
+            "label": label,
+            "points": points,
+            "group_id": None,
+            "description": "",
+            "shape_type": "rectangle",
+            "flags": {}
+        }
+
     def save_json(self, image_path, image_name, label_prefix, canvas_items=None,
                  image_width=None, image_height=None, current_index=None):
         """生成并保存 JSON 文件"""
@@ -220,34 +232,17 @@ class SaveManager:
         
         # 添加贴图
         for pixmap, rect, label in items_to_use:
-            x, y, w, h = rect.x(), rect.y(), rect.width(), rect.height()
-            points = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
-            
-            shape = {
-                "label": label,
-                "points": points,
-                "group_id": None,
-                "description": "",
-                "shape_type": "rectangle",
-                "flags": {}
-            }
+            shape = self._build_labelme_shape(
+                label, rect.x(), rect.y(), rect.width(), rect.height()
+            )
             json_data["shapes"].append(shape)
         
         # 添加检测框
         if index_to_use >= 0 and index_to_use in self.editor.detection_boxes_dict:
             for box in self.editor.detection_boxes_dict[index_to_use]:
-                x, y, w, h = box['x'], box['y'], box['width'], box['height']
-                label = box['label']
-                points = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
-                
-                shape = {
-                    "label": label,
-                    "points": points,
-                    "group_id": None,
-                    "description": "",
-                    "shape_type": "rectangle",
-                    "flags": {}
-                }
+                shape = self._build_labelme_shape(
+                    box['label'], box['x'], box['y'], box['width'], box['height']
+                )
                 json_data["shapes"].append(shape)
         
         try:

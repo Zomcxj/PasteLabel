@@ -2,16 +2,28 @@
 标签管理器模块 - 管理标签的增删改查操作
 """
 
+from typing import TYPE_CHECKING
+from PyQt5.QtCore import pyqtSignal, QObject
 from PyQt5.QtWidgets import QMenu, QAction, QInputDialog, QMessageBox, QListWidgetItem
 
+from .utils import extract_label_name
 
-class LabelManager:
+if TYPE_CHECKING:
+    from .editor_protocol import EditorProtocol
+
+
+class LabelManager(QObject):
     """标签管理器 - 管理全局标签和贴图标签"""
-    
-    def __init__(self, editor):
+
+    # 信号：数据变更后通知编辑器刷新 UI
+    data_changed = pyqtSignal()
+    label_list_changed = pyqtSignal()
+
+    def __init__(self, editor: "EditorProtocol", parent=None):
         """
-        :param editor: ImageEditor 实例引用
+        :param editor: 实现 EditorProtocol 的编辑器实例
         """
+        super().__init__(parent)
         self.editor = editor
     
     # ========== 贴图标签管理 ==========
@@ -94,7 +106,7 @@ class LabelManager:
                             updated_items.append(item)
                     self.editor.canvas_items_dict[i] = updated_items
             
-            self.editor.canvas.update()
+            self.data_changed.emit()
     
     def delete_paste_label(self):
         """删除贴图标签"""
@@ -131,7 +143,7 @@ class LabelManager:
                             new_items.append(item)
                     self.editor.canvas_items_dict[i] = new_items
             
-            self.editor.canvas.update()
+            self.data_changed.emit()
     
     # ========== 检测框标签管理 ==========
     
@@ -162,10 +174,7 @@ class LabelManager:
         
         # 从列表中获取旧标签名称（去除计数部分）
         old_label_text = selected_items[0].text()
-        if " (" in old_label_text:
-            old_label = old_label_text.split(" (")[0]
-        else:
-            old_label = old_label_text
+        old_label = extract_label_name(old_label_text)
         
         # 输入新标签名称
         new_label, ok = QInputDialog.getText(
@@ -191,8 +200,8 @@ class LabelManager:
                 self.editor.global_labels.remove(old_label)
                 self.editor.global_labels.add(new_label)
             
-            self.editor.update_label_list()
-            self.editor.canvas.update()
+            self.label_list_changed.emit()
+            self.data_changed.emit()
     
     def delete_label(self):
         """删除标签"""
@@ -201,10 +210,7 @@ class LabelManager:
             return
         
         label_text = selected_items[0].text()
-        if " (" in label_text:
-            label_to_delete = label_text.split(" (")[0]
-        else:
-            label_to_delete = label_text
+        label_to_delete = extract_label_name(label_text)
         
         reply = QMessageBox.question(
             self.editor, "确认删除",
@@ -230,8 +236,8 @@ class LabelManager:
             if label_to_delete in self.editor.global_labels:
                 self.editor.global_labels.remove(label_to_delete)
             
-            self.editor.update_label_list()
-            self.editor.canvas.update()
+            self.label_list_changed.emit()
+            self.data_changed.emit()
     
     def add_label(self, label_name=None):
         """添加标签"""
@@ -245,7 +251,7 @@ class LabelManager:
         
         if label_name not in self.editor.global_labels:
             self.editor.global_labels.add(label_name)
-            self.editor.update_label_list()
+            self.label_list_changed.emit()
     
     def update_global_labels(self):
         """更新全局标签集合"""

@@ -8,6 +8,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 
+from .utils import extract_label_name
+
 
 class LabelSelectionDialog(QDialog):
     """标签选择对话框"""
@@ -63,9 +65,7 @@ class LabelSelectionDialog(QDialog):
     @staticmethod
     def _extract_pure_label(label_text):
         """从标签文本中提取纯标签名称"""
-        if " (" in label_text:
-            return label_text.split(" (")[0]
-        return label_text
+        return extract_label_name(label_text)
     
     @staticmethod
     def _get_button_style():
@@ -188,10 +188,7 @@ class SaveTipDialog:
         """
         from PyQt5.QtWidgets import QLabel
         from PyQt5.QtCore import QTimer
-        try:
-            from .utils import PathUtils
-        except ImportError:
-            from utils import PathUtils
+        from .utils import PathUtils
         
         formatted_file_path = PathUtils.to_display_path(file_path)
         

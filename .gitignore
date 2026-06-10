@@ -6,6 +6,7 @@ __pycache__/
 dist/
 build/
 *.spec
+.pytest_cache/
 
 .atomcode/
 .vscode/
@@ -21,4 +22,7 @@ Thumbs.db
 images/
 x-anylabeling-matting/
 images_paste_output/
+
+# Logs
+crash_log.txt
 

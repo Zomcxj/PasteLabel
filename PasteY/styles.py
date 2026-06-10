@@ -121,6 +121,43 @@ def get_draw_button_style():
     """
 
 
+def get_icon_button_style():
+    """获取图标按钮样式（工具栏透明按钮）"""
+    return """
+        QPushButton {
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            padding: 1px;
+        }
+        QPushButton:hover {
+            background-color: rgba(33, 150, 243, 0.1);
+            border-color: rgba(33, 150, 243, 0.3);
+        }
+        QPushButton:pressed {
+            background-color: rgba(33, 150, 243, 0.2);
+            border-color: rgba(33, 150, 243, 0.5);
+        }
+    """
+
+
+def get_prefix_input_focus_style(text_color="black"):
+    """获取前缀输入框焦点样式"""
+    return f"""
+        QLineEdit {{
+            border: 1px solid #E0E0E0;
+            border-radius: 8px;
+            padding: 4px 8px;
+            font-size: 12px;
+            background-color: white;
+            color: {text_color};
+        }}
+        QLineEdit:hover {{
+            border-color: #BBDEFB;
+        }}
+    """
+
+
 def _lighten_color(color_str):
     """加亮颜色（简化实现）"""
     return "#F5F5F5"

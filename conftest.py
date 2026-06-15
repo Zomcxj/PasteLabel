@@ -335,6 +335,16 @@ qtwidgets.QMenu = type('QMenu', (_MockQWidget,), {
     'exec_': lambda self, *a: None,
 })
 qtwidgets.QAction = type('QAction', (), {'__init__': lambda self, *a: None})
+qtwidgets.QGroupBox = type('QGroupBox', (_MockQWidget,), {
+    'setStyleSheet': lambda self, *a: None,
+})
+qtwidgets.QFrame = type('QFrame', (_MockQWidget,), {
+    'VLine': 1,
+    'Sunken': 3,
+    'setFrameShape': lambda self, *a: None,
+    'setFrameShadow': lambda self, *a: None,
+    'setFixedHeight': lambda self, *a: None,
+})
 
 # 注册模块
 sys.modules['PyQt5'] = types.ModuleType('PyQt5')

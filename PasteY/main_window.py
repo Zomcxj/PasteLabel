@@ -13,6 +13,8 @@ from .ui_builder import UIBuilderMixin
 from .image_loader import ImageLoaderMixin
 from .paste_engine import PasteEngineMixin
 from .event_handler import EventHandlerMixin
+from .theme import ThemeManager
+from .dwm import set_titlebar_dark, is_available
 
 
 class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
@@ -21,7 +23,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("贴图标注工具")
+        self.setWindowTitle("PasteLabel")
         self.resize(WINDOW_CONFIG['default_width'], WINDOW_CONFIG['default_height'])
 
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -29,6 +31,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
         self._init_data()
         self.init_ui()
+        self._apply_theme()
         self._connect_manager_signals()
         self.update_label_list()
         self.installEventFilterRecursive(self)
@@ -111,6 +114,110 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.update_file_count()
         self.canvas.update()
 
+    def showEvent(self, event):
+        """窗口显示后设置标题栏颜色（winId 必须在 show 之后获取）"""
+        super().showEvent(event)
+        is_dark = ThemeManager.get_mode().value == "dark"
+        hwnd = int(self.winId())
+        set_titlebar_dark(hwnd, is_dark)
+
+    def _apply_theme(self):
+        """应用当前主题样式"""
+        app = QApplication.instance()
+        app.setStyleSheet(ThemeManager.get_stylesheet())
+        if hasattr(self, 'theme_btn'):
+            is_dark = ThemeManager.get_mode().value == "dark"
+            self.theme_btn.setText("🌙" if is_dark else "☀")
+        if hasattr(self, 'prefix_input'):
+            has_text = bool(self.prefix_input.text().strip())
+            self.prefix_input.setProperty("placeholder", not has_text)
+            self.prefix_input.style().unpolish(self.prefix_input)
+            self.prefix_input.style().polish(self.prefix_input)
+        self.canvas.update()
+
+    def toggle_theme(self):
+        """切换主题"""
+        ThemeManager.toggle()
+        self._apply_theme()
+        is_dark = ThemeManager.get_mode().value == "dark"
+        hwnd = int(self.winId())
+        set_titlebar_dark(hwnd, is_dark)
+        mode_name = "深色" if is_dark else "浅色"
+        self.status_label.setText(f"已切换到{mode_name}主题")
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(2000, lambda: self.status_label.setText(""))
+
+    def toggle_language(self):
+        """切换中英文"""
+        from . import i18n
+        i18n.toggle_lang()
+        self._refresh_ui_texts()
+        lang_name = "中文" if i18n.get_lang() == "zh" else "English"
+        self.status_label.setText(f"Language: {lang_name}")
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(2000, lambda: self.status_label.setText(""))
+
+    def _refresh_ui_texts(self):
+        """刷新所有界面文字"""
+        from . import i18n
+        tr = i18n.t
+        self.draw_box_btn.setText(tr("绘制BOX"))
+        self.draw_box_btn.setToolTip(tr("绘制检测框"))
+        self.auto_save_checkbox.setText(tr("自动保存"))
+        self.show_labels_checkbox.setText(tr("显示BOX"))
+        self.show_label_names_checkbox.setText(tr("显示Label"))
+        self.auto_label_checkbox.setText(tr("贴图标签"))
+        self.prefix_checkbox.setText(tr("添加文件名前缀"))
+        self.random_paste_btn.setText(tr("随机贴图"))
+        self.batch_paste_btn.setText(tr("一键贴图"))
+        is_thumb = self.is_thumbnail_mode
+        self.toggle_view_btn.setText(tr("列表视图") if is_thumb else tr("缩略视图"))
+        self.clear_btn.setText(tr("清空画布"))
+        self.save_btn.setText(tr("保存图片"))
+        self.save_all_btn.setText(tr("全部保存"))
+        self.lang_btn.setToolTip(tr("切换中英文"))
+        self.theme_btn.setToolTip(tr("切换深色/浅色主题"))
+        if hasattr(self, 'bg_list_group'):
+            self.bg_list_group.setTitle(tr("背景图列表"))
+        if hasattr(self, 'label_group'):
+            self.label_group.setTitle(tr("标签管理"))
+        if hasattr(self, 'paste_group'):
+            self.paste_group.setTitle(tr("贴图列表"))
+        if hasattr(self, 'bg_label_header_lbl'):
+            self.bg_label_header_lbl.setText(tr("背景图标签"))
+        if hasattr(self, 'paste_label_header_lbl'):
+            self.paste_label_header_lbl.setText(tr("贴图标签_list"))
+        if hasattr(self, 'bg_lbl'):
+            self.bg_lbl.setText(tr("背景图:"))
+        if hasattr(self, 'paste_lbl'):
+            self.paste_lbl.setText(tr("贴图:"))
+        if hasattr(self, 'label_lbl'):
+            self.label_lbl.setText(tr("标签:"))
+        if hasattr(self, 'paste_count_lbl'):
+            self.paste_count_lbl.setText(tr("贴图个数:"))
+        if hasattr(self, 'size_lbl'):
+            self.size_lbl.setText(tr("短边尺寸:"))
+        if hasattr(self, 'upload_a_btn'):
+            self.upload_a_btn.setToolTip(tr("选择背景图片"))
+        if hasattr(self, 'load_folder_btn'):
+            self.load_folder_btn.setToolTip(tr("加载文件夹图片"))
+        if hasattr(self, 'upload_b_btn'):
+            self.upload_b_btn.setToolTip(tr("选择贴图"))
+        if hasattr(self, 'load_small_folder_btn'):
+            self.load_small_folder_btn.setToolTip(tr("加载贴图文件夹"))
+        if hasattr(self, 'upload_paste_label_btn'):
+            self.upload_paste_label_btn.setToolTip(tr("选择标签文件"))
+        if hasattr(self, 'random_paste_btn'):
+            self.random_paste_btn.setToolTip(tr("随机贴图"))
+        if hasattr(self, 'batch_paste_btn'):
+            self.batch_paste_btn.setToolTip(tr("一键贴图"))
+        if hasattr(self, 'clear_btn'):
+            self.clear_btn.setToolTip(tr("清空画布"))
+        if hasattr(self, 'save_btn'):
+            self.save_btn.setToolTip(tr("保存图片"))
+        if hasattr(self, 'save_all_btn'):
+            self.save_all_btn.setToolTip(tr("全部保存"))
+
 
 # 程序入口
 def main():
@@ -121,6 +228,18 @@ def main():
     warnings.simplefilter("ignore", DeprecationWarning)
 
     app = QApplication(sys.argv)
+
+    from PyQt5.QtGui import QFontDatabase
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    font_dir = os.path.join(base, "ico_image", "fonts")
+    for name in ["JetBrainsMono-Regular.ttf", "JetBrainsMono-Medium.ttf", "JetBrainsMono-Bold.ttf"]:
+        fpath = os.path.join(font_dir, name)
+        if os.path.exists(fpath):
+            QFontDatabase.addApplicationFont(fpath)
+
     editor = ImageEditor()
     editor.show()
     sys.exit(app.exec_())

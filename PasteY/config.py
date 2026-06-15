@@ -84,3 +84,8 @@ RANDOM_POSITION_CONFIG = {
 AUTO_SAVE_CONFIG = {
     'enabled': False,  # 默认不启用自动保存
 }
+
+# 主题配置
+THEME_CONFIG = {
+    'default_mode': 'light',  # 默认主题: 'light' 或 'dark'
+}

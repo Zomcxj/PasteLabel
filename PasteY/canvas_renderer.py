@@ -5,6 +5,7 @@ from PyQt5.QtGui import QPainter, QPixmap, QColor, QPen, QFontMetrics
 from PyQt5.QtCore import Qt, QPointF, QRectF
 
 from .config import DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG
+from .theme import ThemeManager
 
 
 class CanvasRendererMixin:
@@ -15,12 +16,17 @@ class CanvasRendererMixin:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
+        t = ThemeManager.get_theme()
+        bg_color = t['canvas_bg']
+        r = int(bg_color[1:3], 16)
+        g = int(bg_color[3:5], 16)
+        b = int(bg_color[5:7], 16)
+        painter.fillRect(self.rect(), QColor(r, g, b))
+
         background_rect = self.get_background_rect()
 
         if self.parent.current_background is not None and background_rect:
             self._draw_background(painter, background_rect)
-        else:
-            painter.fillRect(self.rect(), QColor(230, 230, 230))
 
         if background_rect:
             self._draw_paste_items(painter, background_rect)

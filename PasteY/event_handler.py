@@ -13,6 +13,8 @@ class EventHandlerMixin:
 
     def keyPressEvent(self, event):
         """键盘按下事件"""
+        modifiers = event.modifiers()
+
         if event.key() == Qt.Key_A:
             self.switch_background(-1)
         elif event.key() == Qt.Key_D:
@@ -35,7 +37,7 @@ class EventHandlerMixin:
                 self.canvas.temp_draw_box = None
                 self.canvas.setCursor(Qt.ArrowCursor)
                 if hasattr(self, 'draw_box_btn'):
-                    self.draw_box_btn.setText("绘制 BOX(W)")
+                    self.draw_box_btn.setText("绘制BOX")
                 self.canvas.update()
         elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_E:
             if self.canvas.selected_box is not None and 0 <= self.canvas.selected_box < len(self.detection_boxes):
@@ -54,6 +56,22 @@ class EventHandlerMixin:
             current_state = self.auto_save_checkbox.isChecked()
             self.auto_save_checkbox.setChecked(not current_state)
             self.auto_save_current_canvas()
+        elif event.key() == Qt.Key_F:
+            self.canvas.reset_view()
+            self.canvas.update()
+            self.status_label.setText("视图已重置")
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(1500, lambda: self.status_label.setText(""))
+        elif event.key() == Qt.Key_Home:
+            if self.background_images:
+                self.switch_background_to_index(0)
+        elif event.key() == Qt.Key_End:
+            if self.background_images:
+                self.switch_background_to_index(len(self.background_images) - 1)
+        elif event.key() == Qt.Key_PageUp:
+            self.switch_background(-5)
+        elif event.key() == Qt.Key_PageDown:
+            self.switch_background(5)
 
         super().keyPressEvent(event)
 
@@ -95,6 +113,19 @@ class EventHandlerMixin:
         if not self.background_images:
             return
 
+        new_index = self.current_background_index + direction
+        self.switch_background_to_index(new_index)
+
+    def switch_background_to_index(self, new_index):
+        """切换到指定索引的背景图"""
+        if not self.background_images:
+            return
+
+        new_index = max(0, min(new_index, len(self.background_images) - 1))
+
+        if new_index == self.current_background_index:
+            return
+
         if hasattr(self, 'auto_save_checkbox') and self.auto_save_checkbox.isChecked():
             if self.canvas_items:
                 self.auto_save_current_canvas()
@@ -102,12 +133,6 @@ class EventHandlerMixin:
         if self.current_background_index >= 0:
             self.canvas_items_dict[self.current_background_index] = self.canvas_items.copy()
             self.detection_boxes_dict[self.current_background_index] = self.detection_boxes.copy()
-
-        new_index = self.current_background_index + direction
-        new_index = max(0, min(new_index, len(self.background_images) - 1))
-
-        if new_index == self.current_background_index:
-            return
 
         self.current_background_index = new_index
 

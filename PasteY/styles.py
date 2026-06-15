@@ -1,168 +1,45 @@
 """
 样式模块 - 定义 UI 样式表
-将样式从主窗口类中分离，便于统一管理和修改
+使用主题模块统一管理深色/浅色主题
 """
+from .theme import ThemeManager
 
 
 def get_list_style():
-    """获取列表样式"""
-    return """
-        QListWidget {
-            border: 1px solid #E0E0E0;
-            border-radius: 8px;
-            background-color: white;
-        }
-        QListWidget::item {
-            padding: 4px;
-            border-bottom: 1px solid #F0F0F0;
-        }
-        QListWidget::item:hover {
-            background-color: #F5F5F5;
-        }
-        QListWidget::item:selected {
-            background-color: #E3F2FD;
-            color: #1976D2;
-        }
-    """
+    return ThemeManager.get_list_style()
 
 
 def get_action_button_style(bg_color, text_color):
-    """获取操作按钮样式"""
-    return f"""
-        QPushButton {{
-            background-color: {bg_color};
-            border: 1px solid {text_color};
-            border-radius: 12px;
-            padding: 6px 12px;
-            font-size: 12px;
-            font-weight: 500;
-            color: {text_color};
-        }}
-        QPushButton:hover {{
-            background-color: {_lighten_color(bg_color)};
-        }}
-        QPushButton:pressed {{
-            background-color: {_darken_color(bg_color)};
-        }}
-    """
+    return ThemeManager.get_action_button_style(bg_color, text_color)
 
 
 def get_spinbox_style():
-    """获取数字输入框样式"""
-    return """
-        QSpinBox {
-            border: 1px solid #E0E0E0;
-            border-radius: 8px;
-            padding: 4px 8px;
-            font-size: 12px;
-            background-color: white;
-        }
-        QSpinBox:hover {
-            border-color: #BBDEFB;
-        }
-    """
+    return ThemeManager.get_spinbox_style()
 
 
 def get_checkbox_style(checked_color):
-    """获取复选框样式"""
-    return f"""
-        QCheckBox {{
-            spacing: 8px;
-            font-size: 12px;
-        }}
-        QCheckBox::indicator {{
-            width: 12px;
-            height: 12px;
-            border: 2px solid #BDBDBD;
-            border-radius: 4px;
-            background-color: white;
-        }}
-        QCheckBox::indicator:checked {{
-            background-color: {checked_color};
-            border-color: {checked_color};
-        }}
-    """
+    return ThemeManager.get_checkbox_style(checked_color)
 
 
 def get_input_style():
-    """获取输入框样式"""
-    return """
-        QLineEdit {
-            border: 1px solid #E0E0E0;
-            border-radius: 8px;
-            padding: 4px 8px;
-            font-size: 12px;
-            background-color: white;
-        }
-        QLineEdit:hover {
-            border-color: #BBDEFB;
-        }
-    """
+    return ThemeManager.get_input_style()
 
 
 def get_draw_button_style():
-    """获取绘制按钮样式"""
-    return """
-        QPushButton {
-            background-color: #FFF3E0;
-            border: 1px solid #FFCC80;
-            border-radius: 12px;
-            padding: 6px 12px;
-            font-size: 12px;
-            font-weight: 500;
-            color: #E65100;
-        }
-        QPushButton:hover {
-            background-color: #FFE0B2;
-        }
-        QPushButton:pressed {
-            background-color: #FFCC80;
-        }
-    """
+    return ThemeManager.get_draw_button_style()
 
 
 def get_icon_button_style():
-    """获取图标按钮样式（工具栏透明按钮）"""
-    return """
-        QPushButton {
-            background-color: transparent;
-            border: 1px solid transparent;
-            border-radius: 4px;
-            padding: 1px;
-        }
-        QPushButton:hover {
-            background-color: rgba(33, 150, 243, 0.1);
-            border-color: rgba(33, 150, 243, 0.3);
-        }
-        QPushButton:pressed {
-            background-color: rgba(33, 150, 243, 0.2);
-            border-color: rgba(33, 150, 243, 0.5);
-        }
-    """
+    return ThemeManager.get_button_style(variant="icon")
 
 
 def get_prefix_input_focus_style(text_color="black"):
-    """获取前缀输入框焦点样式"""
-    return f"""
-        QLineEdit {{
-            border: 1px solid #E0E0E0;
-            border-radius: 8px;
-            padding: 4px 8px;
-            font-size: 12px;
-            background-color: white;
-            color: {text_color};
-        }}
-        QLineEdit:hover {{
-            border-color: #BBDEFB;
-        }}
-    """
+    return ThemeManager.get_prefix_input_focus_style(text_color)
 
 
 def _lighten_color(color_str):
-    """加亮颜色（简化实现）"""
     return "#F5F5F5"
 
 
 def _darken_color(color_str):
-    """变暗颜色（简化实现）"""
     return "#CCCCCC"

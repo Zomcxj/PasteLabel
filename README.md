@@ -43,23 +43,34 @@ PasteLabel/
 │   ├── models.py          # 数据模型
 │   ├── dialogs.py         # 对话框
 │   ├── styles.py          # 样式管理
+│   ├── theme.py           # 主题管理（深色/浅色）
 │   ├── exception_hook.py  # 全局异常捕获
 │   ├── build.sh           # 构建脚本（PyInstaller）
 │   ├── PasteLabel.spec    # PyInstaller 配置文件
-│   └── __init__.py        # 包初始化
+│   ├── __init__.py        # 包初始化
+│   └── tests/             # 单元测试
 ├── PasteX/                # 旧版单文件版本（归档）
-│   ├── image_editor.py    # 旧版主程序
-│   └── build.sh           # 旧版构建脚本
 ├── images/                # 样本图片数据
 ├── ico_image/             # 图标资源
 ├── paste_label.txt        # 贴图标签文件
+├── conftest.py            # pytest 配置（mock PyQt5）
 ├── README.md              # 项目说明
 ├── LICENSE                # MIT 许可证
 └── .gitignore
 ```
 
+## 测试
+
+```bash
+# 安装测试依赖
+pip install pytest
+
+# 运行测试
+pytest PasteY/tests/ -v
+```
+
 ## 许可证
 
-[MIT](./LICENSE)
+遵循MIT
 
 Copyright © 2026 Zomcxj

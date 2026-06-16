@@ -15,6 +15,10 @@ from .dialogs import ProgressDialogFactory
 class PasteEngineMixin:
     """贴图引擎混入类 - 管理贴图的添加、删除、随机和批量放置"""
 
+
+class PasteEngineMixin:
+    """贴图引擎混入类 - 管理贴图的添加、删除、随机和批量放置"""
+
     def add_small_to_canvas(self, item):
         """添加贴图到画布"""
         if self._busy:
@@ -98,7 +102,7 @@ class PasteEngineMixin:
         self.canvas.update()
 
     def random_paste_images(self, background=None, detection_boxes=None):
-        """随机贴图"""
+        """随机贴图 - 中心点避让算法"""
         if not self.small_images or not self.current_background:
             return
 
@@ -109,9 +113,16 @@ class PasteEngineMixin:
 
         self.canvas_items.clear()
 
-        boxes = []
+        det_boxes = []
         for box in current_detection_boxes:
-            boxes.append((box['x'], box['y'], box['x'] + box['width'], box['y'] + box['height']))
+            det_boxes.append((box['x'], box['y'], box['x'] + box['width'], box['y'] + box['height']))
+
+        bg_w = current_background.width()
+        bg_h = current_background.height()
+
+        ml = RANDOM_POSITION_CONFIG['margin_left']
+        mt = RANDOM_POSITION_CONFIG['margin_top']
+        mr = RANDOM_POSITION_CONFIG['margin_right']
 
         num_paste = self.paste_count_spin.value()
         selected_indices = random.choices(range(len(self.small_images)), k=num_paste)
@@ -141,50 +152,51 @@ class PasteEngineMixin:
                     new_height = min_size
                     new_width = new_height * aspect_ratio
 
-            ml = RANDOM_POSITION_CONFIG['margin_left']
-            mt = RANDOM_POSITION_CONFIG['margin_top']
-            mr = RANDOM_POSITION_CONFIG['margin_right']
-            max_x = max(ml, min(current_background.width() - new_width, current_background.width() - mr))
-            max_y = max(mt, current_background.height() - new_height)
-
             valid_position = False
             x, y = ml, mt
 
-            if max_x <= ml or max_y <= mt:
+            place_w = bg_w - new_width - mr
+            place_h = bg_h - new_height
+
+            if place_w <= ml or place_h <= mt:
                 continue
 
             for _ in range(RANDOM_POSITION_CONFIG['max_retries']):
-                x = random.randint(ml, int(max_x))
-                y = random.randint(mt, int(max_y))
+                cx = random.uniform(ml + new_width / 2, place_w + new_width / 2)
+                cy = random.uniform(mt + new_height / 2, place_h + new_height / 2)
 
-                new_box = (x, y, x + new_width, y + new_height)
+                tx = cx - new_width / 2
+                ty = cy - new_height / 2
 
-                overlap = False
-                for box in boxes:
-                    iou = calculate_iou(new_box, box)
-                    if iou > RANDOM_POSITION_CONFIG['overlap_iou_detection']:
-                        overlap = True
+                point_in_det = False
+                for db in det_boxes:
+                    if db[0] <= cx <= db[2] and db[1] <= cy <= db[3]:
+                        point_in_det = True
                         break
 
-                if overlap:
+                if point_in_det:
                     continue
 
-                iou_ok = True
-                for pasted_box in pasted_boxes:
-                    iou = calculate_iou(new_box, pasted_box)
-                    if iou > RANDOM_POSITION_CONFIG['overlap_iou_pasted']:
-                        iou_ok = False
+                new_box = (tx, ty, tx + new_width, ty + new_height)
+
+                overlaps_pasted = False
+                for pb in pasted_boxes:
+                    if calculate_iou(new_box, pb) > RANDOM_POSITION_CONFIG['overlap_iou_pasted']:
+                        overlaps_pasted = True
                         break
 
-                if iou_ok:
-                    valid_position = True
-                    break
+                if overlaps_pasted:
+                    continue
+
+                x, y = tx, ty
+                valid_position = True
+                break
 
             if valid_position:
                 rect = QRectF(x, y, new_width, new_height)
                 paste_label = self._get_paste_label(idx)
                 self.canvas_items.append((pixmap, rect, paste_label))
-                pasted_boxes.append(new_box)
+                pasted_boxes.append((x, y, x + new_width, y + new_height))
 
         if not background:
             self.canvas.update()

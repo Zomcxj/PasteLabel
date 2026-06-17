@@ -1,17 +1,19 @@
 """
 Windows DWM API 模块 - 设置标题栏深色/浅色模式
 兼容 Win10 1809+ (属性19) 和 Win10 1903+ / Win11 (属性20)
+优先使用 ctypes，不可用时回退到 PowerShell
 """
 import sys
+import os
+import subprocess
 
 _dwmapi = None
-_user32 = None
 _initialized = False
 _dwm_available = False
 
 
 def _init():
-    global _dwmapi, _user32, _initialized, _dwm_available
+    global _dwmapi, _initialized, _dwm_available
     if _initialized:
         return
     _initialized = True
@@ -20,7 +22,6 @@ def _init():
     try:
         import ctypes
         _dwmapi = ctypes.windll.dwmapi
-        _user32 = ctypes.windll.user32
         _dwm_available = True
     except Exception:
         _dwm_available = False
@@ -33,18 +34,40 @@ def set_titlebar_dark(hwnd, dark):
     :param dark: True=深色标题栏, False=浅色标题栏
     """
     _init()
-    if not _dwm_available or not hwnd:
-        return False
-    try:
-        import ctypes
-        value = ctypes.c_int(1 if dark else 0)
-        # Win10 1809: 属性 19 (DWMWA_USE_IMMERSIVE_DARK_MODE)
-        _dwmapi.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(value), ctypes.sizeof(value))
-        # Win10 1903+ / Win11: 属性 20
-        _dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), ctypes.sizeof(value))
-        return True
-    except Exception:
-        return False
+
+    if _dwm_available and hwnd:
+        try:
+            import ctypes
+            value = ctypes.c_int(1 if dark else 0)
+            _dwmapi.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(value), ctypes.sizeof(value))
+            _dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), ctypes.sizeof(value))
+            return True
+        except Exception:
+            pass
+
+    if sys.platform == 'win32' and hwnd:
+        try:
+            v = 1 if dark else 0
+            ps = (
+                'Add-Type @"'
+                'using System;using System.Runtime.InteropServices;'
+                'public class Dwm {'
+                '[DllImport("dwmapi.dll")]'
+                'public static extern int DwmSetWindowAttribute(IntPtr h,int a,ref int v,int s);}'
+                '"@;'
+                '$v={v};'
+                '[Dwm]::DwmSetWindowAttribute([IntPtr]{h},20,[ref]$v,4);'
+                '[Dwm]::DwmSetWindowAttribute([IntPtr]{h},19,[ref]$v,4)'
+            ).format(v=v, h=hwnd)
+            subprocess.Popen(
+                ["powershell", "-NoProfile", "-Command", ps],
+                creationflags=0x08000000
+            )
+            return True
+        except Exception:
+            pass
+
+    return False
 
 
 def is_available():

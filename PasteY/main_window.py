@@ -131,6 +131,21 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         hwnd = int(self.winId())
         set_titlebar_dark(hwnd, dark)
 
+    def _apply_theme(self):
+        """应用当前主题样式"""
+        app = QApplication.instance()
+        app.setStyleSheet(ThemeManager.get_stylesheet())
+        if hasattr(self, 'theme_btn'):
+            is_dark = ThemeManager.get_mode().value == "dark"
+            self.theme_btn.setText("🌙" if is_dark else "☀")
+        if hasattr(self, 'prefix_input'):
+            has_text = bool(self.prefix_input.text().strip())
+            self.prefix_input.setProperty("placeholder", not has_text)
+            self.prefix_input.style().unpolish(self.prefix_input)
+            self.prefix_input.style().polish(self.prefix_input)
+        self._update_status_info()
+        self.canvas.update()
+
     def toggle_theme(self):
         """切换主题"""
         ThemeManager.toggle()

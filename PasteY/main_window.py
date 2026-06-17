@@ -3,7 +3,6 @@
 """
 import os
 import sys
-import subprocess
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QApplication
 from PyQt5.QtCore import QPoint
 
@@ -16,7 +15,7 @@ from .image_loader import ImageLoaderMixin
 from .paste_engine import PasteEngineMixin
 from .event_handler import EventHandlerMixin
 from .theme import ThemeManager, ThemeMode
-from .dwm import set_titlebar_dark, is_available
+from .dwm import set_titlebar_dark
 
 
 class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
@@ -127,68 +126,20 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         is_dark = ThemeManager.get_mode().value == "dark"
         QTimer.singleShot(30, lambda: self._set_titlebar_dark(is_dark))
 
-    def _apply_theme(self):
-        """应用当前主题样式"""
-        app = QApplication.instance()
-        app.setStyleSheet(ThemeManager.get_stylesheet())
-        if hasattr(self, 'theme_btn'):
-            is_dark = ThemeManager.get_mode().value == "dark"
-            self.theme_btn.setText("🌙" if is_dark else "☀")
-        if hasattr(self, 'prefix_input'):
-            has_text = bool(self.prefix_input.text().strip())
-            self.prefix_input.setProperty("placeholder", not has_text)
-            self.prefix_input.style().unpolish(self.prefix_input)
-            self.prefix_input.style().polish(self.prefix_input)
-        self._update_status_info()
-        self.canvas.update()
-        from PyQt5.QtCore import QTimer
-        is_dark = ThemeManager.get_mode().value == "dark"
-        QTimer.singleShot(30, lambda: self._set_titlebar_dark(is_dark))
-
-    def _update_status_info(self):
-        """更新状态栏信息"""
-        info = self.get_image_info()
-        if info:
-            stats = self.get_label_stats()
-            stats_text = " | ".join([f"{k}:{v}" for k, v in list(stats.items())[:3]])
-            self.status_label.setText(
-                f"{info['width']}x{info['height']} | Paste: {info['paste_count']} Box: {info['box_count']}"
-                + (f" | {stats_text}" if stats_text else "")
-            )
+    def _set_titlebar_dark(self, dark):
+        """设置系统标题栏颜色"""
+        hwnd = int(self.winId())
+        set_titlebar_dark(hwnd, dark)
 
     def toggle_theme(self):
         """切换主题"""
         ThemeManager.toggle()
         self._apply_theme()
         is_dark = ThemeManager.get_mode().value == "dark"
+        self._set_titlebar_dark(is_dark)
         self.status_label.setText(f"Theme: {'Dark' if is_dark else 'Light'}")
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(2000, lambda: self.status_label.setText(""))
-
-    def _set_titlebar_dark(self, dark):
-        """设置系统标题栏颜色"""
-        if sys.platform != 'win32':
-            return
-        try:
-            hwnd = int(self.winId())
-            value = 1 if dark else 0
-            ps = (
-                'Add-Type @"'
-                'using System;using System.Runtime.InteropServices;'
-                'public class Dwm {'
-                '[DllImport("dwmapi.dll")]'
-                'public static extern int DwmSetWindowAttribute(IntPtr h,int a,ref int v,int s);}'
-                '"@;'
-                '$v={v};'
-                '[Dwm]::DwmSetWindowAttribute([IntPtr]{h},20,[ref]$v,4);'
-                '[Dwm]::DwmSetWindowAttribute([IntPtr]{h},19,[ref]$v,4)'
-            ).format(v=value, h=hwnd)
-            subprocess.Popen(
-                ["powershell", "-NoProfile", "-Command", ps],
-                creationflags=0x08000000
-            )
-        except Exception:
-            pass
 
     def toggle_language(self):
         """切换中英文"""

@@ -23,6 +23,7 @@ class PasteEngineMixin:
         """添加贴图到画布"""
         if self._busy:
             return
+        self.save_undo_state()
         index = item.data(Qt.UserRole)
         pixmap = self.small_images[index][1]
 
@@ -95,6 +96,7 @@ class PasteEngineMixin:
         """清空画布"""
         if self._busy:
             return
+        self.save_undo_state()
         self.canvas_items.clear()
         if self.current_background_index >= 0:
             self.canvas_items_dict[self.current_background_index] = self.canvas_items.copy()
@@ -106,6 +108,7 @@ class PasteEngineMixin:
         if not self.small_images or not self.current_background:
             return
 
+        self.save_undo_state()
         self._validate_size_range()
 
         current_background = background if background else self.current_background

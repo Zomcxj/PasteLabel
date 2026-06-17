@@ -2,6 +2,8 @@
 主窗口模块 - ImageEditor 主窗口逻辑（协调器）
 """
 import os
+import sys
+import subprocess
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QApplication
 from PyQt5.QtCore import QPoint
 
@@ -13,7 +15,7 @@ from .ui_builder import UIBuilderMixin
 from .image_loader import ImageLoaderMixin
 from .paste_engine import PasteEngineMixin
 from .event_handler import EventHandlerMixin
-from .theme import ThemeManager
+from .theme import ThemeManager, ThemeMode
 from .dwm import set_titlebar_dark, is_available
 
 
@@ -61,6 +63,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
         self.save_manager = SaveManager(self, self)
         self.label_manager = LabelManager(self, self)
+
+        from .undo_manager import UndoManager
+        self.undo_manager = UndoManager()
 
     def _connect_manager_signals(self):
         """连接管理器信号 → 编辑器 UI 刷新（需在 init_ui 之后调用）"""
@@ -112,14 +117,15 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         if self.current_background_index >= 0:
             self.background_list.setCurrentRow(self.current_background_index)
         self.update_file_count()
+        self._update_status_info()
         self.canvas.update()
 
     def showEvent(self, event):
         """窗口显示后设置标题栏颜色（winId 必须在 show 之后获取）"""
         super().showEvent(event)
+        from PyQt5.QtCore import QTimer
         is_dark = ThemeManager.get_mode().value == "dark"
-        hwnd = int(self.winId())
-        set_titlebar_dark(hwnd, is_dark)
+        QTimer.singleShot(30, lambda: self._set_titlebar_dark(is_dark))
 
     def _apply_theme(self):
         """应用当前主题样式"""
@@ -133,26 +139,63 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.prefix_input.setProperty("placeholder", not has_text)
             self.prefix_input.style().unpolish(self.prefix_input)
             self.prefix_input.style().polish(self.prefix_input)
+        self._update_status_info()
         self.canvas.update()
+        from PyQt5.QtCore import QTimer
+        is_dark = ThemeManager.get_mode().value == "dark"
+        QTimer.singleShot(30, lambda: self._set_titlebar_dark(is_dark))
+
+    def _update_status_info(self):
+        """更新状态栏信息"""
+        info = self.get_image_info()
+        if info:
+            stats = self.get_label_stats()
+            stats_text = " | ".join([f"{k}:{v}" for k, v in list(stats.items())[:3]])
+            self.status_label.setText(
+                f"{info['width']}x{info['height']} | Paste: {info['paste_count']} Box: {info['box_count']}"
+                + (f" | {stats_text}" if stats_text else "")
+            )
 
     def toggle_theme(self):
         """切换主题"""
         ThemeManager.toggle()
         self._apply_theme()
         is_dark = ThemeManager.get_mode().value == "dark"
-        hwnd = int(self.winId())
-        set_titlebar_dark(hwnd, is_dark)
-        mode_name = "深色" if is_dark else "浅色"
-        self.status_label.setText(f"已切换到{mode_name}主题")
+        self.status_label.setText(f"Theme: {'Dark' if is_dark else 'Light'}")
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(2000, lambda: self.status_label.setText(""))
+
+    def _set_titlebar_dark(self, dark):
+        """设置系统标题栏颜色"""
+        if sys.platform != 'win32':
+            return
+        try:
+            hwnd = int(self.winId())
+            value = 1 if dark else 0
+            ps = (
+                'Add-Type @"'
+                'using System;using System.Runtime.InteropServices;'
+                'public class Dwm {'
+                '[DllImport("dwmapi.dll")]'
+                'public static extern int DwmSetWindowAttribute(IntPtr h,int a,ref int v,int s);}'
+                '"@;'
+                '$v={v};'
+                '[Dwm]::DwmSetWindowAttribute([IntPtr]{h},20,[ref]$v,4);'
+                '[Dwm]::DwmSetWindowAttribute([IntPtr]{h},19,[ref]$v,4)'
+            ).format(v=value, h=hwnd)
+            subprocess.Popen(
+                ["powershell", "-NoProfile", "-Command", ps],
+                creationflags=0x08000000
+            )
+        except Exception:
+            pass
 
     def toggle_language(self):
         """切换中英文"""
         from . import i18n
         i18n.toggle_lang()
         self._refresh_ui_texts()
-        lang_name = "中文" if i18n.get_lang() == "zh" else "English"
+        lang_name = "Chinese" if i18n.get_lang() == "zh" else "English"
         self.status_label.setText(f"Language: {lang_name}")
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(2000, lambda: self.status_label.setText(""))
@@ -168,6 +211,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.show_label_names_checkbox.setText(tr("显示Label"))
         self.auto_label_checkbox.setText(tr("贴图标签"))
         self.prefix_checkbox.setText(tr("添加文件名前缀"))
+        self.show_grid_checkbox.setText(tr("显示网格"))
+        self.show_paste_names_checkbox.setText(tr("显示贴图名"))
         self.random_paste_btn.setText(tr("随机贴图"))
         self.batch_paste_btn.setText(tr("一键贴图"))
         is_thumb = self.is_thumbnail_mode
@@ -217,6 +262,61 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.save_btn.setToolTip(tr("保存图片"))
         if hasattr(self, 'save_all_btn'):
             self.save_all_btn.setToolTip(tr("全部保存"))
+
+    def save_undo_state(self):
+        """保存撤销状态"""
+        self.undo_manager.save_state(self.canvas_items, self.detection_boxes)
+
+    def undo(self):
+        """撤销"""
+        self.canvas_items, self.detection_boxes = self.undo_manager.undo(
+            self.canvas_items, self.detection_boxes
+        )
+        self.canvas.update()
+        self.update_label_list()
+
+    def redo(self):
+        """重做"""
+        self.canvas_items, self.detection_boxes = self.undo_manager.redo(
+            self.canvas_items, self.detection_boxes
+        )
+        self.canvas.update()
+        self.update_label_list()
+
+    def toggle_grid(self):
+        """切换网格显示"""
+        if hasattr(self, 'show_grid_checkbox'):
+            self.show_grid_checkbox.setChecked(not self.show_grid_checkbox.isChecked())
+            self.canvas.update()
+
+    def open_settings(self):
+        """打开设置对话框"""
+        from .settings_dialog import SettingsDialog
+        dialog = SettingsDialog(self)
+        dialog.exec_()
+
+    def get_image_info(self):
+        """获取当前图片信息"""
+        if self.current_background is None:
+            return None
+        info = {
+            'width': self.current_background.width(),
+            'height': self.current_background.height(),
+            'path': self.background_images[self.current_background_index] if self.current_background_index >= 0 else '',
+            'paste_count': len(self.canvas_items),
+            'box_count': len(self.detection_boxes),
+        }
+        return info
+
+    def get_label_stats(self):
+        """获取标签统计"""
+        stats = {}
+        for _, _, label in self.canvas_items:
+            stats[label] = stats.get(label, 0) + 1
+        for box in self.detection_boxes:
+            label = box.get('label', 'unknown')
+            stats[label] = stats.get(label, 0) + 1
+        return stats
 
 
 # 程序入口

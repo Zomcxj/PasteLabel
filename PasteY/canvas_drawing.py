@@ -32,6 +32,7 @@ class CanvasDrawingMixin:
     def _complete_drawing(self, mouse_pos):
         from .dialogs import LabelSelectionDialog
 
+        self.parent.save_undo_state()
         background_rect = self.get_background_rect()
         constrained_pos = self._constrain_to_background(mouse_pos, background_rect)
 

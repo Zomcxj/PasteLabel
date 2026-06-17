@@ -71,6 +71,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             item_y = (rect.y() * self.background_scale) + background_rect.top()
             item_rect = QRectF(item_x, item_y, rect.width() * self.background_scale,
                               rect.height() * self.background_scale)
+            self.parent.save_undo_state()
             self.drag_start = mouse_pos - item_rect.topLeft()
             self.is_dragging_item = True
 
@@ -112,6 +113,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
             box_rect = QRectF(box_x, box_y, box_width, box_height)
             if box_rect.contains(mouse_pos):
+                self.parent.save_undo_state()
                 self.selected_box = i
                 self.box_drag_start = mouse_pos
                 self.is_dragging_box = True

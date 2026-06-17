@@ -1,4 +1,4 @@
-﻿"""
+"""
 Theme module - manages dark/light theme switching
 """
 from enum import Enum
@@ -361,6 +361,19 @@ class ThemeManager:
                 font-size: 16px;
             }}
             QPushButton#themeBtn:hover {{
+                background-color: {t['accent_light']};
+                border-color: {t['accent']};
+            }}
+
+            /* 设置按钮 */
+            QPushButton#settingsBtn {{
+                background-color: transparent;
+                border: 1px solid {t['border_color']};
+                border-radius: 6px;
+                padding: 4px;
+                font-size: 16px;
+            }}
+            QPushButton#settingsBtn:hover {{
                 background-color: {t['accent_light']};
                 border-color: {t['accent']};
             }}

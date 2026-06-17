@@ -1,0 +1,191 @@
+"""
+设置对话框 - 快捷键自定义
+"""
+import sys
+import json
+import os
+from PyQt5.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+    QPushButton, QGroupBox, QScrollArea, QWidget
+)
+from PyQt5.QtCore import Qt
+
+from .config import SHORTCUT_CONFIG
+
+
+class SettingsDialog(QDialog):
+    """设置对话框"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("设置")
+        self.setMinimumWidth(400)
+        self.setMinimumHeight(500)
+        self.setObjectName("settingsDialog")
+
+        self.shortcut_inputs = {}
+        self._init_ui()
+        self._load_shortcuts()
+
+    def _init_ui(self):
+        layout = QVBoxLayout(self)
+
+        group = QGroupBox("快捷键设置")
+        group_layout = QVBoxLayout(group)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+
+        shortcut_names = {
+            'undo': '撤销',
+            'redo': '重做',
+            'save': '保存',
+            'save_all': '全部保存',
+            'clear': '清空画布',
+            'toggle_grid': '显示网格',
+            'toggle_labels': '显示BOX',
+            'toggle_label_names': '显示Label',
+            'toggle_auto_save': '自动保存',
+            'draw_box': '绘制检测框',
+            'quit_draw': '退出绘制',
+            'next_image': '下一张',
+            'prev_image': '上一张',
+            'delete_selected': '删除选中',
+            'fit_view': '适应视图',
+            'zoom_in': '放大',
+            'zoom_out': '缩小',
+            'zoom_reset': '重置缩放',
+        }
+
+        for key, name in shortcut_names.items():
+            row = QHBoxLayout()
+            row.addWidget(QLabel(f"{name}:"), 2)
+
+            input_field = QLineEdit()
+            input_field.setObjectName("shortcutInput")
+            input_field.setText(SHORTCUT_CONFIG.get(key, ''))
+            input_field.setReadOnly(True)
+            input_field.keyPressEvent = lambda event, field=input_field: self._capture_key(event, field)
+            self.shortcut_inputs[key] = input_field
+            row.addWidget(input_field, 1)
+
+            reset_btn = QPushButton("重置")
+            reset_btn.setObjectName("resetBtn")
+            reset_btn.setFixedWidth(50)
+            reset_btn.clicked.connect(lambda _, k=key, f=input_field: self._reset_shortcut(k, f))
+            row.addWidget(reset_btn)
+
+            scroll_layout.addLayout(row)
+
+        scroll.setWidget(scroll_content)
+        group_layout.addWidget(scroll)
+        layout.addWidget(group)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        save_btn = QPushButton("保存")
+        save_btn.setObjectName("successBtn")
+        save_btn.clicked.connect(self._save_shortcuts)
+        btn_layout.addWidget(save_btn)
+
+        cancel_btn = QPushButton("取消")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(cancel_btn)
+
+        layout.addLayout(btn_layout)
+
+    def _capture_key(self, event, field):
+        """捕获按键"""
+        key = event.key()
+        modifiers = event.modifiers()
+
+        key_name = ""
+        if modifiers & Qt.ControlModifier:
+            key_name += "Ctrl+"
+        if modifiers & Qt.AltModifier:
+            key_name += "Alt+"
+        if modifiers & Qt.ShiftModifier:
+            key_name += "Shift+"
+
+        key_map = {
+            Qt.Key_A: 'A', Qt.Key_B: 'B', Qt.Key_C: 'C', Qt.Key_D: 'D',
+            Qt.Key_E: 'E', Qt.Key_F: 'F', Qt.Key_G: 'G', Qt.Key_H: 'H',
+            Qt.Key_I: 'I', Qt.Key_J: 'J', Qt.Key_K: 'K', Qt.Key_L: 'L',
+            Qt.Key_M: 'M', Qt.Key_N: 'N', Qt.Key_O: 'O', Qt.Key_P: 'P',
+            Qt.Key_Q: 'Q', Qt.Key_R: 'R', Qt.Key_S: 'S', Qt.Key_T: 'T',
+            Qt.Key_U: 'U', Qt.Key_V: 'V', Qt.Key_W: 'W', Qt.Key_X: 'X',
+            Qt.Key_Y: 'Y', Qt.Key_Z: 'Z',
+            Qt.Key_0: '0', Qt.Key_1: '1', Qt.Key_2: '2', Qt.Key_3: '3',
+            Qt.Key_4: '4', Qt.Key_5: '5', Qt.Key_6: '6', Qt.Key_7: '7',
+            Qt.Key_8: '8', Qt.Key_9: '9',
+            Qt.Key_Delete: 'Delete', Qt.Key_Space: 'Space',
+            Qt.Key_F1: 'F1', Qt.Key_F2: 'F2', Qt.Key_F3: 'F3', Qt.Key_F4: 'F4',
+            Qt.Key_F5: 'F5', Qt.Key_F6: 'F6', Qt.Key_F7: 'F7', Qt.Key_F8: 'F8',
+            Qt.Key_F9: 'F9', Qt.Key_F10: 'F10', Qt.Key_F11: 'F11', Qt.Key_F12: 'F12',
+        }
+
+        if key in key_map:
+            key_name += key_map[key]
+            field.setText(key_name)
+
+    def _reset_shortcut(self, key, field):
+        """重置单个快捷键"""
+        field.setText(SHORTCUT_CONFIG.get(key, ''))
+
+    def _load_shortcuts(self):
+        """加载保存的快捷键"""
+        config_path = self._get_config_path()
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                shortcuts = config.get('shortcuts', {})
+                for key, field in self.shortcut_inputs.items():
+                    if key in shortcuts:
+                        field.setText(shortcuts[key])
+            except Exception:
+                pass
+
+    def _save_shortcuts(self):
+        """保存快捷键到文件"""
+        shortcuts = {}
+        for key, field in self.shortcut_inputs.items():
+            text = field.text().strip()
+            if text:
+                shortcuts[key] = text
+
+        config = {'shortcuts': shortcuts}
+
+        config_path = self._get_config_path()
+        try:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            self.accept()
+        except Exception as e:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "保存失败", f"无法保存设置: {e}")
+
+    def _get_config_path(self):
+        """获取配置文件路径 - 默认在用户目录"""
+        return os.path.join(os.path.expanduser("~"), '.PasteLabel.json')
+
+
+def load_shortcuts():
+    """加载快捷键配置"""
+    config_path = _get_config_path()
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            return config.get('shortcuts', {})
+        except Exception:
+            pass
+    return SHORTCUT_CONFIG
+
+
+def _get_config_path():
+    """获取配置文件路径 - 默认在用户目录"""
+    return os.path.join(os.path.expanduser("~"), '.PasteLabel.json')

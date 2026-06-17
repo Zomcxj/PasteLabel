@@ -61,7 +61,9 @@ class UIBuilderMixin:
         self.setCentralWidget(central_widget)
 
         self.status_label = QLabel("")
+        self.status_label.setObjectName("statusLabel")
         self.statusBar().addWidget(self.status_label)
+        self.statusBar().show()
 
     def _create_toolbar(self, layout):
         """创建工具栏"""
@@ -124,23 +126,30 @@ class UIBuilderMixin:
         upload_layout.addSpacing(8)
 
         self._add_checkboxes(upload_layout)
-        self._add_prefix_input(upload_layout)
+        self._add_prefix_row(upload_layout)
 
         upload_layout.addStretch()
 
         self.lang_btn = QPushButton("中/EN")
         self.lang_btn.setObjectName("langBtn")
-        self.lang_btn.setFixedSize(42, 24)
+        self.lang_btn.setFixedSize(42, 28)
         self.lang_btn.setToolTip(tr("切换中英文"))
         self.lang_btn.clicked.connect(self.toggle_language)
         upload_layout.addWidget(self.lang_btn)
 
         self.theme_btn = QPushButton("☀")
         self.theme_btn.setObjectName("themeBtn")
-        self.theme_btn.setFixedSize(24, 24)
-        self.theme_btn.setToolTip(tr("切换深色/浅色主题"))
+        self.theme_btn.setFixedSize(28, 28)
+        self.theme_btn.setToolTip("切换深色/浅色主题")
         self.theme_btn.clicked.connect(self.toggle_theme)
         upload_layout.addWidget(self.theme_btn)
+
+        self.settings_btn = QPushButton("⚙")
+        self.settings_btn.setObjectName("settingsBtn")
+        self.settings_btn.setFixedSize(28, 28)
+        self.settings_btn.setToolTip("设置快捷键")
+        self.settings_btn.clicked.connect(self.open_settings)
+        upload_layout.addWidget(self.settings_btn)
 
         layout.addWidget(toolbar_widget)
 
@@ -208,17 +217,46 @@ class UIBuilderMixin:
         self.prefix_checkbox.setChecked(True)
         layout.addWidget(self.prefix_checkbox)
 
-    def _add_prefix_input(self, layout):
-        """添加前缀输入框"""
-        layout.addSpacing(8)
+        layout.addSpacing(10)
+        self.show_grid_checkbox = QCheckBox(tr("显示网格"))
+        self.show_grid_checkbox.setObjectName("gridCb")
+        self.show_grid_checkbox.setChecked(False)
+        self.show_grid_checkbox.stateChanged.connect(self._on_grid_changed)
+        layout.addWidget(self.show_grid_checkbox)
+
+        layout.addSpacing(10)
+        self.show_paste_names_checkbox = QCheckBox(tr("显示贴图名"))
+        self.show_paste_names_checkbox.setObjectName("pasteNameCb")
+        self.show_paste_names_checkbox.setChecked(True)
+        self.show_paste_names_checkbox.stateChanged.connect(self._on_grid_changed)
+        layout.addWidget(self.show_paste_names_checkbox)
+
+    def _add_prefix_row(self, layout):
+        """添加前缀行（复选框 + 输入框同行）"""
+        row = QHBoxLayout()
+        row.setSpacing(6)
+
+        self.prefix_checkbox = QCheckBox(tr("添加文件名前缀"))
+        self.prefix_checkbox.setObjectName("prefixCb")
+        self.prefix_checkbox.setChecked(True)
+        row.addWidget(self.prefix_checkbox)
+
         self.prefix_input = QLineEdit()
         self.prefix_input.setObjectName("prefixInput")
         self.default_prefix = DEFAULT_PREFIX
         self.prefix_input.setText(self.default_prefix)
         self.prefix_input.focusInEvent = self.on_prefix_input_focus_in
         self.prefix_input.focusOutEvent = self.on_prefix_input_focus_out
-        self.prefix_input.setMaximumWidth(120)
-        layout.addWidget(self.prefix_input)
+        self.prefix_input.setMaximumWidth(100)
+        row.addWidget(self.prefix_input)
+
+        row.addStretch()
+        layout.addLayout(row)
+
+    def _on_grid_changed(self):
+        """网格复选框状态变化"""
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
 
     def on_prefix_input_focus_in(self, event):
         """前缀输入框获得焦点"""
@@ -245,7 +283,7 @@ class UIBuilderMixin:
         min_size = self.min_size_spin.value()
         max_size = self.max_size_spin.value()
         if min_size > max_size:
-            self.status_label.setText(tr("最小值不能大于最大值"))
+            self.status_label.setText("Min cannot exceed Max")
             QTimer.singleShot(2000, lambda: self.status_label.setTextr(""))
             self.min_size_spin.setValue(max_size)
 
@@ -511,8 +549,8 @@ class UIBuilderMixin:
         self.small_list.updateGeometry()
         self.small_list.repaint()
 
-        mode_text = tr("缩略图模式") if self.is_thumbnail_mode else tr("列表模式")
-        self.status_label.setText(f"已切换到{mode_text}")
+        mode_text = "Thumbnail" if self.is_thumbnail_mode else "List"
+        self.status_label.setText(f"View: {mode_text}")
         QTimer.singleShot(2000, lambda: self.status_label.setText(""))
 
     def _set_list_mode(self):

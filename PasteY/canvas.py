@@ -104,9 +104,8 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         return None
 
     def update_status_label(self):
-        """更新状态栏显示"""
+        """更新状态栏显示 - 追加鼠标坐标到已有信息"""
         if not self.parent.current_background or not self.mouse_inside:
-            self.parent.status_label.setText("")
             return
 
         background_rect = self.get_background_rect()
@@ -118,18 +117,27 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         orig_x = rel_x / self.background_scale
         orig_y = rel_y / self.background_scale
 
-        status_text = f"X: {int(orig_x)}, Y: {int(orig_y)}"
+        coord_text = f"X: {int(orig_x)}, Y: {int(orig_y)}"
 
         if self.selected_item_size:
             w, h = self.selected_item_size
-            status_text += f" | W: {int(w)}, H: {int(h)}"
+            coord_text += f" | W: {int(w)}, H: {int(h)}"
         elif (self.selected_box is not None and
               0 <= self.selected_box < len(self.parent.detection_boxes)):
             box = self.parent.detection_boxes[self.selected_box]
-            status_text += f" | W: {int(box['width'])}, H: {int(box['height'])}"
+            coord_text += f" | W: {int(box['width'])}, H: {int(box['height'])}"
         elif self.is_drawing_box and self.temp_draw_box:
             w = self.temp_draw_box.width() / self.background_scale
             h = self.temp_draw_box.height() / self.background_scale
-            status_text += f" | W: {int(w)}, H: {int(h)}"
+            coord_text += f" | W: {int(w)}, H: {int(h)}"
 
-        self.parent.status_label.setText(status_text)
+        info = self.parent.get_image_info()
+        if info:
+            stats = self.parent.get_label_stats()
+            stats_text = " | ".join([f"{k}:{v}" for k, v in list(stats.items())[:3]])
+            base = f"{info['width']}x{info['height']} | Paste: {info['paste_count']} Box: {info['box_count']}"
+            if stats_text:
+                base += f" | {stats_text}"
+            self.parent.status_label.setText(f"{base}  {coord_text}")
+        else:
+            self.parent.status_label.setText(coord_text)

@@ -233,6 +233,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.size_lbl.setText(tr("短边尺寸:"))
         if hasattr(self, 'options_btn'):
             self.options_btn.setText(tr("选项"))
+        if hasattr(self, '_draw_box_action'):
+            self._draw_box_action.setText("  " + tr("绘制BOX"))
         if hasattr(self, '_menu_actions'):
             menu_texts = [tr("显示BOX"), tr("显示Label"),
                          tr("自动保存"), tr("显示网格"), tr("显示贴图名"), tr("添加文件名前缀")]

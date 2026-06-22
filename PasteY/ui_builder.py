@@ -296,10 +296,10 @@ class UIBuilderMixin:
         self.options_menu.setObjectName("optionsMenu")
         self.options_menu.setMinimumWidth(200)
 
-        draw_box_action = QAction("  " + tr("绘制BOX"), self)
-        draw_box_action.setShortcut("W")
-        draw_box_action.triggered.connect(self.toggle_draw_mode)
-        self.options_menu.addAction(draw_box_action)
+        self._draw_box_action = QAction("  " + tr("绘制BOX"), self)
+        self._draw_box_action.setShortcut("W")
+        self._draw_box_action.triggered.connect(self.toggle_draw_mode)
+        self.options_menu.addAction(self._draw_box_action)
         self.options_menu.addSeparator()
 
         items = [

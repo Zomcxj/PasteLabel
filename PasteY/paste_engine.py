@@ -15,10 +15,6 @@ from .dialogs import ProgressDialogFactory
 class PasteEngineMixin:
     """贴图引擎混入类 - 管理贴图的添加、删除、随机和批量放置"""
 
-
-class PasteEngineMixin:
-    """贴图引擎混入类 - 管理贴图的添加、删除、随机和批量放置"""
-
     def add_small_to_canvas(self, item):
         """添加贴图到画布"""
         if self._busy:
@@ -35,6 +31,9 @@ class PasteEngineMixin:
 
         width = pixmap.width() * scale_factor
         height = pixmap.height() * scale_factor
+
+        if width <= 0 or height <= 0:
+            return
 
         min_edge = self.min_size_spin.value()
         aspect_ratio = width / height
@@ -134,6 +133,9 @@ class PasteEngineMixin:
 
         for idx in selected_indices:
             file_path, pixmap = self.small_images[idx]
+
+            if pixmap.width() <= 0 or pixmap.height() <= 0:
+                continue
 
             aspect_ratio = pixmap.width() / pixmap.height()
             min_size = self.min_size_spin.value()

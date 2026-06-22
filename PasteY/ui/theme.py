@@ -357,6 +357,45 @@ class ThemeManager:
             QPushButton#iconBtn:pressed {{
                 background-color: {t['accent']};
             }}
+            QPushButton#bgBtn {{
+                background-color: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                padding: 2px;
+            }}
+            QPushButton#bgBtn:hover {{
+                background-color: #E3F2FD;
+                border-color: #2196F3;
+            }}
+            QPushButton#bgBtn:pressed {{
+                background-color: #BBDEFB;
+            }}
+            QPushButton#pasteBtn {{
+                background-color: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                padding: 2px;
+            }}
+            QPushButton#pasteBtn:hover {{
+                background-color: #E8F5E9;
+                border-color: #4CAF50;
+            }}
+            QPushButton#pasteBtn:pressed {{
+                background-color: #C8E6C9;
+            }}
+            QPushButton#labelBtn {{
+                background-color: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                padding: 2px;
+            }}
+            QPushButton#labelBtn:hover {{
+                background-color: #FFF3E0;
+                border-color: #FF9800;
+            }}
+            QPushButton#labelBtn:pressed {{
+                background-color: #FFE0B2;
+            }}
             QPushButton#themeBtn {{
                 background-color: transparent;
                 border: 1px solid {t['border_color']};

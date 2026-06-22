@@ -116,4 +116,4 @@ class OptionsPopup(QWidget):
                                 break
 
 
-from .canvas import Canvas  # noqa: F401
+from ..canvas import Canvas  # noqa: F401

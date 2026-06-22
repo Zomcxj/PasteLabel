@@ -4,7 +4,7 @@ Canvas 控件 - 由 CanvasRendererMixin + CanvasInteractionMixin 组合而成
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt, QPoint, QRectF
 
-from .config import BACKGROUND_SCALE_CONFIG
+from ..core.config import BACKGROUND_SCALE_CONFIG
 from .canvas_renderer import CanvasRendererMixin
 from .canvas_interaction import CanvasInteractionMixin
 

@@ -30,7 +30,7 @@ class CanvasDrawingMixin:
         return True
 
     def _complete_drawing(self, mouse_pos):
-        from .dialogs import LabelSelectionDialog
+        from ..ui.dialogs import LabelSelectionDialog
 
         self.parent.save_undo_state()
         background_rect = self.get_background_rect()

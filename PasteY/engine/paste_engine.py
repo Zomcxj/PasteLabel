@@ -7,9 +7,9 @@ from PyQt5.QtWidgets import QProgressDialog, QApplication
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt, QRectF
 
-from .config import RANDOM_POSITION_CONFIG, PASTE_ITEM_CONFIG
-from .utils import extract_label_name, calculate_iou
-from .dialogs import ProgressDialogFactory
+from ..core.config import RANDOM_POSITION_CONFIG, PASTE_ITEM_CONFIG
+from ..core.utils import extract_label_name, calculate_iou
+from ..ui.dialogs import ProgressDialogFactory
 
 
 class PasteEngineMixin:

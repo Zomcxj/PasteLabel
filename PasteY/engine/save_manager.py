@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING
 from PyQt5.QtCore import QRectF, pyqtSignal, QObject, QTimer, Qt
 from PyQt5.QtGui import QPixmap, QPainter, QColor
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QApplication
-from .config import LABELME_VERSION, DEFAULT_PREFIX
-from .utils import PathUtils
-from .dwm import set_titlebar_dark
-from .theme import ThemeManager
+from ..core.config import LABELME_VERSION, DEFAULT_PREFIX
+from ..core.utils import PathUtils
+from ..ui.dwm import set_titlebar_dark
+from ..ui.theme import ThemeManager
 
 if TYPE_CHECKING:
-    from .editor_protocol import EditorProtocol
+    from ..core.editor_protocol import EditorProtocol
 
 
 class _SyncTitleBarDialog(QDialog):
@@ -47,7 +47,7 @@ class _SyncTitleBarDialog(QDialog):
 
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        from . import i18n
+        from ..ui import i18n
         tr = i18n.t
         ok_btn = QPushButton(tr("确定"))
         ok_btn.setObjectName("successBtn")
@@ -68,7 +68,7 @@ class _SyncTitleBarDialog(QDialog):
 
 def _show_messagebox(msg_type, parent, title, text):
     """显示同步标题栏颜色的对话框"""
-    from . import i18n
+    from ..ui import i18n
     tr = i18n.t
     dialog = _SyncTitleBarDialog(msg_type, tr(title), tr(text), parent)
     dialog.exec_()
@@ -135,7 +135,7 @@ class SaveManager(QObject):
     
     def save_canvas(self):
         """保存当前画布"""
-        from .dialogs import SaveTipDialog
+        from ..ui.dialogs import SaveTipDialog
         
         if self.editor.current_background is None:
             _show_messagebox("warning", self.editor, "警告", "请先选择背景图片")
@@ -165,7 +165,7 @@ class SaveManager(QObject):
     
     def save_all_canvas(self):
         """保存所有画布"""
-        from .dialogs import ProgressDialogFactory
+        from ..ui.dialogs import ProgressDialogFactory
         
         if not self.editor.background_images:
             _show_messagebox("warning", self.editor, "警告", "没有背景图片可保存")

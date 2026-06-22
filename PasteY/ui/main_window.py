@@ -8,14 +8,14 @@ from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtCore import QPoint
 from PyQt5.QtGui import QColor
 
-from .config import WINDOW_CONFIG, THUMBNAIL_CONFIG
-from .utils import create_app_icon
-from .save_manager import SaveManager
-from .label_manager import LabelManager
+from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG
+from ..core.utils import create_app_icon
+from ..engine.save_manager import SaveManager
+from ..engine.label_manager import LabelManager
 from .ui_builder import UIBuilderMixin
-from .image_loader import ImageLoaderMixin
-from .paste_engine import PasteEngineMixin
-from .event_handler import EventHandlerMixin
+from ..engine.image_loader import ImageLoaderMixin
+from ..engine.paste_engine import PasteEngineMixin
+from ..engine.event_handler import EventHandlerMixin
 from .theme import ThemeManager, ThemeMode
 from .dwm import set_titlebar_dark
 from .settings_dialog import SettingsDialog
@@ -44,7 +44,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def _load_settings(self):
         """从配置文件加载主题和语言设置"""
-        from . import config_manager, i18n
+        from ..core import config_manager
+        from . import i18n
         from .theme import ThemeManager, ThemeMode
 
         settings = config_manager.load_all()
@@ -58,7 +59,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
     def _init_data(self):
         """初始化数据结构"""
         from PyQt5.QtWidgets import QLineEdit
-        from .config import DEFAULT_PREFIX
+        from ..core.config import DEFAULT_PREFIX
 
         self.background_images = []
         self.current_background = None
@@ -89,7 +90,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.save_manager = SaveManager(self, self)
         self.label_manager = LabelManager(self, self)
 
-        from .undo_manager import UndoManager
+        from ..engine.undo_manager import UndoManager
         self.undo_manager = UndoManager()
 
     def _connect_manager_signals(self):
@@ -184,7 +185,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def toggle_theme(self):
         """切换主题"""
-        from . import config_manager
+        from ..core import config_manager
         ThemeManager.toggle()
         self._apply_theme()
         is_dark = ThemeManager.get_mode().value == "dark"
@@ -196,7 +197,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def toggle_language(self):
         """切换中英文"""
-        from . import i18n, config_manager
+        from . import i18n
+        from ..core import config_manager
         i18n.toggle_lang()
         config_manager.save_language(i18n.get_lang())
         self._refresh_ui_texts()

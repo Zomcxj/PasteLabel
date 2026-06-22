@@ -42,44 +42,52 @@ python PasteY/main.py
 
 ```
 PasteLabel/
-├── PasteY/                # 模块化代码包
-│   ├── main.py            # 程序入口
-│   ├── main_window.py     # 主窗口逻辑
-│   ├── canvas.py          # 画布控件
-│   ├── canvas_renderer.py # 画布绘制
-│   ├── canvas_interaction.py # 画布交互（事件入口、拖拽、缩放）
-│   ├── canvas_drawing.py  # 检测框绘制逻辑
-│   ├── canvas_menu.py     # 右键菜单
-│   ├── paste_engine.py    # 贴图引擎（随机/批量放置）
-│   ├── image_loader.py    # 图片加载
-│   ├── label_manager.py   # 标签管理
-│   ├── save_manager.py    # 保存管理
-│   ├── event_handler.py   # 事件处理
-│   ├── editor_protocol.py # 编辑器接口
-│   ├── config.py          # 配置常量
-│   ├── utils.py           # 工具函数
-│   ├── models.py          # 数据模型
-│   ├── dialogs.py         # 对话框
-│   ├── styles.py          # 样式管理
-│   ├── theme.py           # 主题管理（深色/浅色）
-│   ├── i18n.py            # 中英文切换
-│   ├── dwm.py             # Windows DWM API（标题栏颜色）
-│   ├── title_bar.py       # 自定义标题栏（预留）
-│   ├── settings_dialog.py # 快捷键设置对话框
-│   ├── exception_hook.py  # 全局异常捕获
-│   ├── widgets.py         # 自定义控件
-│   ├── build.sh           # 构建脚本（PyInstaller）
-│   ├── PasteLabel.spec    # PyInstaller 配置文件
-│   ├── __init__.py        # 包初始化
-│   └── tests/             # 单元测试
-├── PasteX/                # 旧版单文件版本（归档）
-├── images/                # 样本图片数据
-├── ico_image/             # 图标资源
-│   └── fonts/             # JetBrains Mono 字体
-├── paste_label.txt        # 贴图标签文件
-├── conftest.py            # pytest 配置（mock PyQt5）
-├── README.md              # 项目说明
-├── LICENSE                # MIT 许可证
+├── PasteY/                    # 模块化代码包
+│   ├── main.py                # 程序入口
+│   ├── __init__.py            # 包初始化
+│   ├── canvas/                # 画布模块
+│   │   ├── canvas.py          # 画布控件
+│   │   ├── canvas_renderer.py # 画布绘制
+│   │   ├── canvas_interaction.py # 画布交互（拖拽、缩放）
+│   │   ├── canvas_drawing.py  # 检测框绘制逻辑
+│   │   └── canvas_menu.py     # 右键菜单
+│   ├── ui/                    # 界面模块
+│   │   ├── main_window.py     # 主窗口逻辑
+│   │   ├── ui_builder.py      # UI 构建
+│   │   ├── widgets.py         # 自定义控件
+│   │   ├── dialogs.py         # 对话框
+│   │   ├── settings_dialog.py # 设置对话框
+│   │   ├── theme.py           # 主题管理（深色/浅色）
+│   │   ├── i18n.py            # 中英文切换
+│   │   ├── styles.py          # 样式管理
+│   │   ├── title_bar.py       # 标题栏
+│   │   └── dwm.py             # Windows DWM API
+│   ├── engine/                # 业务逻辑模块
+│   │   ├── paste_engine.py    # 贴图引擎（随机/批量放置）
+│   │   ├── image_loader.py    # 图片加载
+│   │   ├── label_manager.py   # 标签管理
+│   │   ├── save_manager.py    # 保存管理
+│   │   ├── undo_manager.py    # 撤销/重做
+│   │   └── event_handler.py   # 事件处理
+│   ├── core/                  # 核心配置模块
+│   │   ├── config.py          # 配置常量
+│   │   ├── config_manager.py  # 配置管理器
+│   │   ├── utils.py           # 工具函数
+│   │   ├── models.py          # 数据模型
+│   │   ├── editor_protocol.py # 编辑器接口
+│   │   └── exception_hook.py  # 全局异常捕获
+│   ├── tests/                 # 单元测试
+│   ├── build.sh               # 构建脚本
+│   └── PasteLabel.spec        # PyInstaller 配置
+├── PasteX/                    # 旧版单文件版本
+├── images/                    # 样本图片数据
+├── ico_image/                 # 图标资源
+│   └── fonts/                 # JetBrains Mono 字体
+├── paste_label.txt            # 贴图标签文件
+├── conftest.py                # pytest 配置
+├── README.md                  # 项目说明
+├── user_guide.md              # 用户指南
+├── LICENSE                    # MIT 许可证
 └── .gitignore
 ```
 

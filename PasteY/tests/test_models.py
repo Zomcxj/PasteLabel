@@ -13,8 +13,8 @@ def _load_module(name, path):
     spec.loader.exec_module(mod)
     return mod
 
-_models_path = os.path.join(os.path.dirname(__file__), '..', 'models.py')
-_models = _load_module('PasteY.models', os.path.abspath(_models_path))
+_models_path = os.path.join(os.path.dirname(__file__), '..', 'core', 'models.py')
+_models = _load_module('PasteY.core.models', os.path.abspath(_models_path))
 
 DetectionBox = _models.DetectionBox
 SaveInfo = _models.SaveInfo

@@ -1,7 +1,7 @@
 """
 撤销/重做模块 - 操作历史管理
 """
-from .config import UNDO_CONFIG
+from ..core.config import UNDO_CONFIG
 
 
 class UndoManager:

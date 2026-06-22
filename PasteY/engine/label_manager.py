@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING
 from PyQt5.QtCore import pyqtSignal, QObject
 from PyQt5.QtWidgets import QMenu, QAction, QInputDialog, QMessageBox, QListWidgetItem
 
-from .utils import extract_label_name
+from ..core.utils import extract_label_name
 
 if TYPE_CHECKING:
-    from .editor_protocol import EditorProtocol
+    from ..core.editor_protocol import EditorProtocol
 
 
 class LabelManager(QObject):

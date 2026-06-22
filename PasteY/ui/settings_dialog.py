@@ -9,10 +9,11 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer
 
-from .config import SHORTCUT_CONFIG
+from ..core.config import SHORTCUT_CONFIG
 from .theme import ThemeManager, ThemeMode
 from .dwm import set_titlebar_dark
-from . import config_manager, i18n
+from ..core import config_manager
+from . import i18n
 
 
 class SettingsDialog(QDialog):

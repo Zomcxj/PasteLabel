@@ -218,7 +218,7 @@ class SettingsDialog(QDialog):
 
     def _get_config_path(self):
         """获取配置文件路径 - 默认在用户目录"""
-        return os.path.join(os.path.expanduser("~"), '.PasteLabel.json')
+        return os.path.join(os.path.expanduser("~"), '.pastelabel.json')
 
 
 def load_shortcuts():
@@ -236,4 +236,4 @@ def load_shortcuts():
 
 def _get_config_path():
     """获取配置文件路径 - 默认在用户目录"""
-    return os.path.join(os.path.expanduser("~"), '.PasteLabel.json')
+    return os.path.join(os.path.expanduser("~"), '.pastelabel.json')

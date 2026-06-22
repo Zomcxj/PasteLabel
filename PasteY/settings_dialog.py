@@ -108,14 +108,15 @@ class SettingsDialog(QDialog):
         opt_layout = QVBoxLayout(opt_group)
 
         prefix_row = QHBoxLayout()
-        prefix_label = QLabel(tr("添加文件名前缀"))
-        prefix_row.addWidget(prefix_label)
+        prefix_label = QLabel(tr("添加文件名前缀") + ":")
+        prefix_row.addWidget(prefix_label, 2)
 
         self.prefix_input = QLineEdit()
         self.prefix_input.setObjectName("shortcutInput")
-        self.prefix_input.setMaximumWidth(200)
-        prefix_row.addWidget(self.prefix_input)
-        prefix_row.addStretch()
+        self.prefix_input.setMinimumWidth(150)
+        prefix_row.addWidget(self.prefix_input, 1)
+
+        prefix_row.addSpacing(70)
         opt_layout.addLayout(prefix_row)
 
         layout.addWidget(opt_group)

@@ -345,6 +345,12 @@ qtwidgets.QFrame = type('QFrame', (_MockQWidget,), {
     'setFrameShadow': lambda self, *a: None,
     'setFixedHeight': lambda self, *a: None,
 })
+qtwidgets.QComboBox = type('QComboBox', (_MockQWidget,), {
+    'addItems': lambda self, *a: None,
+    'setCurrentIndex': lambda self, *a: None,
+    'currentIndex': lambda self: 0,
+    'setMaximumWidth': lambda self, *a: None,
+})
 
 # 注册模块
 sys.modules['PyQt5'] = types.ModuleType('PyQt5')

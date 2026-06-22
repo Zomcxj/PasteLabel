@@ -5,13 +5,14 @@ import json
 import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QGroupBox, QScrollArea, QWidget, QCheckBox
+    QPushButton, QGroupBox, QScrollArea, QWidget, QCheckBox, QComboBox
 )
 from PyQt5.QtCore import Qt, QTimer
 
 from .config import SHORTCUT_CONFIG
-from .theme import ThemeManager
+from .theme import ThemeManager, ThemeMode
 from .dwm import set_titlebar_dark
+from . import config_manager, i18n
 
 
 class SettingsDialog(QDialog):
@@ -106,6 +107,28 @@ class SettingsDialog(QDialog):
         opt_group = QGroupBox(tr("选项设置"))
         opt_layout = QVBoxLayout(opt_group)
 
+        theme_row = QHBoxLayout()
+        theme_label = QLabel(tr("主题"))
+        theme_row.addWidget(theme_label)
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems([tr("浅色"), tr("深色")])
+        self.theme_combo.setCurrentIndex(0 if ThemeManager.get_mode() == ThemeMode.LIGHT else 1)
+        self.theme_combo.setMaximumWidth(120)
+        theme_row.addWidget(self.theme_combo)
+        theme_row.addStretch()
+        opt_layout.addLayout(theme_row)
+
+        lang_row = QHBoxLayout()
+        lang_label = QLabel(tr("语言"))
+        lang_row.addWidget(lang_label)
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItems(["中文", "English"])
+        self.lang_combo.setCurrentIndex(0 if i18n.get_lang() == "zh" else 1)
+        self.lang_combo.setMaximumWidth(120)
+        lang_row.addWidget(self.lang_combo)
+        lang_row.addStretch()
+        opt_layout.addLayout(lang_row)
+
         prefix_label = QLabel(tr("添加文件名前缀"))
         opt_layout.addWidget(prefix_label)
 
@@ -170,17 +193,10 @@ class SettingsDialog(QDialog):
 
     def _load_shortcuts(self):
         """加载保存的快捷键"""
-        config_path = self._get_config_path()
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                shortcuts = config.get('shortcuts', {})
-                for key, field in self.shortcut_inputs.items():
-                    if key in shortcuts:
-                        field.setText(shortcuts[key])
-            except Exception:
-                pass
+        shortcuts = config_manager.load_shortcuts()
+        for key, field in self.shortcut_inputs.items():
+            if key in shortcuts:
+                field.setText(shortcuts[key])
 
     def _load_options(self):
         """加载选项状态"""
@@ -195,21 +211,22 @@ class SettingsDialog(QDialog):
             if text:
                 shortcuts[key] = text
 
-        config = {'shortcuts': shortcuts}
-
         if self._editor:
             self._editor.prefix_input.setText(self.prefix_input.text())
 
-        config_path = self._get_config_path()
-        try:
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
-            self.accept()
-        except Exception as e:
-            from PyQt5.QtWidgets import QMessageBox
-            from . import i18n
-            tr = i18n.t
-            QMessageBox.warning(self, tr("保存失败"), f"{tr('无法保存设置')}: {e}")
+        theme = 'dark' if self.theme_combo.currentIndex() == 1 else 'light'
+        language = 'en' if self.lang_combo.currentIndex() == 1 else 'zh'
+
+        config_manager.save_all(shortcuts=shortcuts, theme=theme, language=language)
+
+        ThemeManager.set_mode(ThemeMode.DARK if theme == 'dark' else ThemeMode.LIGHT)
+        i18n.set_lang(language)
+
+        if self._editor:
+            self._editor._apply_theme()
+            self._editor._refresh_ui_texts()
+
+        self.accept()
 
     def _get_config_path(self):
         """获取配置文件路径 - 默认在用户目录"""
@@ -218,17 +235,4 @@ class SettingsDialog(QDialog):
 
 def load_shortcuts():
     """加载快捷键配置"""
-    config_path = _get_config_path()
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            return config.get('shortcuts', {})
-        except Exception:
-            pass
-    return SHORTCUT_CONFIG
-
-
-def _get_config_path():
-    """获取配置文件路径 - 默认在用户目录"""
-    return os.path.join(os.path.expanduser("~"), '.pastelabel.json')
+    return config_manager.load_shortcuts()

@@ -33,6 +33,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.setWindowIcon(create_app_icon(script_dir))
 
+        self._load_settings()
         self._init_data()
         self.init_ui()
         self._apply_theme()
@@ -40,6 +41,19 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._connect_manager_signals()
         self.update_label_list()
         self.installEventFilterRecursive(self)
+
+    def _load_settings(self):
+        """从配置文件加载主题和语言设置"""
+        from . import config_manager, i18n
+        from .theme import ThemeManager, ThemeMode
+
+        settings = config_manager.load_all()
+
+        theme = settings.get('theme', 'light')
+        ThemeManager.set_mode(ThemeMode.DARK if theme == 'dark' else ThemeMode.LIGHT)
+
+        language = settings.get('language', 'zh')
+        i18n.set_lang(language)
 
     def _init_data(self):
         """初始化数据结构"""

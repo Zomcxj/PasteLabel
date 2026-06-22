@@ -336,7 +336,7 @@ class UIBuilderMixin:
     def on_prefix_input_focus_in(self, event):
         """前缀输入框获得焦点"""
         if self.prefix_input.text() == self.default_prefix:
-            self.prefix_input.setTextr("")
+            self.prefix_input.setText("")
             self.prefix_input.setProperty("placeholder", False)
             self.prefix_input.style().unpolish(self.prefix_input)
             self.prefix_input.style().polish(self.prefix_input)
@@ -359,7 +359,7 @@ class UIBuilderMixin:
         max_size = self.max_size_spin.value()
         if min_size > max_size:
             self.status_label.setText("Min cannot exceed Max")
-            QTimer.singleShot(2000, lambda: self.status_label.setTextr(""))
+            QTimer.singleShot(2000, lambda: self.status_label.setText(""))
             self.min_size_spin.setValue(max_size)
 
     def _on_min_size_changed(self, value):

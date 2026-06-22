@@ -4,7 +4,7 @@
 import os
 import sys
 import subprocess
-from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QApplication
+from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtCore import QPoint
 from PyQt5.QtGui import QColor
 
@@ -142,15 +142,6 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         """设置系统标题栏颜色"""
         hwnd = int(self.winId())
         set_titlebar_dark(hwnd, dark)
-
-    def toggle_theme(self):
-        """切换主题"""
-        ThemeManager.toggle()
-        self._apply_theme()
-        is_dark = ThemeManager.get_mode().value == "dark"
-        self.status_label.setText(f"Theme: {'Dark' if is_dark else 'Light'}")
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(2000, lambda: self.status_label.setText(""))
 
     def _apply_theme(self):
         """应用当前主题样式"""

@@ -1,7 +1,6 @@
 """
 设置对话框 - 快捷键自定义
 """
-import sys
 import json
 import os
 from PyQt5.QtWidgets import (

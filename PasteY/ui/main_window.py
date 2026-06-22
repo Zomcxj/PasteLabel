@@ -350,7 +350,7 @@ def main():
     if getattr(sys, 'frozen', False):
         base = sys._MEIPASS
     else:
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     font_dir = os.path.join(base, "ico_image", "fonts")
     for name in ["JetBrainsMono-Regular.ttf", "JetBrainsMono-Medium.ttf", "JetBrainsMono-Bold.ttf"]:
         fpath = os.path.join(font_dir, name)

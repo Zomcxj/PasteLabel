@@ -4,7 +4,7 @@
 import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
-    QLineEdit, QPushButton, QInputDialog, QMessageBox
+    QLineEdit, QPushButton
 )
 from PyQt5.QtCore import Qt
 

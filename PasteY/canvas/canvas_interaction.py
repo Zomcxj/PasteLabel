@@ -80,6 +80,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             return False
 
         background_rect = self.get_background_rect()
+        if background_rect is None:
+            return False
         item_x = (rect.x() * self.background_scale) + background_rect.left()
         item_y = (rect.y() * self.background_scale) + background_rect.top()
         item_width = rect.width() * self.background_scale

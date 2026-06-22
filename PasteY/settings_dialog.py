@@ -93,7 +93,7 @@ class SettingsDialog(QDialog):
 
             reset_btn = QPushButton(tr("重置"))
             reset_btn.setObjectName("resetBtn")
-            reset_btn.setFixedWidth(50)
+            reset_btn.setFixedWidth(70)
             reset_btn.clicked.connect(lambda _, k=key, f=input_field: self._reset_shortcut(k, f))
             row.addWidget(reset_btn)
 
@@ -106,16 +106,13 @@ class SettingsDialog(QDialog):
         opt_group = QGroupBox(tr("选项设置"))
         opt_layout = QVBoxLayout(opt_group)
 
-        prefix_row = QHBoxLayout()
-        self.prefix_cb = QCheckBox(tr("添加文件名前缀"))
-        self.prefix_cb.setChecked(True)
-        prefix_row.addWidget(self.prefix_cb)
+        prefix_label = QLabel(tr("添加文件名前缀"))
+        opt_layout.addWidget(prefix_label)
 
         self.prefix_input = QLineEdit()
         self.prefix_input.setObjectName("shortcutInput")
-        self.prefix_input.setMaximumWidth(150)
-        prefix_row.addWidget(self.prefix_input)
-        opt_layout.addLayout(prefix_row)
+        self.prefix_input.setMaximumWidth(200)
+        opt_layout.addWidget(self.prefix_input)
 
         layout.addWidget(opt_group)
 
@@ -188,7 +185,6 @@ class SettingsDialog(QDialog):
     def _load_options(self):
         """加载选项状态"""
         if self._editor:
-            self.prefix_cb.setChecked(self._editor.prefix_checkbox.isChecked())
             self.prefix_input.setText(self._editor.prefix_input.text())
 
     def _save_shortcuts(self):
@@ -202,7 +198,6 @@ class SettingsDialog(QDialog):
         config = {'shortcuts': shortcuts}
 
         if self._editor:
-            self._editor.prefix_checkbox.setChecked(self.prefix_cb.isChecked())
             self._editor.prefix_input.setText(self.prefix_input.text())
 
         config_path = self._get_config_path()

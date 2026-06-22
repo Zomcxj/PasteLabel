@@ -113,10 +113,10 @@ class SettingsDialog(QDialog):
 
         self.prefix_input = QLineEdit()
         self.prefix_input.setObjectName("shortcutInput")
-        self.prefix_input.setMinimumWidth(150)
+        self.prefix_input.setMinimumWidth(220)
         prefix_row.addWidget(self.prefix_input, 1)
 
-        prefix_row.addSpacing(70)
+        prefix_row.addStretch()
         opt_layout.addLayout(prefix_row)
 
         layout.addWidget(opt_group)

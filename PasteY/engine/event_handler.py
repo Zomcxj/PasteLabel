@@ -3,7 +3,7 @@
 """
 import os
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import Qt, QEvent, QPoint
+from PyQt5.QtCore import Qt, QEvent
 
 from ..core.utils import extract_label_name
 

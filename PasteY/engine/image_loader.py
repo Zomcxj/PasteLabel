@@ -4,10 +4,10 @@
 import os
 import json
 from PyQt5.QtWidgets import (
-    QFileDialog, QListWidgetItem, QMessageBox, QLabel
+    QFileDialog, QListWidgetItem, QMessageBox
 )
 from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtCore import Qt, QPoint, QSize
+from PyQt5.QtCore import Qt, QSize
 
 from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
 from ..core.utils import PathUtils, natural_sort_key, create_thumbnail

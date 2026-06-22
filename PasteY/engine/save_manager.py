@@ -5,9 +5,9 @@
 import os
 import json
 from typing import TYPE_CHECKING
-from PyQt5.QtCore import QRectF, pyqtSignal, QObject, QTimer, Qt
+from PyQt5.QtCore import pyqtSignal, QObject, QTimer, Qt
 from PyQt5.QtGui import QPixmap, QPainter, QColor
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QApplication
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QApplication
 from ..core.config import LABELME_VERSION, DEFAULT_PREFIX
 from ..core.utils import PathUtils
 from ..ui.dwm import set_titlebar_dark

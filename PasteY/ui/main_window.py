@@ -3,10 +3,8 @@
 """
 import os
 import sys
-import subprocess
 from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtCore import QPoint
-from PyQt5.QtGui import QColor
 
 from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG
 from ..core.utils import create_app_icon

@@ -12,8 +12,8 @@ def _load_module(name, path):
     spec.loader.exec_module(mod)
     return mod
 
-_utils_path = os.path.join(os.path.dirname(__file__), '..', 'utils.py')
-_utils = _load_module('PasteY.utils', os.path.abspath(_utils_path))
+_utils_path = os.path.join(os.path.dirname(__file__), '..', 'core', 'utils.py')
+_utils = _load_module('PasteY.core.utils', os.path.abspath(_utils_path))
 
 calculate_iou = _utils.calculate_iou
 natural_sort_key = _utils.natural_sort_key

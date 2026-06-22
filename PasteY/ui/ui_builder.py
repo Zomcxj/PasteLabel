@@ -10,9 +10,9 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QIcon, QPixmap, QPainter
 from PyQt5.QtCore import Qt, QSize, QTimer, QPoint
 
-from .config import WINDOW_CONFIG, PASTE_PARAMS, THUMBNAIL_CONFIG, DEFAULT_PREFIX
-from .utils import create_thumbnail
-from .widgets import Canvas
+from ..core.config import WINDOW_CONFIG, PASTE_PARAMS, THUMBNAIL_CONFIG, DEFAULT_PREFIX
+from ..core.utils import create_thumbnail
+from ..canvas import Canvas
 from .theme import ThemeManager
 from .i18n import t as tr
 
@@ -83,12 +83,12 @@ class UIBuilderMixin:
         self.bg_lbl = QLabel(tr("背景图:"))
         upload_layout.addWidget(self.bg_lbl)
         self.upload_a_btn = self._create_svg_button(
-            SVG_FILE, self.upload_background, tr("选择背景图片"), bg_color
+            SVG_FILE, self.upload_background, tr("选择背景图片"), bg_color, "bgBtn"
         )
         upload_layout.addWidget(self.upload_a_btn)
 
         self.load_folder_btn = self._create_svg_button(
-            SVG_FOLDER, self.load_folder_images, tr("加载文件夹图片"), bg_color
+            SVG_FOLDER, self.load_folder_images, tr("加载文件夹图片"), bg_color, "bgBtn"
         )
         upload_layout.addWidget(self.load_folder_btn)
 
@@ -96,12 +96,12 @@ class UIBuilderMixin:
         self.paste_lbl = QLabel(tr("贴图:"))
         upload_layout.addWidget(self.paste_lbl)
         self.upload_b_btn = self._create_svg_button(
-            SVG_FILE, self.upload_small_images, tr("选择贴图"), paste_color
+            SVG_FILE, self.upload_small_images, tr("选择贴图"), paste_color, "pasteBtn"
         )
         upload_layout.addWidget(self.upload_b_btn)
 
         self.load_small_folder_btn = self._create_svg_button(
-            SVG_FOLDER, self.load_small_folder_images, tr("加载贴图文件夹"), paste_color
+            SVG_FOLDER, self.load_small_folder_images, tr("加载贴图文件夹"), paste_color, "pasteBtn"
         )
         upload_layout.addWidget(self.load_small_folder_btn)
 
@@ -109,7 +109,7 @@ class UIBuilderMixin:
         self.label_lbl = QLabel(tr("标签:"))
         upload_layout.addWidget(self.label_lbl)
         self.upload_paste_label_btn = self._create_svg_button(
-            SVG_FILE, self.upload_paste_labels, tr("选择标签文件"), label_color
+            SVG_FILE, self.upload_paste_labels, tr("选择标签文件"), label_color, "labelBtn"
         )
         upload_layout.addWidget(self.upload_paste_label_btn)
 
@@ -157,10 +157,10 @@ class UIBuilderMixin:
         btn.setToolTip(tooltip)
         return btn
 
-    def _create_svg_button(self, svg_data, slot, tooltip, color):
+    def _create_svg_button(self, svg_data, slot, tooltip, color, obj_name=None):
         """创建 SVG 图标按钮"""
         btn = QPushButton("")
-        btn.setObjectName("iconBtn")
+        btn.setObjectName(obj_name or "iconBtn")
         btn.setIcon(QIcon(_load_svg_icon(svg_data, 14, color)))
         btn.clicked.connect(slot)
         btn.setFixedSize(24, 24)

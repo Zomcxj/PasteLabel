@@ -3,7 +3,7 @@ Canvas 交互混入 - 鼠标/键盘事件入口、拖拽、缩放
 """
 from PyQt5.QtCore import Qt, QRectF
 
-from .config import BACKGROUND_SCALE_CONFIG
+from ..core.config import BACKGROUND_SCALE_CONFIG
 from .canvas_drawing import CanvasDrawingMixin
 from .canvas_menu import CanvasMenuMixin
 

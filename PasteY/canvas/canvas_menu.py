@@ -4,7 +4,7 @@ Canvas 右键菜单 - 贴图标签管理
 from PyQt5.QtWidgets import QMenu, QAction, QInputDialog
 from PyQt5.QtCore import QPoint
 
-from .utils import extract_label_name
+from ..core.utils import extract_label_name
 
 
 class CanvasMenuMixin:

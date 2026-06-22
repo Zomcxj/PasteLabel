@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 
-from .utils import extract_label_name
+from ..core.utils import extract_label_name
 from .theme import ThemeManager
 
 
@@ -147,7 +147,7 @@ class SaveTipDialog:
     def show_save_tip(parent, file_path, success=True):
         from PyQt5.QtWidgets import QLabel
         from PyQt5.QtCore import QTimer
-        from .utils import PathUtils
+        from ..core.utils import PathUtils
 
         t = ThemeManager.get_theme()
         formatted_file_path = PathUtils.to_display_path(file_path)

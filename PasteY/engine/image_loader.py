@@ -9,8 +9,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import Qt, QPoint, QSize
 
-from .config import SUPPORTED_IMAGE_EXTENSIONS
-from .utils import PathUtils, natural_sort_key, create_thumbnail
+from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
+from ..core.utils import PathUtils, natural_sort_key, create_thumbnail
 
 
 class ImageLoaderMixin:

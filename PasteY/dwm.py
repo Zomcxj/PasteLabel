@@ -1,10 +1,9 @@
 """
 Windows DWM API 模块 - 设置标题栏深色/浅色模式
 兼容 Win10 1809+ (属性19) 和 Win10 1903+ / Win11 (属性20)
-优先使用 ctypes，不可用时回退到 PowerShell
+优先使用 ctypes，不可用时使用 PowerShell
 """
 import sys
-import os
 import subprocess
 
 _dwmapi = None
@@ -50,12 +49,11 @@ def set_titlebar_dark(hwnd, dark):
             v = 1 if dark else 0
             ps = (
                 'Add-Type @"'
-                'using System;using System.Runtime.InteropServices;'
-                'public class Dwm {'
+                'using System.Runtime.InteropServices;'
+                'public class Dwm{'
                 '[DllImport("dwmapi.dll")]'
-                'public static extern int DwmSetWindowAttribute(IntPtr h,int a,ref int v,int s);}'
+                'public static extern int DwmSetWindowAttribute(System.IntPtr h,int a,ref int v,int s);}'
                 '"@;'
-                '$v={v};'
                 '[Dwm]::DwmSetWindowAttribute([IntPtr]{h},20,[ref]$v,4);'
                 '[Dwm]::DwmSetWindowAttribute([IntPtr]{h},19,[ref]$v,4)'
             ).format(v=v, h=hwnd)

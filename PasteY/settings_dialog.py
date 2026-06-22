@@ -6,11 +6,13 @@ import json
 import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QGroupBox, QScrollArea, QWidget
+    QPushButton, QGroupBox, QScrollArea, QWidget, QCheckBox
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 
 from .config import SHORTCUT_CONFIG
+from .theme import ThemeManager
+from .dwm import set_titlebar_dark
 
 
 class SettingsDialog(QDialog):
@@ -18,7 +20,10 @@ class SettingsDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("设置")
+        from . import i18n
+        tr = i18n.t
+        self._editor = parent
+        self.setWindowTitle(tr("设置"))
         self.setMinimumWidth(400)
         self.setMinimumHeight(500)
         self.setObjectName("settingsDialog")
@@ -26,11 +31,25 @@ class SettingsDialog(QDialog):
         self.shortcut_inputs = {}
         self._init_ui()
         self._load_shortcuts()
+        self._load_options()
+
+    def showEvent(self, event):
+        """窗口显示后设置标题栏颜色"""
+        super().showEvent(event)
+        QTimer.singleShot(30, self._sync_titlebar)
+
+    def _sync_titlebar(self):
+        """同步标题栏颜色"""
+        is_dark = ThemeManager.get_mode().value == "dark"
+        hwnd = int(self.winId())
+        set_titlebar_dark(hwnd, is_dark)
 
     def _init_ui(self):
+        from . import i18n
+        tr = i18n.t
         layout = QVBoxLayout(self)
 
-        group = QGroupBox("快捷键设置")
+        group = QGroupBox(tr("快捷键设置"))
         group_layout = QVBoxLayout(group)
 
         scroll = QScrollArea()
@@ -39,24 +58,25 @@ class SettingsDialog(QDialog):
         scroll_layout = QVBoxLayout(scroll_content)
 
         shortcut_names = {
-            'undo': '撤销',
-            'redo': '重做',
-            'save': '保存',
-            'save_all': '全部保存',
-            'clear': '清空画布',
-            'toggle_grid': '显示网格',
-            'toggle_labels': '显示BOX',
-            'toggle_label_names': '显示Label',
-            'toggle_auto_save': '自动保存',
-            'draw_box': '绘制检测框',
-            'quit_draw': '退出绘制',
-            'next_image': '下一张',
-            'prev_image': '上一张',
-            'delete_selected': '删除选中',
-            'fit_view': '适应视图',
-            'zoom_in': '放大',
-            'zoom_out': '缩小',
-            'zoom_reset': '重置缩放',
+            'undo': tr("撤销"),
+            'redo': tr("重做"),
+            'save': tr("保存"),
+            'save_all': tr("全部保存"),
+            'clear': tr("清空画布"),
+            'toggle_grid': tr("显示网格"),
+            'toggle_labels': tr("显示BOX"),
+            'toggle_label_names': tr("显示Label"),
+            'toggle_auto_save': tr("自动保存"),
+            'toggle_paste_names': tr("显示贴图名"),
+            'draw_box': tr("绘制检测框"),
+            'quit_draw': tr("退出绘制"),
+            'next_image': tr("下一张"),
+            'prev_image': tr("上一张"),
+            'delete_selected': tr("删除选中"),
+            'fit_view': tr("适应视图"),
+            'zoom_in': tr("放大"),
+            'zoom_out': tr("缩小"),
+            'zoom_reset': tr("重置缩放"),
         }
 
         for key, name in shortcut_names.items():
@@ -67,11 +87,12 @@ class SettingsDialog(QDialog):
             input_field.setObjectName("shortcutInput")
             input_field.setText(SHORTCUT_CONFIG.get(key, ''))
             input_field.setReadOnly(True)
+            input_field.setMinimumWidth(150)
             input_field.keyPressEvent = lambda event, field=input_field: self._capture_key(event, field)
             self.shortcut_inputs[key] = input_field
             row.addWidget(input_field, 1)
 
-            reset_btn = QPushButton("重置")
+            reset_btn = QPushButton(tr("重置"))
             reset_btn.setObjectName("resetBtn")
             reset_btn.setFixedWidth(50)
             reset_btn.clicked.connect(lambda _, k=key, f=input_field: self._reset_shortcut(k, f))
@@ -83,15 +104,31 @@ class SettingsDialog(QDialog):
         group_layout.addWidget(scroll)
         layout.addWidget(group)
 
+        opt_group = QGroupBox(tr("选项设置"))
+        opt_layout = QVBoxLayout(opt_group)
+
+        prefix_row = QHBoxLayout()
+        self.prefix_cb = QCheckBox(tr("添加文件名前缀"))
+        self.prefix_cb.setChecked(True)
+        prefix_row.addWidget(self.prefix_cb)
+
+        self.prefix_input = QLineEdit()
+        self.prefix_input.setObjectName("shortcutInput")
+        self.prefix_input.setMaximumWidth(150)
+        prefix_row.addWidget(self.prefix_input)
+        opt_layout.addLayout(prefix_row)
+
+        layout.addWidget(opt_group)
+
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        save_btn = QPushButton("保存")
+        save_btn = QPushButton(tr("保存"))
         save_btn.setObjectName("successBtn")
         save_btn.clicked.connect(self._save_shortcuts)
         btn_layout.addWidget(save_btn)
 
-        cancel_btn = QPushButton("取消")
+        cancel_btn = QPushButton(tr("取消"))
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
@@ -149,6 +186,12 @@ class SettingsDialog(QDialog):
             except Exception:
                 pass
 
+    def _load_options(self):
+        """加载选项状态"""
+        if self._editor:
+            self.prefix_cb.setChecked(self._editor.prefix_checkbox.isChecked())
+            self.prefix_input.setText(self._editor.prefix_input.text())
+
     def _save_shortcuts(self):
         """保存快捷键到文件"""
         shortcuts = {}
@@ -159,6 +202,10 @@ class SettingsDialog(QDialog):
 
         config = {'shortcuts': shortcuts}
 
+        if self._editor:
+            self._editor.prefix_checkbox.setChecked(self.prefix_cb.isChecked())
+            self._editor.prefix_input.setText(self.prefix_input.text())
+
         config_path = self._get_config_path()
         try:
             with open(config_path, 'w', encoding='utf-8') as f:
@@ -166,7 +213,9 @@ class SettingsDialog(QDialog):
             self.accept()
         except Exception as e:
             from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "保存失败", f"无法保存设置: {e}")
+            from . import i18n
+            tr = i18n.t
+            QMessageBox.warning(self, tr("保存失败"), f"{tr('无法保存设置')}: {e}")
 
     def _get_config_path(self):
         """获取配置文件路径 - 默认在用户目录"""

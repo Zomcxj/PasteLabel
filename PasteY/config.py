@@ -118,6 +118,7 @@ SHORTCUT_CONFIG = {
     'toggle_labels': 'R',
     'toggle_label_names': 'T',
     'toggle_auto_save': 'G',
+    'toggle_paste_names': 'F',
     'draw_box': 'W',
     'quit_draw': 'Q',
     'next_image': 'D',

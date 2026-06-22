@@ -47,7 +47,9 @@ class _SyncTitleBarDialog(QDialog):
 
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        ok_btn = QPushButton("确定")
+        from . import i18n
+        tr = i18n.t
+        ok_btn = QPushButton(tr("确定"))
         ok_btn.setObjectName("successBtn")
         ok_btn.setFixedWidth(80)
         ok_btn.clicked.connect(self.accept)
@@ -66,7 +68,9 @@ class _SyncTitleBarDialog(QDialog):
 
 def _show_messagebox(msg_type, parent, title, text):
     """显示同步标题栏颜色的对话框"""
-    dialog = _SyncTitleBarDialog(msg_type, title, text, parent)
+    from . import i18n
+    tr = i18n.t
+    dialog = _SyncTitleBarDialog(msg_type, tr(title), tr(text), parent)
     dialog.exec_()
 
 

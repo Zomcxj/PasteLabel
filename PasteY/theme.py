@@ -95,6 +95,10 @@ class ThemeManager:
         return cls._current_theme
 
     @classmethod
+    def get_theme_colors(cls):
+        return cls._current_theme
+
+    @classmethod
     def get_mode(cls):
         return cls._mode
 
@@ -376,6 +380,37 @@ class ThemeManager:
             QPushButton#settingsBtn:hover {{
                 background-color: {t['accent_light']};
                 border-color: {t['accent']};
+            }}
+
+            /* 选项按钮 */
+            QPushButton#optionsBtn {{
+                background-color: {t['accent_light']};
+                border: 1px solid {t['accent']};
+                border-radius: 6px;
+                padding: 3px 8px;
+                font-size: 11px;
+                font-weight: bold;
+                color: {t['accent']};
+            }}
+            QPushButton#optionsBtn:hover {{
+                background-color: {t['accent']};
+                color: {t['widget_bg']};
+            }}
+            QPushButton#optionsBtn::menu-indicator {{
+                width: 0px;
+                height: 0px;
+            }}
+            QMenu#optionsMenu {{
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
+                padding: 4px;
+            }}
+            QMenu#optionsMenu::item {{
+                padding: 6px 16px;
+            }}
+            QMenu#optionsMenu::item:selected {{
+                background-color: {t['accent_light']};
+                color: {t['accent']};
             }}
             QPushButton#langBtn {{
                 background-color: transparent;

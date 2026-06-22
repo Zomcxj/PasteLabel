@@ -4,7 +4,7 @@ Canvas 控件 - 由 CanvasRendererMixin + CanvasInteractionMixin 组合而成
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt, QPoint, QRectF
 
-from ..core.config import BACKGROUND_SCALE_CONFIG
+from ..core.config import BACKGROUND_SCALE_CONFIG, WINDOW_CONFIG
 from .canvas_renderer import CanvasRendererMixin
 from .canvas_interaction import CanvasInteractionMixin
 
@@ -13,11 +13,11 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
     """画布控件 - 用于显示和编辑背景图、贴图、检测框"""
 
     def __init__(self, parent=None):
-        super().__init__()
+        super().__init__(parent)
         self.parent = parent
         self.setMinimumSize(
-            BACKGROUND_SCALE_CONFIG.get('canvas_min_width', 800),
-            BACKGROUND_SCALE_CONFIG.get('canvas_min_height', 600)
+            WINDOW_CONFIG.get('min_width', 1024),
+            WINDOW_CONFIG.get('min_height', 768)
         )
 
         # 拖动相关

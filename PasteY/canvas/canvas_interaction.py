@@ -261,8 +261,9 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 nr.setWidth(new_w)
                 nr.setHeight(new_h)
 
+                self.selected_item_size = (new_w, new_h)
+
             self.parent.canvas_items[self.parent.selected_item] = (p, nr, label)
-            self.selected_item_size = (new_w, new_h)
             self.update()
 
     def mouseReleaseEvent(self, event):

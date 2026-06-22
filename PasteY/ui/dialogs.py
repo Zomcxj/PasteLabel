@@ -186,8 +186,12 @@ class SaveTipDialog:
         save_label.adjustSize()
 
         canvas_rect = parent.canvas.rect()
-        img_width = parent.current_background.width()
-        img_height = parent.current_background.height()
+        if parent.current_background:
+            img_width = parent.current_background.width()
+            img_height = parent.current_background.height()
+        else:
+            img_width = canvas_rect.width()
+            img_height = canvas_rect.height()
         img_x = (canvas_rect.width() - img_width) // 2
         img_y = (canvas_rect.height() - img_height) // 2
         img_center_x = img_x + img_width // 2

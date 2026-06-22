@@ -134,7 +134,7 @@ class CanvasRendererMixin:
                 pixmap
             )
 
-        from .config import LABEL_COLORS
+        from ..core.config import LABEL_COLORS
         label_color_index = (hash(label) + item_index) % len(LABEL_COLORS)
         label_color_hex = LABEL_COLORS[label_color_index]
         lr = int(label_color_hex[1:3], 16)

@@ -106,7 +106,7 @@ class SettingsDialog(QDialog):
 
         opt_group = QGroupBox(tr("选项设置"))
         opt_layout = QVBoxLayout(opt_group)
-        opt_layout.setContentsMargins(0, 0, 0, 0)
+        opt_layout.setContentsMargins(9, 14, 9, 9)
 
         prefix_row = QHBoxLayout()
         prefix_label = QLabel(tr("添加文件名前缀") + ":")

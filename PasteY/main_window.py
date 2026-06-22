@@ -184,18 +184,21 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def toggle_theme(self):
         """切换主题"""
+        from . import config_manager
         ThemeManager.toggle()
         self._apply_theme()
         is_dark = ThemeManager.get_mode().value == "dark"
         self._set_titlebar_dark(is_dark)
+        config_manager.save_theme('dark' if is_dark else 'light')
         self.status_label.setText(f"Theme: {'Dark' if is_dark else 'Light'}")
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(2000, lambda: self.status_label.setText(""))
 
     def toggle_language(self):
         """切换中英文"""
-        from . import i18n
+        from . import i18n, config_manager
         i18n.toggle_lang()
+        config_manager.save_language(i18n.get_lang())
         self._refresh_ui_texts()
         lang_name = "Chinese" if i18n.get_lang() == "zh" else "English"
         self.status_label.setText(f"Language: {lang_name}")

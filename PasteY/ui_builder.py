@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QLineEdit, QCheckBox, QSpinBox, QGroupBox, QFrame
 )
 from PyQt5.QtGui import QIcon, QPixmap, QPainter
-from PyQt5.QtCore import Qt, QSize, QTimer
+from PyQt5.QtCore import Qt, QSize, QTimer, QPoint
 
 from .config import WINDOW_CONFIG, PASTE_PARAMS, THUMBNAIL_CONFIG, DEFAULT_PREFIX
 from .utils import create_thumbnail
@@ -113,20 +113,9 @@ class UIBuilderMixin:
         self._add_separator(upload_layout)
         upload_layout.addSpacing(8)
 
-        self.draw_box_btn = QPushButton(tr("绘制BOX"))
-        self.draw_box_btn.setObjectName("drawBoxBtn")
-        self.draw_box_btn.clicked.connect(self.toggle_draw_mode)
-        self.draw_box_btn.setMinimumWidth(80)
-        self.draw_box_btn.setMaximumWidth(100)
-        self.draw_box_btn.setToolTip(tr("绘制检测框"))
-        upload_layout.addWidget(self.draw_box_btn)
-
-        upload_layout.addSpacing(8)
-        self._add_separator(upload_layout)
-        upload_layout.addSpacing(8)
-
-        self._add_checkboxes(upload_layout)
-        self._add_prefix_row(upload_layout)
+        self._init_checkboxes()
+        self._init_prefix_checkbox()
+        self._create_options_menu(upload_layout)
 
         upload_layout.addStretch()
 
@@ -257,6 +246,92 @@ class UIBuilderMixin:
         """网格复选框状态变化"""
         if hasattr(self, 'canvas'):
             self.canvas.update()
+
+    def _init_checkboxes(self):
+        """初始化隐藏的复选框"""
+        self.show_labels_checkbox = QCheckBox(tr("显示BOX"))
+        self.show_labels_checkbox.setObjectName("showBoxCb")
+        self.show_labels_checkbox.setChecked(False)
+        self.show_labels_checkbox.stateChanged.connect(self.on_labels_checkbox_changed)
+
+        self.show_label_names_checkbox = QCheckBox(tr("显示Label"))
+        self.show_label_names_checkbox.setObjectName("showLabelCb")
+        self.show_label_names_checkbox.setChecked(True)
+        self.show_label_names_checkbox.stateChanged.connect(self.on_labels_checkbox_changed)
+
+        self.auto_label_checkbox = QCheckBox(tr("贴图标签"))
+        self.auto_label_checkbox.setObjectName("autoLabelCb")
+        self.auto_label_checkbox.setChecked(True)
+
+        self.auto_save_checkbox = QCheckBox(tr("自动保存"))
+        self.auto_save_checkbox.setObjectName("autoSaveCb")
+        self.auto_save_checkbox.setChecked(False)
+
+        self.show_grid_checkbox = QCheckBox(tr("显示网格"))
+        self.show_grid_checkbox.setObjectName("gridCb")
+        self.show_grid_checkbox.setChecked(False)
+        self.show_grid_checkbox.stateChanged.connect(self._on_grid_changed)
+
+        self.show_paste_names_checkbox = QCheckBox(tr("显示贴图名"))
+        self.show_paste_names_checkbox.setObjectName("pasteNameCb")
+        self.show_paste_names_checkbox.setChecked(True)
+        self.show_paste_names_checkbox.stateChanged.connect(self._on_grid_changed)
+
+    def _init_prefix_checkbox(self):
+        """初始化前缀复选框"""
+        self.prefix_checkbox = QCheckBox(tr("添加文件名前缀"))
+        self.prefix_checkbox.setObjectName("prefixCb")
+        self.prefix_checkbox.setChecked(True)
+
+    def _create_options_menu(self, layout):
+        """创建选项下拉菜单按钮"""
+        from PyQt5.QtWidgets import QMenu, QAction
+
+        self.options_btn = QPushButton(tr("选项"))
+        self.options_btn.setObjectName("optionsBtn")
+        self.options_btn.setMinimumWidth(60)
+        self.options_btn.setToolTip(tr("选项设置"))
+
+        self.options_menu = QMenu()
+        self.options_menu.setObjectName("optionsMenu")
+        self.options_menu.setMinimumWidth(200)
+
+        draw_box_action = QAction("  " + tr("绘制BOX"), self)
+        draw_box_action.setShortcut("W")
+        draw_box_action.triggered.connect(self.toggle_draw_mode)
+        self.options_menu.addAction(draw_box_action)
+        self.options_menu.addSeparator()
+
+        items = [
+            (tr("显示BOX"), "R", self.show_labels_checkbox),
+            (tr("显示Label"), "T", self.show_label_names_checkbox),
+            (tr("自动保存"), "G", self.auto_save_checkbox),
+            (tr("显示网格"), "Ctrl+G", self.show_grid_checkbox),
+            (tr("显示贴图名"), "F", self.show_paste_names_checkbox),
+            (tr("添加文件名前缀"), "", self.prefix_checkbox),
+        ]
+
+        self._menu_actions = []
+        for text, shortcut, checkbox in items:
+            action = QAction(text, self)
+            if shortcut:
+                action.setShortcut(shortcut)
+            action.setCheckable(True)
+            action.setChecked(checkbox.isChecked())
+            action.triggered.connect(lambda checked, cb=checkbox: cb.setChecked(checked))
+            checkbox.stateChanged.connect(lambda state, a=action: a.setChecked(state == Qt.Checked))
+            self.options_menu.addAction(action)
+            self._menu_actions.append((action, checkbox))
+
+        self.options_btn.setMenu(self.options_menu)
+        layout.addWidget(self.options_btn)
+
+    def _show_options_popup(self):
+        """显示选项弹出菜单"""
+        btn_pos = self.options_btn.mapToGlobal(QPoint(0, self.options_btn.height()))
+        self.options_popup.move(btn_pos)
+        self.options_popup.show()
+        self.options_popup.raise_()
 
     def on_prefix_input_focus_in(self, event):
         """前缀输入框获得焦点"""

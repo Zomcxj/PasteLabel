@@ -3,8 +3,10 @@
 """
 import os
 import sys
+import subprocess
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QApplication
 from PyQt5.QtCore import QPoint
+from PyQt5.QtGui import QColor
 
 from .config import WINDOW_CONFIG, THUMBNAIL_CONFIG
 from .utils import create_app_icon
@@ -16,6 +18,7 @@ from .paste_engine import PasteEngineMixin
 from .event_handler import EventHandlerMixin
 from .theme import ThemeManager, ThemeMode
 from .dwm import set_titlebar_dark
+from .settings_dialog import SettingsDialog
 
 
 class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
@@ -33,12 +36,16 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._init_data()
         self.init_ui()
         self._apply_theme()
+        self._refresh_ui_texts()
         self._connect_manager_signals()
         self.update_label_list()
         self.installEventFilterRecursive(self)
 
     def _init_data(self):
         """初始化数据结构"""
+        from PyQt5.QtWidgets import QLineEdit
+        from .config import DEFAULT_PREFIX
+
         self.background_images = []
         self.current_background = None
         self.current_background_index = -1
@@ -54,6 +61,11 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.detection_boxes_dict = {}
         self.detection_boxes = []
         self.global_labels = set()
+
+        self.prefix_input = QLineEdit()
+        self.prefix_input.setText(DEFAULT_PREFIX)
+        self.prefix_checkbox_state = True
+        self.default_prefix = DEFAULT_PREFIX
 
         self.is_thumbnail_mode = True
         self.thumbnail_grid_width = THUMBNAIL_CONFIG['grid_width']
@@ -131,6 +143,15 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         hwnd = int(self.winId())
         set_titlebar_dark(hwnd, dark)
 
+    def toggle_theme(self):
+        """切换主题"""
+        ThemeManager.toggle()
+        self._apply_theme()
+        is_dark = ThemeManager.get_mode().value == "dark"
+        self.status_label.setText(f"Theme: {'Dark' if is_dark else 'Light'}")
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(2000, lambda: self.status_label.setText(""))
+
     def _apply_theme(self):
         """应用当前主题样式"""
         app = QApplication.instance()
@@ -143,8 +164,18 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.prefix_input.setProperty("placeholder", not has_text)
             self.prefix_input.style().unpolish(self.prefix_input)
             self.prefix_input.style().polish(self.prefix_input)
-        self._update_status_info()
         self.canvas.update()
+
+    def _update_status_info(self):
+        """更新状态栏信息"""
+        info = self.get_image_info()
+        if info:
+            stats = self.get_label_stats()
+            stats_text = " | ".join([f"{k}:{v}" for k, v in list(stats.items())[:3]])
+            self.status_label.setText(
+                f"{info['width']}x{info['height']} | Paste: {info['paste_count']} Box: {info['box_count']}"
+                + (f" | {stats_text}" if stats_text else "")
+            )
 
     def toggle_theme(self):
         """切换主题"""
@@ -170,8 +201,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         """刷新所有界面文字"""
         from . import i18n
         tr = i18n.t
-        self.draw_box_btn.setText(tr("绘制BOX"))
-        self.draw_box_btn.setToolTip(tr("绘制检测框"))
+        if hasattr(self, 'draw_box_btn'):
+            self.draw_box_btn.setText(tr("绘制BOX"))
+            self.draw_box_btn.setToolTip(tr("绘制检测框"))
         self.auto_save_checkbox.setText(tr("自动保存"))
         self.show_labels_checkbox.setText(tr("显示BOX"))
         self.show_label_names_checkbox.setText(tr("显示Label"))
@@ -208,6 +240,14 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.paste_count_lbl.setText(tr("贴图个数:"))
         if hasattr(self, 'size_lbl'):
             self.size_lbl.setText(tr("短边尺寸:"))
+        if hasattr(self, 'options_btn'):
+            self.options_btn.setText(tr("选项"))
+        if hasattr(self, '_menu_actions'):
+            menu_texts = [tr("显示BOX"), tr("显示Label"),
+                         tr("自动保存"), tr("显示网格"), tr("显示贴图名"), tr("添加文件名前缀")]
+            for i, (action, _) in enumerate(self._menu_actions):
+                if i < len(menu_texts):
+                    action.setText(menu_texts[i])
         if hasattr(self, 'upload_a_btn'):
             self.upload_a_btn.setToolTip(tr("选择背景图片"))
         if hasattr(self, 'load_folder_btn'):
@@ -257,7 +297,6 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def open_settings(self):
         """打开设置对话框"""
-        from .settings_dialog import SettingsDialog
         dialog = SettingsDialog(self)
         dialog.exec_()
 

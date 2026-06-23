@@ -146,17 +146,6 @@ class UIBuilderMixin:
 
         layout.addWidget(toolbar_widget)
 
-    def _create_icon_button(self, icon_path, slot, tooltip):
-        """创建图标按钮"""
-        btn = QPushButton("")
-        btn.setObjectName("iconBtn")
-        if os.path.exists(icon_path):
-            btn.setIcon(QIcon(icon_path))
-        btn.clicked.connect(slot)
-        btn.setFixedSize(24, 24)
-        btn.setToolTip(tooltip)
-        return btn
-
     def _create_svg_button(self, svg_data, slot, tooltip, color, obj_name=None):
         """创建 SVG 图标按钮"""
         btn = QPushButton("")
@@ -259,33 +248,6 @@ class UIBuilderMixin:
 
         self.options_btn.setMenu(self.options_menu)
         layout.addWidget(self.options_btn)
-
-    def _show_options_popup(self):
-        """显示选项弹出菜单"""
-        btn_pos = self.options_btn.mapToGlobal(QPoint(0, self.options_btn.height()))
-        self.options_popup.move(btn_pos)
-        self.options_popup.show()
-        self.options_popup.raise_()
-
-    def on_prefix_input_focus_in(self, event):
-        """前缀输入框获得焦点"""
-        if self.prefix_input.text() == self.default_prefix:
-            self.prefix_input.setText("")
-            self.prefix_input.setProperty("placeholder", False)
-            self.prefix_input.style().unpolish(self.prefix_input)
-            self.prefix_input.style().polish(self.prefix_input)
-        QLineEdit.focusInEvent(self.prefix_input, event)
-
-    def on_prefix_input_focus_out(self, event):
-        """前缀输入框失去焦点"""
-        if not self.prefix_input.text().strip():
-            self.prefix_input.setText(self.default_prefix)
-            self.prefix_input.setProperty("placeholder", True)
-        else:
-            self.prefix_input.setProperty("placeholder", False)
-        self.prefix_input.style().unpolish(self.prefix_input)
-        self.prefix_input.style().polish(self.prefix_input)
-        QLineEdit.focusOutEvent(self.prefix_input, event)
 
     def _validate_size_range(self):
         """验证尺寸范围，确保最小值不大于最大值"""

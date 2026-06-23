@@ -22,12 +22,10 @@ class EventHandlerMixin:
         elif event.key() == Qt.Key_R:
             current_state = self.show_labels_checkbox.isChecked()
             self.show_labels_checkbox.setChecked(not current_state)
-            self.on_labels_checkbox_changed()
         elif event.key() == Qt.Key_T:
             if hasattr(self, 'show_label_names_checkbox'):
                 current_state = self.show_label_names_checkbox.isChecked()
                 self.show_label_names_checkbox.setChecked(not current_state)
-                self.on_labels_checkbox_changed()
         elif event.key() == Qt.Key_G and modifiers & Qt.ControlModifier:
             self.toggle_grid()
         elif event.key() == Qt.Key_G and not modifiers:

@@ -255,7 +255,8 @@ class ImageLoaderMixin:
                                             "label": label
                                         })
             except Exception as e:
-                print(f"加载检测框文件失败：{e}")
+                from ..core.exception_hook import _write_log
+                _write_log(f"加载检测框文件失败：{e}")
 
         return detection_boxes
 
@@ -271,7 +272,8 @@ class ImageLoaderMixin:
                 self.update_label_list()
                 self.canvas.update()
             else:
-                print(f"警告: 图片加载失败或为空: {file_path}")
+                from ..core.exception_hook import _write_log
+                _write_log(f"警告: 图片加载失败或为空: {file_path}")
 
     def select_background(self, item):
         """选择背景图"""
@@ -321,7 +323,7 @@ class ImageLoaderMixin:
                 self.file_count_label.hide()
         except Exception as e:
             import traceback
-            error_msg = "".join(traceback.format_exc())
+            error_msg = traceback.format_exc()
             self._log_error(f"select_background 错误: {e}\n{error_msg}")
 
     def update_file_count(self):

@@ -189,7 +189,7 @@ class CanvasRendererMixin:
         """在矩形上方绘制标签（背景 + 文字）"""
         font = painter.font()
         metrics = QFontMetrics(font)
-        text_width = metrics.width(label)
+        text_width = metrics.horizontalAdvance(label)
         text_height = metrics.height()
 
         painter.fillRect(int(x), int(y) - text_height, text_width, text_height, bg_color)

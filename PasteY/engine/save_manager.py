@@ -130,7 +130,8 @@ class SaveManager(QObject):
         
         painter.end()
         if not result.save(file_path):
-            print(f"自动保存失败: {file_path}")
+            from ..core.exception_hook import _write_log
+            _write_log(f"自动保存失败: {file_path}")
         self.save_json(file_path, base_name, prefix)
     
     def save_canvas(self):
@@ -217,7 +218,8 @@ class SaveManager(QObject):
             
             painter.end()
             if not result.save(save_file_path):
-                print(f"批量保存失败: {save_file_path}")
+                from ..core.exception_hook import _write_log
+                _write_log(f"批量保存失败: {save_file_path}")
             
             self.save_json(save_file_path, base_name, prefix, temp_canvas_items,
                           pixmap.width(), pixmap.height(), i)
@@ -308,4 +310,5 @@ class SaveManager(QObject):
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"保存 JSON 失败: {json_path}, 错误: {e}")
+            from ..core.exception_hook import _write_log
+            _write_log(f"保存 JSON 失败: {json_path}, 错误: {e}")

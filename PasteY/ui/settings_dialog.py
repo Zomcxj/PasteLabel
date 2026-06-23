@@ -202,10 +202,6 @@ class SettingsDialog(QDialog):
         config_manager.save_shortcuts(shortcuts)
         self.accept()
 
-    def _get_config_path(self):
-        """获取配置文件路径 - 默认在用户目录"""
-        return os.path.join(os.path.expanduser("~"), '.pastelabel.json')
-
 
 def load_shortcuts():
     """加载快捷键配置"""

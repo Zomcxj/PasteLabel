@@ -170,7 +170,7 @@ class EventHandlerMixin:
             self.canvas.update()
         except Exception as e:
             import traceback
-            error_msg = "".join(traceback.format_exc())
+            error_msg = traceback.format_exc()
             self._log_error(f"label_list_item_pressed 错误: {e}\n{error_msg}")
 
     def label_list_item_clicked(self, item):
@@ -180,7 +180,7 @@ class EventHandlerMixin:
             self.canvas.update()
         except Exception as e:
             import traceback
-            error_msg = "".join(traceback.format_exc())
+            error_msg = traceback.format_exc()
             self._log_error(f"label_list_item_clicked 错误: {e}\n{error_msg}")
 
     def closeEvent(self, event):

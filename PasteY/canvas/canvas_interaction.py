@@ -251,6 +251,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             nr = QRectF(rect)
 
             bg_rect = self.get_background_rect()
+            if bg_rect is None:
+                return
             ix = (rect.x() * self.background_scale) + bg_rect.left()
             iy = (rect.y() * self.background_scale) + bg_rect.top()
             iw = rect.width() * self.background_scale

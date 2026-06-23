@@ -7,7 +7,10 @@ import traceback
 from datetime import datetime
 
 
-LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash_log.txt")
+if getattr(sys, 'frozen', False):
+    LOG_FILE = os.path.join(os.path.dirname(sys.executable), "crash_log.txt")
+else:
+    LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash_log.txt")
 
 
 def _write_log(message):
@@ -38,7 +41,10 @@ def install_exception_hook():
 
 def exception_hook(exctype, value, tb):
     """全局异常处理"""
-    error_msg = "".join(traceback.format_exception(exctype, value, tb))
+    try:
+        error_msg = "".join(traceback.format_exception(exctype, value, tb))
+    except Exception:
+        error_msg = f"{exctype.__name__}: {value}"
     _write_log(f"未捕获的异常:\n{error_msg}")
     
     # 尝试使用 QMessageBox 显示错误
@@ -56,4 +62,7 @@ def exception_hook(exctype, value, tb):
         pass
     
     # 调用原始的 excepthook
-    sys.__excepthook__(exctype, value, tb)
+    try:
+        sys.__excepthook__(exctype, value, tb)
+    except Exception:
+        pass

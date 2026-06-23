@@ -4,13 +4,13 @@
 import os
 import json
 from PyQt5.QtWidgets import (
-    QFileDialog, QListWidgetItem, QMessageBox, QLabel
+    QFileDialog, QListWidgetItem, QMessageBox
 )
 from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtCore import Qt, QPoint, QSize
+from PyQt5.QtCore import Qt, QSize
 
-from .config import SUPPORTED_IMAGE_EXTENSIONS
-from .utils import PathUtils, natural_sort_key, create_thumbnail
+from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
+from ..core.utils import PathUtils, natural_sort_key, create_thumbnail
 
 
 class ImageLoaderMixin:
@@ -255,7 +255,8 @@ class ImageLoaderMixin:
                                             "label": label
                                         })
             except Exception as e:
-                print(f"加载检测框文件失败：{e}")
+                from ..core.exception_hook import _write_log
+                _write_log(f"加载检测框文件失败：{e}")
 
         return detection_boxes
 
@@ -271,7 +272,8 @@ class ImageLoaderMixin:
                 self.update_label_list()
                 self.canvas.update()
             else:
-                print(f"警告: 图片加载失败或为空: {file_path}")
+                from ..core.exception_hook import _write_log
+                _write_log(f"警告: 图片加载失败或为空: {file_path}")
 
     def select_background(self, item):
         """选择背景图"""
@@ -289,7 +291,7 @@ class ImageLoaderMixin:
                 self.detection_boxes_dict[self.current_background_index] = self.detection_boxes.copy()
                 background_path = self.background_images[self.current_background_index]
                 background_name = os.path.basename(background_path)
-                self.save_json(background_path, background_name, "", canvas_items=[])
+                self.save_json(background_path, background_name, "", canvas_items=self.canvas_items)
 
             self.current_background_index = index
 
@@ -321,7 +323,7 @@ class ImageLoaderMixin:
                 self.file_count_label.hide()
         except Exception as e:
             import traceback
-            error_msg = "".join(traceback.format_exc())
+            error_msg = traceback.format_exc()
             self._log_error(f"select_background 错误: {e}\n{error_msg}")
 
     def update_file_count(self):
@@ -337,10 +339,7 @@ class ImageLoaderMixin:
     def _log_error(self, message):
         """记录错误信息"""
         try:
-            from datetime import datetime
-            log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash_log.txt")
-            with open(log_path, 'a', encoding='utf-8') as f:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                f.write(f"[{timestamp}] {message}\n")
+            from ..core.exception_hook import _write_log
+            _write_log(message)
         except Exception:
             pass

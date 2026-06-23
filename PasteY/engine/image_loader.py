@@ -339,10 +339,7 @@ class ImageLoaderMixin:
     def _log_error(self, message):
         """记录错误信息"""
         try:
-            from datetime import datetime
-            log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash_log.txt")
-            with open(log_path, 'a', encoding='utf-8') as f:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                f.write(f"[{timestamp}] {message}\n")
+            from ..core.exception_hook import _write_log
+            _write_log(message)
         except Exception:
             pass

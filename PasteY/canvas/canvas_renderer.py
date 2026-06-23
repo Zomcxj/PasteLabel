@@ -218,7 +218,7 @@ class CanvasRendererMixin:
 
     def _is_pressed_label(self, box):
         """检查检测框是否是当前按下的标签"""
-        if not hasattr(self.parent, 'pressed_label') or self._editor.pressed_label is None:
+        if not hasattr(self._editor, 'pressed_label') or self._editor.pressed_label is None:
             return False
         return box.get('label') == self._editor.pressed_label
 
@@ -252,7 +252,7 @@ class CanvasRendererMixin:
         painter.setPen(pen)
         painter.drawRect(int(x), int(y), int(width), int(height))
 
-        if label and getattr(self.parent, 'show_label_names_checkbox', None) and self._editor.show_label_names_checkbox.isChecked():
+        if label and getattr(self._editor, 'show_label_names_checkbox', None) and self._editor.show_label_names_checkbox.isChecked():
             self._draw_box_label(painter, x, y, label, border_color)
 
         if is_selected:

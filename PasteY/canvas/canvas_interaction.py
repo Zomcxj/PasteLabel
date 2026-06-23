@@ -335,6 +335,10 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         return new_w, new_h
 
     def _scale_selected_item(self, event):
+        if (self._editor.selected_item is None or
+            self._editor.selected_item >= len(self._editor.canvas_items)):
+            return
+
         delta = event.angleDelta().y()
         scale_factor = 1.1 if delta > 0 else 0.9
 
@@ -364,6 +368,10 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.selected_item_size = (new_width, new_height)
 
     def _scale_selected_box(self, event):
+        if (self.selected_box is None or
+            self.selected_box >= len(self._editor.detection_boxes)):
+            return
+
         delta = event.angleDelta().y()
         scale_factor = 1.03 if delta > 0 else 0.97
 
@@ -410,7 +418,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Delete or event.key() == Qt.Key_E:
-            if self._editor.selected_item is not None:
+            if (self._editor.selected_item is not None and
+                0 <= self._editor.selected_item < len(self._editor.canvas_items)):
                 del self._editor.canvas_items[self._editor.selected_item]
                 self._editor.selected_item = None
                 self.selected_item_size = None

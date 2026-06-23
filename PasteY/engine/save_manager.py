@@ -160,7 +160,8 @@ class SaveManager(QObject):
         painter.end()
         save_success = result.save(file_path)
         
-        self.save_json(file_path, base_name, prefix)
+        if save_success:
+            self.save_json(file_path, base_name, prefix)
         
         SaveTipDialog.show_save_tip(self.editor, file_path, save_success and os.path.exists(file_path))
     

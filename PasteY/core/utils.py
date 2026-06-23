@@ -129,6 +129,9 @@ def create_thumbnail(pixmap, max_width, max_height):
     orig_width = pixmap.width()
     orig_height = pixmap.height()
 
+    if orig_width <= 0 or orig_height <= 0:
+        return pixmap
+
     # 计算等比缩放比例，使图片完整显示在网格内
     scale_x = max_width / orig_width
     scale_y = max_height / orig_height

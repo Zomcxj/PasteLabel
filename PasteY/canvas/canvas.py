@@ -60,14 +60,19 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         if self._editor.current_background is None:
             return None
 
+        bg_w = self._editor.current_background.width()
+        bg_h = self._editor.current_background.height()
+        if bg_w <= 0 or bg_h <= 0:
+            return None
+
         if not self.is_manual_scale:
-            scale_x = self.width() / self._editor.current_background.width()
-            scale_y = self.height() / self._editor.current_background.height()
+            scale_x = self.width() / bg_w
+            scale_y = self.height() / bg_h
             self.background_scale = min(scale_x, scale_y)
             self.background_offset = QPoint(0, 0)
 
-        scaled_width = self._editor.current_background.width() * self.background_scale
-        scaled_height = self._editor.current_background.height() * self.background_scale
+        scaled_width = bg_w * self.background_scale
+        scaled_height = bg_h * self.background_scale
 
         x = (self.width() - scaled_width) // 2 + self.background_offset.x()
         y = (self.height() - scaled_height) // 2 + self.background_offset.y()

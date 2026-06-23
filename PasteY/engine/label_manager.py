@@ -134,6 +134,7 @@ class LabelManager(QObject):
                 if label != label_to_delete:
                     new_canvas_items.append((pixmap, rect, label))
             self.editor.canvas_items = new_canvas_items
+            self.editor.selected_item = None
             
             for i in range(len(self.editor.background_images)):
                 if i in self.editor.canvas_items_dict:
@@ -224,6 +225,7 @@ class LabelManager(QObject):
                 box for box in self.editor.detection_boxes
                 if box.get("label") != label_to_delete
             ]
+            self.editor.canvas.selected_box = None
             
             # 从所有背景的检测框中删除
             for index in self.editor.detection_boxes_dict:

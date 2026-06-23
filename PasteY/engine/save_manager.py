@@ -168,10 +168,15 @@ class SaveManager(QObject):
         """保存所有画布"""
         from ..ui.dialogs import ProgressDialogFactory
         
+        if self.editor._busy:
+            return
+
         if not self.editor.background_images:
             _show_messagebox("warning", self.editor, "警告", "没有背景图片可保存")
             return
         
+        self.editor._busy = True
+
         progress_dialog = ProgressDialogFactory.create_progress_dialog(
             self.editor, "保存进度", "正在保存所有图片...", len(self.editor.background_images)
         )
@@ -253,6 +258,7 @@ class SaveManager(QObject):
             self.save_completed.emit()
         
         self.label_list_changed.emit()
+        self.editor._busy = False
     
     @staticmethod
     def _build_labelme_shape(label, x, y, w, h):

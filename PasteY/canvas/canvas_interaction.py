@@ -199,7 +199,30 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self._scale_item()
             return
 
+        self._check_hover()
         self.update()
+
+    def _check_hover(self):
+        """检查鼠标悬停在贴图上时自动选中"""
+        if self.parent.current_background is None or self.parent.current_background_index < 0:
+            return
+
+        bg_rect = self.get_background_rect()
+        if bg_rect is None:
+            return
+
+        for i, (pixmap, rect, label) in enumerate(self.parent.canvas_items):
+            ix = (rect.x() * self.background_scale) + bg_rect.left()
+            iy = (rect.y() * self.background_scale) + bg_rect.top()
+            iw = rect.width() * self.background_scale
+            ih = rect.height() * self.background_scale
+            item_rect = QRectF(ix, iy, iw, ih)
+
+            if item_rect.contains(self.mouse_pos):
+                if self.parent.selected_item != i:
+                    self.parent.selected_item = i
+                    self.selected_item_size = (rect.width(), rect.height())
+                return
 
     def _drag_item(self):
         bg_rect = self.get_background_rect()
@@ -269,6 +292,11 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self.update()
 
     def mouseReleaseEvent(self, event):
+        if self.is_dragging_box or self.is_resizing_box:
+            if hasattr(self, '_needs_save') and self._needs_save:
+                self._save_current_detection_boxes()
+                self._needs_save = False
+
         self.is_dragging_item = False
         self.is_dragging_background = False
         self.is_dragging_box = False

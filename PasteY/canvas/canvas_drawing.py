@@ -141,8 +141,7 @@ class CanvasDrawingMixin:
             self.box_drag_start = self.mouse_pos
 
             self._sync_detection_box_to_dict(self.selected_box)
-
-            self._save_current_detection_boxes()
+            self._needs_save = True
             self.update()
 
     def _resize_box(self):
@@ -178,8 +177,7 @@ class CanvasDrawingMixin:
             self.box_resize_start = self.mouse_pos
 
             self._sync_detection_box_to_dict(self.selected_box)
-
-            self._save_current_detection_boxes()
+            self._needs_save = True
             self.update()
 
     def _check_box_handle(self, mouse_pos, x, y, width, height, box_index):

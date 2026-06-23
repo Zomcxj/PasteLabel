@@ -101,22 +101,9 @@ class CanvasRendererMixin:
             item_rect = QRectF(item_x, item_y, item_width, item_height)
             is_selected = (i == self.parent.selected_item)
 
-            self._check_mouse_hover(item_rect, i)
-
             self._draw_single_paste_item(
                 painter, pixmap, item_rect, label, is_selected, i
             )
-
-    def _check_mouse_hover(self, item_rect, item_index):
-        """检查鼠标是否悬停在贴图上，如果是则自动选中"""
-        mouse_pos = self.mouse_pos
-        if item_rect.contains(mouse_pos):
-            if self.parent.selected_item != item_index:
-                self.parent.selected_item = item_index
-                _, rect, _ = self.parent.canvas_items[item_index]
-                self.selected_item_size = (rect.width(), rect.height())
-            return True
-        return False
 
     def _draw_single_paste_item(self, painter, pixmap, item_rect, label, is_selected, item_index=0):
         """绘制单个贴图"""

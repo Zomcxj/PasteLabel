@@ -436,7 +436,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 self.draw_start_pos = None
                 self.temp_draw_box = None
                 self.setCursor(Qt.ArrowCursor)
-                if hasattr(self.parent, 'draw_box_btn'):
+                if hasattr(self._editor, 'draw_box_btn'):
                     self._editor.draw_box_btn.setText("绘制 BOX(W)")
                 self.update()
         super().keyPressEvent(event)

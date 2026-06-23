@@ -25,7 +25,7 @@ class CanvasRendererMixin:
 
         background_rect = self.get_background_rect()
 
-        if self.parent.current_background is not None and background_rect:
+        if self._editor.current_background is not None and background_rect:
             self._draw_background(painter, background_rect)
 
         if background_rect:
@@ -34,8 +34,8 @@ class CanvasRendererMixin:
         if background_rect:
             self._draw_paste_items(painter, background_rect)
 
-        if (self.parent.show_labels_checkbox.isChecked() and
-            background_rect and self.parent.detection_boxes):
+        if (self._editor.show_labels_checkbox.isChecked() and
+            background_rect and self._editor.detection_boxes):
             self._draw_detection_boxes(painter, background_rect)
 
         if self.is_drawing_box:
@@ -48,12 +48,12 @@ class CanvasRendererMixin:
             int(background_rect.top()),
             int(background_rect.width()),
             int(background_rect.height()),
-            self.parent.current_background
+            self._editor.current_background
         )
 
     def _draw_grid(self, painter, background_rect):
         """绘制网格参考线"""
-        if not self.parent.show_grid_checkbox.isChecked():
+        if not self._editor.show_grid_checkbox.isChecked():
             return
 
         t = ThemeManager.get_theme()
@@ -92,14 +92,14 @@ class CanvasRendererMixin:
 
     def _draw_paste_items(self, painter, background_rect):
         """绘制所有贴图"""
-        for i, (pixmap, rect, label) in enumerate(self.parent.canvas_items):
+        for i, (pixmap, rect, label) in enumerate(self._editor.canvas_items):
             item_x = (rect.x() * self.background_scale) + background_rect.left()
             item_y = (rect.y() * self.background_scale) + background_rect.top()
             item_width = rect.width() * self.background_scale
             item_height = rect.height() * self.background_scale
 
             item_rect = QRectF(item_x, item_y, item_width, item_height)
-            is_selected = (i == self.parent.selected_item)
+            is_selected = (i == self._editor.selected_item)
 
             self._draw_single_paste_item(
                 painter, pixmap, item_rect, label, is_selected, i
@@ -186,7 +186,7 @@ class CanvasRendererMixin:
 
     def _draw_paste_label(self, painter, x, y, label, is_selected, item_index=0):
         """绘制贴图标签"""
-        if not self.parent.show_paste_names_checkbox.isChecked():
+        if not self._editor.show_paste_names_checkbox.isChecked():
             return
         from ..core.config import LABEL_COLORS
         label_color_index = (hash(label) + item_index) % len(LABEL_COLORS)
@@ -199,7 +199,7 @@ class CanvasRendererMixin:
 
     def _draw_detection_boxes(self, painter, background_rect):
         """绘制所有检测框"""
-        for i, box in enumerate(self.parent.detection_boxes):
+        for i, box in enumerate(self._editor.detection_boxes):
             if box["width"] <= 0 or box["height"] <= 0:
                 continue
 
@@ -218,9 +218,9 @@ class CanvasRendererMixin:
 
     def _is_pressed_label(self, box):
         """检查检测框是否是当前按下的标签"""
-        if not hasattr(self.parent, 'pressed_label') or self.parent.pressed_label is None:
+        if not hasattr(self.parent, 'pressed_label') or self._editor.pressed_label is None:
             return False
-        return box.get('label') == self.parent.pressed_label
+        return box.get('label') == self._editor.pressed_label
 
     def _draw_single_detection_box(self, painter, x, y, width, height, label,
                                     is_selected, is_pressed_label):
@@ -252,7 +252,7 @@ class CanvasRendererMixin:
         painter.setPen(pen)
         painter.drawRect(int(x), int(y), int(width), int(height))
 
-        if label and getattr(self.parent, 'show_label_names_checkbox', None) and self.parent.show_label_names_checkbox.isChecked():
+        if label and getattr(self.parent, 'show_label_names_checkbox', None) and self._editor.show_label_names_checkbox.isChecked():
             self._draw_box_label(painter, x, y, label, border_color)
 
         if is_selected:

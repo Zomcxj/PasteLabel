@@ -291,7 +291,7 @@ class ImageLoaderMixin:
                 self.detection_boxes_dict[self.current_background_index] = self.detection_boxes.copy()
                 background_path = self.background_images[self.current_background_index]
                 background_name = os.path.basename(background_path)
-                self.save_json(background_path, background_name, "", canvas_items=[])
+                self.save_json(background_path, background_name, "", canvas_items=self.canvas_items)
 
             self.current_background_index = index
 

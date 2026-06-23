@@ -14,7 +14,7 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.parent = parent
+        self._editor = parent
         self.setMinimumSize(
             WINDOW_CONFIG.get('min_width', 1024),
             WINDOW_CONFIG.get('min_height', 768)
@@ -57,17 +57,17 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
 
     def get_background_rect(self):
         """获取背景图在画布上的实际绘制矩形"""
-        if self.parent.current_background is None:
+        if self._editor.current_background is None:
             return None
 
         if not self.is_manual_scale:
-            scale_x = self.width() / self.parent.current_background.width()
-            scale_y = self.height() / self.parent.current_background.height()
+            scale_x = self.width() / self._editor.current_background.width()
+            scale_y = self.height() / self._editor.current_background.height()
             self.background_scale = min(scale_x, scale_y)
             self.background_offset = QPoint(0, 0)
 
-        scaled_width = self.parent.current_background.width() * self.background_scale
-        scaled_height = self.parent.current_background.height() * self.background_scale
+        scaled_width = self._editor.current_background.width() * self.background_scale
+        scaled_height = self._editor.current_background.height() * self.background_scale
 
         x = (self.width() - scaled_width) // 2 + self.background_offset.x()
         y = (self.height() - scaled_height) // 2 + self.background_offset.y()
@@ -82,15 +82,15 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
 
     def find_item_at_position(self, pos):
         """查找指定位置的贴图索引"""
-        if self.parent.current_background is None:
+        if self._editor.current_background is None:
             return None
 
         background_rect = self.get_background_rect()
         if background_rect is None:
             return None
 
-        for i in range(len(self.parent.canvas_items) - 1, -1, -1):
-            pixmap, rect, label = self.parent.canvas_items[i]
+        for i in range(len(self._editor.canvas_items) - 1, -1, -1):
+            pixmap, rect, label = self._editor.canvas_items[i]
 
             item_x = (rect.x() * self.background_scale) + background_rect.left()
             item_y = (rect.y() * self.background_scale) + background_rect.top()
@@ -105,7 +105,7 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
 
     def update_status_label(self):
         """更新状态栏显示 - 追加鼠标坐标到已有信息"""
-        if not self.parent.current_background or not self.mouse_inside:
+        if not self._editor.current_background or not self.mouse_inside:
             return
 
         background_rect = self.get_background_rect()
@@ -123,21 +123,21 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
             w, h = self.selected_item_size
             coord_text += f" | W: {int(w)}, H: {int(h)}"
         elif (self.selected_box is not None and
-              0 <= self.selected_box < len(self.parent.detection_boxes)):
-            box = self.parent.detection_boxes[self.selected_box]
+              0 <= self.selected_box < len(self._editor.detection_boxes)):
+            box = self._editor.detection_boxes[self.selected_box]
             coord_text += f" | W: {int(box['width'])}, H: {int(box['height'])}"
         elif self.is_drawing_box and self.temp_draw_box:
             w = self.temp_draw_box.width() / self.background_scale
             h = self.temp_draw_box.height() / self.background_scale
             coord_text += f" | W: {int(w)}, H: {int(h)}"
 
-        info = self.parent.get_image_info()
+        info = self._editor.get_image_info()
         if info:
-            stats = self.parent.get_label_stats()
+            stats = self._editor.get_label_stats()
             stats_text = " | ".join([f"{k}:{v}" for k, v in list(stats.items())[:3]])
             base = f"{info['width']}x{info['height']} | Paste: {info['paste_count']} Box: {info['box_count']}"
             if stats_text:
                 base += f" | {stats_text}"
-            self.parent.status_label.setText(f"{base}  {coord_text}")
+            self._editor.status_label.setText(f"{base}  {coord_text}")
         else:
-            self.parent.status_label.setText(coord_text)
+            self._editor.status_label.setText(coord_text)

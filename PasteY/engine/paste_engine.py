@@ -211,11 +211,16 @@ class PasteEngineMixin:
 
     def batch_paste_images(self):
         """从当前图片开始依次处理所有图片，应用随机贴图，然后返回当前图片"""
+        if self._busy:
+            return
+
         if not self.small_images:
             return
 
         if not self.background_images:
             return
+
+        self._busy = True
 
         total_count = len(self.background_images)
         start_index = self.current_background_index if self.current_background_index >= 0 else 0
@@ -268,3 +273,5 @@ class PasteEngineMixin:
             self.detection_boxes = original_detection_boxes
             self.canvas_items = self.canvas_items_dict.get(original_index, []).copy()
             self.canvas.update()
+
+        self._busy = False

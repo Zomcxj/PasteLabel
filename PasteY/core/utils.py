@@ -129,6 +129,9 @@ def create_thumbnail(pixmap, max_width, max_height):
     orig_width = pixmap.width()
     orig_height = pixmap.height()
 
+    if orig_width <= 0 or orig_height <= 0:
+        return pixmap
+
     # 计算等比缩放比例，使图片完整显示在网格内
     scale_x = max_width / orig_width
     scale_y = max_height / orig_height
@@ -166,14 +169,16 @@ def create_app_icon(script_dir):
     """
     # 尝试不同的图标路径
     icon_paths = [
-        # 开发环境路径
+        # 开发环境路径（从 ui/ 目录向上两级到项目根目录）
+        os.path.join(script_dir, "../../ico_image", "icoo.png"),
+        # 开发环境路径（从 ui/ 目录向上一级到 PasteY 目录）
         os.path.join(script_dir, "../ico_image", "icoo.png"),
         # 打包环境路径
         os.path.join(script_dir, "ico_image", "icoo.png"),
         # 当前目录
         os.path.join(os.getcwd(), "ico_image", "icoo.png"),
         # 绝对路径（备用）
-        os.path.abspath(os.path.join(script_dir, "..", "ico_image", "icoo.png"))
+        os.path.abspath(os.path.join(script_dir, "../../ico_image", "icoo.png"))
     ]
     
     # 尝试加载图标

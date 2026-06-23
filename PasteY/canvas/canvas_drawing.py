@@ -9,8 +9,8 @@ class CanvasDrawingMixin:
     """检测框绘制、拖动、缩放"""
 
     def _handle_drawing_press(self, mouse_pos):
-        if (not self.parent.background_images or
-            self.parent.current_background_index < 0):
+        if (not self._editor.background_images or
+            self._editor.current_background_index < 0):
             return True
 
         background_rect = self.get_background_rect()
@@ -21,7 +21,7 @@ class CanvasDrawingMixin:
             self.draw_start_pos = mouse_pos
             self.temp_draw_box = QRectF(mouse_pos, QSizeF())
             self.selected_box = None
-            self.parent.selected_item = None
+            self._editor.selected_item = None
             self.update_status_label()
             self.update()
         else:
@@ -30,9 +30,13 @@ class CanvasDrawingMixin:
         return True
 
     def _complete_drawing(self, mouse_pos):
-        from .dialogs import LabelSelectionDialog
+        from ..ui.dialogs import LabelSelectionDialog
 
         background_rect = self.get_background_rect()
+        if background_rect is None:
+            return
+
+        self._editor.save_undo_state()
         constrained_pos = self._constrain_to_background(mouse_pos, background_rect)
 
         x1 = min(self.draw_start_pos.x(), constrained_pos.x())
@@ -54,8 +58,8 @@ class CanvasDrawingMixin:
             return
 
         label_items = []
-        for i in range(self.parent.label_list.count()):
-            label_items.append(self.parent.label_list.item(i).text())
+        for i in range(self._editor.label_list.count()):
+            label_items.append(self._editor.label_list.item(i).text())
 
         selected_label = LabelSelectionDialog.select_label(self, label_items)
 
@@ -77,12 +81,12 @@ class CanvasDrawingMixin:
         height = max(1, height)
 
         new_box = {"x": x, "y": y, "width": width, "height": height, "label": label}
-        self.parent.detection_boxes.append(new_box)
+        self._editor.detection_boxes.append(new_box)
 
-        if self.parent.current_background_index >= 0:
+        if self._editor.current_background_index >= 0:
             self._sync_all_detection_boxes_to_dict()
 
-        self.parent.update_label_list()
+        self._editor.update_label_list()
         self._save_current_detection_boxes()
 
     def _reset_drawing_state(self):
@@ -92,27 +96,27 @@ class CanvasDrawingMixin:
         self.setCursor(Qt.ArrowCursor)
 
         if hasattr(self.parent, 'draw_box_btn'):
-            self.parent.draw_box_btn.setText("绘制 BOX(W)")
+            self._editor.draw_box_btn.setText("绘制 BOX(W)")
 
         self.update()
 
     def _save_current_detection_boxes(self):
-        if self.parent.current_background and self.parent.current_background_index >= 0:
+        if self._editor.current_background and self._editor.current_background_index >= 0:
             import os
-            background_path = self.parent.background_images[self.parent.current_background_index]
+            background_path = self._editor.background_images[self._editor.current_background_index]
             background_name = os.path.basename(background_path)
-            self.parent.save_json(background_path, background_name, "", canvas_items=[])
+            self._editor.save_json(background_path, background_name, "", canvas_items=[])
 
     def _sync_detection_box_to_dict(self, box_index):
-        idx = self.parent.current_background_index
-        if idx in self.parent.detection_boxes_dict:
-            self.parent.detection_boxes_dict[idx][box_index] = \
-                self.parent.detection_boxes[box_index].copy()
+        idx = self._editor.current_background_index
+        if idx in self._editor.detection_boxes_dict:
+            self._editor.detection_boxes_dict[idx][box_index] = \
+                self._editor.detection_boxes[box_index].copy()
 
     def _sync_all_detection_boxes_to_dict(self):
-        idx = self.parent.current_background_index
+        idx = self._editor.current_background_index
         if idx >= 0:
-            self.parent.detection_boxes_dict[idx] = self.parent.detection_boxes.copy()
+            self._editor.detection_boxes_dict[idx] = self._editor.detection_boxes.copy()
 
     def _drag_box(self):
         delta = self.mouse_pos - self.box_drag_start
@@ -121,14 +125,14 @@ class CanvasDrawingMixin:
         if bg_rect:
             dx = delta.x() / self.background_scale
             dy = delta.y() / self.background_scale
-            box = self.parent.detection_boxes[self.selected_box]
+            box = self._editor.detection_boxes[self.selected_box]
 
             nx = box["x"] + dx
             ny = box["y"] + dy
 
-            if self.parent.current_background:
-                bw = self.parent.current_background.width()
-                bh = self.parent.current_background.height()
+            if self._editor.current_background:
+                bw = self._editor.current_background.width()
+                bh = self._editor.current_background.height()
                 nx = max(0, min(nx, bw - box["width"]))
                 ny = max(0, min(ny, bh - box["height"]))
 
@@ -137,8 +141,7 @@ class CanvasDrawingMixin:
             self.box_drag_start = self.mouse_pos
 
             self._sync_detection_box_to_dict(self.selected_box)
-
-            self._save_current_detection_boxes()
+            self._needs_save = True
             self.update()
 
     def _resize_box(self):
@@ -148,7 +151,7 @@ class CanvasDrawingMixin:
         if bg_rect:
             dx = delta.x() / self.background_scale
             dy = delta.y() / self.background_scale
-            box = self.parent.detection_boxes[self.selected_box]
+            box = self._editor.detection_boxes[self.selected_box]
             x, y, w, h = box["x"], box["y"], box["width"], box["height"]
 
             nx, ny, nw, nh = x, y, w, h
@@ -174,8 +177,7 @@ class CanvasDrawingMixin:
             self.box_resize_start = self.mouse_pos
 
             self._sync_detection_box_to_dict(self.selected_box)
-
-            self._save_current_detection_boxes()
+            self._needs_save = True
             self.update()
 
     def _check_box_handle(self, mouse_pos, x, y, width, height, box_index):
@@ -200,7 +202,7 @@ class CanvasDrawingMixin:
                 self.box_resize_start = mouse_pos
                 self.is_resizing_box = True
                 self.resize_handle = handle_name
-                self.parent.selected_item = None
+                self._editor.selected_item = None
                 self.selected_item_size = None
                 self.update_status_label()
                 self.update()

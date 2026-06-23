@@ -3,9 +3,9 @@
 """
 import os
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import Qt, QEvent, QPoint
+from PyQt5.QtCore import Qt, QEvent
 
-from .utils import extract_label_name
+from ..core.utils import extract_label_name
 
 
 class EventHandlerMixin:
@@ -22,12 +22,20 @@ class EventHandlerMixin:
         elif event.key() == Qt.Key_R:
             current_state = self.show_labels_checkbox.isChecked()
             self.show_labels_checkbox.setChecked(not current_state)
-            self.on_labels_checkbox_changed()
         elif event.key() == Qt.Key_T:
             if hasattr(self, 'show_label_names_checkbox'):
                 current_state = self.show_label_names_checkbox.isChecked()
                 self.show_label_names_checkbox.setChecked(not current_state)
-                self.on_labels_checkbox_changed()
+        elif event.key() == Qt.Key_G and modifiers & Qt.ControlModifier:
+            self.toggle_grid()
+        elif event.key() == Qt.Key_G and not modifiers:
+            current_state = self.auto_save_checkbox.isChecked()
+            self.auto_save_checkbox.setChecked(not current_state)
+            self.auto_save_current_canvas()
+        elif event.key() == Qt.Key_F and not modifiers:
+            current_state = self.show_paste_names_checkbox.isChecked()
+            self.show_paste_names_checkbox.setChecked(not current_state)
+            self.canvas.update()
         elif event.key() == Qt.Key_W:
             self.toggle_draw_mode()
         elif event.key() == Qt.Key_Q:
@@ -37,10 +45,11 @@ class EventHandlerMixin:
                 self.canvas.temp_draw_box = None
                 self.canvas.setCursor(Qt.ArrowCursor)
                 if hasattr(self, 'draw_box_btn'):
-                    self.draw_box_btn.setText("绘制BOX")
+                    self.draw_box_btn.setText("绘制BOX(W)")
                 self.canvas.update()
         elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_E:
             if self.canvas.selected_box is not None and 0 <= self.canvas.selected_box < len(self.detection_boxes):
+                self.save_undo_state()
                 del self.detection_boxes[self.canvas.selected_box]
                 self.canvas.selected_box = None
                 if self.current_background_index >= 0:
@@ -52,26 +61,10 @@ class EventHandlerMixin:
                     background_path = self.background_images[self.current_background_index]
                     background_name = os.path.basename(background_path)
                     self.save_json(background_path, background_name, "", canvas_items=[])
-        elif event.key() == Qt.Key_G:
-            current_state = self.auto_save_checkbox.isChecked()
-            self.auto_save_checkbox.setChecked(not current_state)
-            self.auto_save_current_canvas()
-        elif event.key() == Qt.Key_F:
-            self.canvas.reset_view()
-            self.canvas.update()
-            self.status_label.setText("视图已重置")
-            from PyQt5.QtCore import QTimer
-            QTimer.singleShot(1500, lambda: self.status_label.setText(""))
-        elif event.key() == Qt.Key_Home:
-            if self.background_images:
-                self.switch_background_to_index(0)
-        elif event.key() == Qt.Key_End:
-            if self.background_images:
-                self.switch_background_to_index(len(self.background_images) - 1)
-        elif event.key() == Qt.Key_PageUp:
-            self.switch_background(-5)
-        elif event.key() == Qt.Key_PageDown:
-            self.switch_background(5)
+        elif event.key() == Qt.Key_Z and modifiers & Qt.ControlModifier:
+            self.undo()
+        elif event.key() == Qt.Key_Y and modifiers & Qt.ControlModifier:
+            self.redo()
 
         super().keyPressEvent(event)
 
@@ -154,6 +147,7 @@ class EventHandlerMixin:
 
         self.background_list.setCurrentRow(new_index)
         self.update_file_count()
+        self._update_status_info()
         self.selected_item = None
         self.canvas.update()
 
@@ -174,7 +168,7 @@ class EventHandlerMixin:
             self.canvas.update()
         except Exception as e:
             import traceback
-            error_msg = "".join(traceback.format_exc())
+            error_msg = traceback.format_exc()
             self._log_error(f"label_list_item_pressed 错误: {e}\n{error_msg}")
 
     def label_list_item_clicked(self, item):
@@ -184,7 +178,7 @@ class EventHandlerMixin:
             self.canvas.update()
         except Exception as e:
             import traceback
-            error_msg = "".join(traceback.format_exc())
+            error_msg = traceback.format_exc()
             self._log_error(f"label_list_item_clicked 错误: {e}\n{error_msg}")
 
     def closeEvent(self, event):

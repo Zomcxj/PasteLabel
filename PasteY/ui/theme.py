@@ -1,4 +1,4 @@
-﻿"""
+"""
 Theme module - manages dark/light theme switching
 """
 from enum import Enum
@@ -92,6 +92,10 @@ class ThemeManager:
 
     @classmethod
     def get_theme(cls):
+        return cls._current_theme
+
+    @classmethod
+    def get_theme_colors(cls):
         return cls._current_theme
 
     @classmethod
@@ -353,6 +357,45 @@ class ThemeManager:
             QPushButton#iconBtn:pressed {{
                 background-color: {t['accent']};
             }}
+            QPushButton#bgBtn {{
+                background-color: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                padding: 2px;
+            }}
+            QPushButton#bgBtn:hover {{
+                background-color: #E3F2FD;
+                border-color: #2196F3;
+            }}
+            QPushButton#bgBtn:pressed {{
+                background-color: #BBDEFB;
+            }}
+            QPushButton#pasteBtn {{
+                background-color: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                padding: 2px;
+            }}
+            QPushButton#pasteBtn:hover {{
+                background-color: #E8F5E9;
+                border-color: #4CAF50;
+            }}
+            QPushButton#pasteBtn:pressed {{
+                background-color: #C8E6C9;
+            }}
+            QPushButton#labelBtn {{
+                background-color: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                padding: 2px;
+            }}
+            QPushButton#labelBtn:hover {{
+                background-color: #FFF3E0;
+                border-color: #FF9800;
+            }}
+            QPushButton#labelBtn:pressed {{
+                background-color: #FFE0B2;
+            }}
             QPushButton#themeBtn {{
                 background-color: transparent;
                 border: 1px solid {t['border_color']};
@@ -363,6 +406,50 @@ class ThemeManager:
             QPushButton#themeBtn:hover {{
                 background-color: {t['accent_light']};
                 border-color: {t['accent']};
+            }}
+
+            /* 设置按钮 */
+            QPushButton#settingsBtn {{
+                background-color: transparent;
+                border: 1px solid {t['border_color']};
+                border-radius: 6px;
+                padding: 4px;
+                font-size: 16px;
+            }}
+            QPushButton#settingsBtn:hover {{
+                background-color: {t['accent_light']};
+                border-color: {t['accent']};
+            }}
+
+            /* 选项按钮 */
+            QPushButton#optionsBtn {{
+                background-color: {t['accent_light']};
+                border: 1px solid {t['accent']};
+                border-radius: 6px;
+                padding: 3px 8px;
+                font-size: 11px;
+                font-weight: bold;
+                color: {t['accent']};
+            }}
+            QPushButton#optionsBtn:hover {{
+                background-color: {t['accent']};
+                color: {t['widget_bg']};
+            }}
+            QPushButton#optionsBtn::menu-indicator {{
+                width: 0px;
+                height: 0px;
+            }}
+            QMenu#optionsMenu {{
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
+                padding: 4px;
+            }}
+            QMenu#optionsMenu::item {{
+                padding: 6px 16px;
+            }}
+            QMenu#optionsMenu::item:selected {{
+                background-color: {t['accent_light']};
+                color: {t['accent']};
             }}
             QPushButton#langBtn {{
                 background-color: transparent;

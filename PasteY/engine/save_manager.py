@@ -5,14 +5,73 @@
 import os
 import json
 from typing import TYPE_CHECKING
-from PyQt5.QtCore import QRectF, pyqtSignal, QObject
+from PyQt5.QtCore import pyqtSignal, QObject, QTimer, Qt
 from PyQt5.QtGui import QPixmap, QPainter, QColor
-from PyQt5.QtWidgets import QMessageBox, QApplication
-from .config import LABELME_VERSION, DEFAULT_PREFIX
-from .utils import PathUtils
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QApplication
+from ..core.config import LABELME_VERSION, DEFAULT_PREFIX
+from ..core.utils import PathUtils
+from ..ui.dwm import set_titlebar_dark
+from ..ui.theme import ThemeManager
 
 if TYPE_CHECKING:
-    from .editor_protocol import EditorProtocol
+    from ..core.editor_protocol import EditorProtocol
+
+
+class _SyncTitleBarDialog(QDialog):
+    """标题栏同步的对话框"""
+    def __init__(self, msg_type, title, text, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setMinimumWidth(280)
+        self.setMaximumWidth(400)
+        self.setObjectName("syncDialog")
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 16, 20, 16)
+
+        text_layout = QHBoxLayout()
+        text_layout.setSpacing(8)
+
+        icon_label = QLabel("⚠")
+        icon_label.setStyleSheet("background: transparent; font-size: 20px; color: #FF9800;")
+        icon_label.setFixedWidth(24)
+
+        text_label = QLabel(text)
+        text_label.setWordWrap(True)
+        text_label.setStyleSheet("background: transparent; font-size: 13px;")
+
+        text_layout.addWidget(icon_label)
+        text_layout.addWidget(text_label, 1)
+        layout.addLayout(text_layout)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        from ..ui import i18n
+        tr = i18n.t
+        ok_btn = QPushButton(tr("确定"))
+        ok_btn.setObjectName("successBtn")
+        ok_btn.setFixedWidth(80)
+        ok_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(ok_btn)
+        layout.addLayout(btn_layout)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(30, self._sync)
+
+    def _sync(self):
+        is_dark = ThemeManager.get_mode().value == "dark"
+        hwnd = int(self.winId())
+        set_titlebar_dark(hwnd, is_dark)
+
+
+def _show_messagebox(msg_type, parent, title, text):
+    """显示同步标题栏颜色的对话框"""
+    from ..ui import i18n
+    tr = i18n.t
+    dialog = _SyncTitleBarDialog(msg_type, tr(title), tr(text), parent)
+    dialog.exec_()
 
 
 class SaveManager(QObject):
@@ -71,20 +130,21 @@ class SaveManager(QObject):
         
         painter.end()
         if not result.save(file_path):
-            print(f"自动保存失败: {file_path}")
+            from ..core.exception_hook import _write_log
+            _write_log(f"自动保存失败: {file_path}")
         self.save_json(file_path, base_name, prefix)
     
     def save_canvas(self):
         """保存当前画布"""
-        from .dialogs import SaveTipDialog
+        from ..ui.dialogs import SaveTipDialog
         
         if self.editor.current_background is None:
-            QMessageBox.warning(self.editor, "警告", "请先选择背景图片")
+            _show_messagebox("warning", self.editor, "警告", "请先选择背景图片")
             return
         
         save_info = self.get_save_info()
         if not save_info:
-            QMessageBox.warning(self.editor, "警告", "无法获取保存信息")
+            _show_messagebox("warning", self.editor, "警告", "无法获取保存信息")
             return
         
         file_path, base_name, prefix = save_info
@@ -100,18 +160,24 @@ class SaveManager(QObject):
         painter.end()
         save_success = result.save(file_path)
         
-        self.save_json(file_path, base_name, prefix)
+        if save_success:
+            self.save_json(file_path, base_name, prefix)
         
         SaveTipDialog.show_save_tip(self.editor, file_path, save_success and os.path.exists(file_path))
     
     def save_all_canvas(self):
         """保存所有画布"""
-        from .dialogs import ProgressDialogFactory
+        from ..ui.dialogs import ProgressDialogFactory
         
+        if self.editor._busy:
+            return
+
         if not self.editor.background_images:
-            QMessageBox.warning(self.editor, "警告", "没有背景图片可保存")
+            _show_messagebox("warning", self.editor, "警告", "没有背景图片可保存")
             return
         
+        self.editor._busy = True
+
         progress_dialog = ProgressDialogFactory.create_progress_dialog(
             self.editor, "保存进度", "正在保存所有图片...", len(self.editor.background_images)
         )
@@ -158,7 +224,8 @@ class SaveManager(QObject):
             
             painter.end()
             if not result.save(save_file_path):
-                print(f"批量保存失败: {save_file_path}")
+                from ..core.exception_hook import _write_log
+                _write_log(f"批量保存失败: {save_file_path}")
             
             self.save_json(save_file_path, base_name, prefix, temp_canvas_items,
                           pixmap.width(), pixmap.height(), i)
@@ -175,13 +242,13 @@ class SaveManager(QObject):
         
         # 显示保存结果
         if saved_count > 0:
-            QMessageBox.information(
-                self.editor, "保存完成",
+            _show_messagebox(
+                "information", self.editor, "保存完成",
                 f"全部保存完成！\n成功保存 {saved_count} 张图片。"
             )
         else:
-            QMessageBox.warning(
-                self.editor, "保存结果",
+            _show_messagebox(
+                "warning", self.editor, "保存结果",
                 "没有保存任何图片。"
             )
         
@@ -192,6 +259,7 @@ class SaveManager(QObject):
             self.save_completed.emit()
         
         self.label_list_changed.emit()
+        self.editor._busy = False
     
     @staticmethod
     def _build_labelme_shape(label, x, y, w, h):
@@ -249,4 +317,5 @@ class SaveManager(QObject):
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"保存 JSON 失败: {json_path}, 错误: {e}")
+            from ..core.exception_hook import _write_log
+            _write_log(f"保存 JSON 失败: {json_path}, 错误: {e}")

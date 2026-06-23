@@ -89,3 +89,53 @@ AUTO_SAVE_CONFIG = {
 THEME_CONFIG = {
     'default_mode': 'light',  # 默认主题: 'light' 或 'dark'
 }
+
+# 网格配置
+GRID_CONFIG = {
+    'enabled': False,           # 默认关闭
+    'spacing': 50,              # 网格间距（像素）
+    'color_light': '#E0E0E0',   # 浅色模式网格线颜色
+    'color_dark': '#3E3E3E',    # 深色模式网格线颜色
+    'color_ink': '#C8BFB0',     # 水墨模式网格线颜色
+}
+
+# 标签颜色配置 - 高对比度颜色
+LABEL_COLORS = [
+    '#E53935', '#D81B60', '#8E24AA', '#5E35B1',
+    '#3949AB', '#1E88E5', '#039BE5', '#00ACC1',
+    '#00897B', '#43A047', '#7CB342', '#C0CA33',
+    '#FDD835', '#FFB300', '#FB8C00', '#F4511E',
+]
+
+# 快捷键配置
+SHORTCUT_CONFIG = {
+    'undo': 'Ctrl+Z',
+    'redo': 'Ctrl+Y',
+    'save': 'Ctrl+S',
+    'save_all': 'Ctrl+Shift+S',
+    'clear': 'Ctrl+Delete',
+    'toggle_grid': 'Ctrl+G',
+    'toggle_labels': 'R',
+    'toggle_label_names': 'T',
+    'toggle_auto_save': 'G',
+    'toggle_paste_names': 'F',
+    'draw_box': 'W',
+    'quit_draw': 'Q',
+    'next_image': 'D',
+    'prev_image': 'A',
+    'delete_selected': 'Delete',
+    'fit_view': 'Ctrl+F',
+    'zoom_in': 'Ctrl++',
+    'zoom_out': 'Ctrl+-',
+    'zoom_reset': 'Ctrl+0',
+}
+
+# 撤销/重做配置
+UNDO_CONFIG = {
+    'max_history': 50,  # 最大历史记录数
+}
+
+# 检测框锁定配置
+LOCK_CONFIG = {
+    'enabled': False,  # 默认不锁定
+}

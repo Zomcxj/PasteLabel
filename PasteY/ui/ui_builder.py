@@ -8,11 +8,11 @@ from PyQt5.QtWidgets import (
     QLineEdit, QCheckBox, QSpinBox, QGroupBox, QFrame
 )
 from PyQt5.QtGui import QIcon, QPixmap, QPainter
-from PyQt5.QtCore import Qt, QSize, QTimer
+from PyQt5.QtCore import Qt, QSize, QTimer, QPoint
 
-from .config import WINDOW_CONFIG, PASTE_PARAMS, THUMBNAIL_CONFIG, DEFAULT_PREFIX
-from .utils import create_thumbnail
-from .widgets import Canvas
+from ..core.config import WINDOW_CONFIG, PASTE_PARAMS, THUMBNAIL_CONFIG, DEFAULT_PREFIX
+from ..core.utils import create_thumbnail
+from ..canvas import Canvas
 from .theme import ThemeManager
 from .i18n import t as tr
 
@@ -61,7 +61,9 @@ class UIBuilderMixin:
         self.setCentralWidget(central_widget)
 
         self.status_label = QLabel("")
+        self.status_label.setObjectName("statusLabel")
         self.statusBar().addWidget(self.status_label)
+        self.statusBar().show()
 
     def _create_toolbar(self, layout):
         """创建工具栏"""
@@ -74,15 +76,19 @@ class UIBuilderMixin:
         t = ThemeManager.get_theme()
         color = t['text_secondary']
 
+        bg_color = "#2196F3"
+        paste_color = "#4CAF50"
+        label_color = "#FF9800"
+
         self.bg_lbl = QLabel(tr("背景图:"))
         upload_layout.addWidget(self.bg_lbl)
         self.upload_a_btn = self._create_svg_button(
-            SVG_FILE, self.upload_background, tr("选择背景图片"), color
+            SVG_FILE, self.upload_background, tr("选择背景图片"), bg_color, "bgBtn"
         )
         upload_layout.addWidget(self.upload_a_btn)
 
         self.load_folder_btn = self._create_svg_button(
-            SVG_FOLDER, self.load_folder_images, tr("加载文件夹图片"), color
+            SVG_FOLDER, self.load_folder_images, tr("加载文件夹图片"), bg_color, "bgBtn"
         )
         upload_layout.addWidget(self.load_folder_btn)
 
@@ -90,12 +96,12 @@ class UIBuilderMixin:
         self.paste_lbl = QLabel(tr("贴图:"))
         upload_layout.addWidget(self.paste_lbl)
         self.upload_b_btn = self._create_svg_button(
-            SVG_FILE, self.upload_small_images, tr("选择贴图"), color
+            SVG_FILE, self.upload_small_images, tr("选择贴图"), paste_color, "pasteBtn"
         )
         upload_layout.addWidget(self.upload_b_btn)
 
         self.load_small_folder_btn = self._create_svg_button(
-            SVG_FOLDER, self.load_small_folder_images, tr("加载贴图文件夹"), color
+            SVG_FOLDER, self.load_small_folder_images, tr("加载贴图文件夹"), paste_color, "pasteBtn"
         )
         upload_layout.addWidget(self.load_small_folder_btn)
 
@@ -103,7 +109,7 @@ class UIBuilderMixin:
         self.label_lbl = QLabel(tr("标签:"))
         upload_layout.addWidget(self.label_lbl)
         self.upload_paste_label_btn = self._create_svg_button(
-            SVG_FILE, self.upload_paste_labels, tr("选择标签文件"), color
+            SVG_FILE, self.upload_paste_labels, tr("选择标签文件"), label_color, "labelBtn"
         )
         upload_layout.addWidget(self.upload_paste_label_btn)
 
@@ -111,54 +117,39 @@ class UIBuilderMixin:
         self._add_separator(upload_layout)
         upload_layout.addSpacing(8)
 
-        self.draw_box_btn = QPushButton(tr("绘制BOX"))
-        self.draw_box_btn.setObjectName("drawBoxBtn")
-        self.draw_box_btn.clicked.connect(self.toggle_draw_mode)
-        self.draw_box_btn.setMinimumWidth(80)
-        self.draw_box_btn.setMaximumWidth(100)
-        self.draw_box_btn.setToolTip(tr("绘制检测框"))
-        upload_layout.addWidget(self.draw_box_btn)
-
-        upload_layout.addSpacing(8)
-        self._add_separator(upload_layout)
-        upload_layout.addSpacing(8)
-
-        self._add_checkboxes(upload_layout)
-        self._add_prefix_input(upload_layout)
+        self._init_checkboxes()
+        self._init_prefix_checkbox()
+        self._create_options_menu(upload_layout)
 
         upload_layout.addStretch()
 
         self.lang_btn = QPushButton("中/EN")
         self.lang_btn.setObjectName("langBtn")
-        self.lang_btn.setFixedSize(42, 24)
+        self.lang_btn.setFixedSize(42, 28)
         self.lang_btn.setToolTip(tr("切换中英文"))
         self.lang_btn.clicked.connect(self.toggle_language)
         upload_layout.addWidget(self.lang_btn)
 
         self.theme_btn = QPushButton("☀")
         self.theme_btn.setObjectName("themeBtn")
-        self.theme_btn.setFixedSize(24, 24)
-        self.theme_btn.setToolTip(tr("切换深色/浅色主题"))
+        self.theme_btn.setFixedSize(28, 28)
+        self.theme_btn.setToolTip("切换深色/浅色主题")
         self.theme_btn.clicked.connect(self.toggle_theme)
         upload_layout.addWidget(self.theme_btn)
 
+        self.settings_btn = QPushButton("⚙")
+        self.settings_btn.setObjectName("settingsBtn")
+        self.settings_btn.setFixedSize(28, 28)
+        self.settings_btn.setToolTip("设置快捷键")
+        self.settings_btn.clicked.connect(self.open_settings)
+        upload_layout.addWidget(self.settings_btn)
+
         layout.addWidget(toolbar_widget)
 
-    def _create_icon_button(self, icon_path, slot, tooltip):
-        """创建图标按钮"""
-        btn = QPushButton("")
-        btn.setObjectName("iconBtn")
-        if os.path.exists(icon_path):
-            btn.setIcon(QIcon(icon_path))
-        btn.clicked.connect(slot)
-        btn.setFixedSize(24, 24)
-        btn.setToolTip(tooltip)
-        return btn
-
-    def _create_svg_button(self, svg_data, slot, tooltip, color):
+    def _create_svg_button(self, svg_data, slot, tooltip, color, obj_name=None):
         """创建 SVG 图标按钮"""
         btn = QPushButton("")
-        btn.setObjectName("iconBtn")
+        btn.setObjectName(obj_name or "iconBtn")
         btn.setIcon(QIcon(_load_svg_icon(svg_data, 14, color)))
         btn.clicked.connect(slot)
         btn.setFixedSize(24, 24)
@@ -174,79 +165,97 @@ class UIBuilderMixin:
         sep.setFixedHeight(20)
         layout.addWidget(sep)
 
-    def _add_checkboxes(self, layout):
-        """添加复选框"""
-        layout.addSpacing(10)
-        self.auto_save_checkbox = QCheckBox(tr("自动保存"))
-        self.auto_save_checkbox.setObjectName("autoSaveCb")
-        self.auto_save_checkbox.setChecked(False)
-        layout.addWidget(self.auto_save_checkbox)
+    def _on_grid_changed(self):
+        """网格复选框状态变化"""
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
 
-        layout.addSpacing(10)
+    def _init_checkboxes(self):
+        """初始化隐藏的复选框"""
         self.show_labels_checkbox = QCheckBox(tr("显示BOX"))
         self.show_labels_checkbox.setObjectName("showBoxCb")
         self.show_labels_checkbox.setChecked(False)
         self.show_labels_checkbox.stateChanged.connect(self.on_labels_checkbox_changed)
-        layout.addWidget(self.show_labels_checkbox)
 
-        layout.addSpacing(10)
         self.show_label_names_checkbox = QCheckBox(tr("显示Label"))
         self.show_label_names_checkbox.setObjectName("showLabelCb")
         self.show_label_names_checkbox.setChecked(True)
         self.show_label_names_checkbox.stateChanged.connect(self.on_labels_checkbox_changed)
-        layout.addWidget(self.show_label_names_checkbox)
 
-        layout.addSpacing(10)
         self.auto_label_checkbox = QCheckBox(tr("贴图标签"))
         self.auto_label_checkbox.setObjectName("autoLabelCb")
         self.auto_label_checkbox.setChecked(True)
-        layout.addWidget(self.auto_label_checkbox)
 
-        layout.addSpacing(10)
+        self.auto_save_checkbox = QCheckBox(tr("自动保存"))
+        self.auto_save_checkbox.setObjectName("autoSaveCb")
+        self.auto_save_checkbox.setChecked(False)
+
+        self.show_grid_checkbox = QCheckBox(tr("显示网格"))
+        self.show_grid_checkbox.setObjectName("gridCb")
+        self.show_grid_checkbox.setChecked(False)
+        self.show_grid_checkbox.stateChanged.connect(self._on_grid_changed)
+
+        self.show_paste_names_checkbox = QCheckBox(tr("显示贴图名"))
+        self.show_paste_names_checkbox.setObjectName("pasteNameCb")
+        self.show_paste_names_checkbox.setChecked(True)
+        self.show_paste_names_checkbox.stateChanged.connect(self._on_grid_changed)
+
+    def _init_prefix_checkbox(self):
+        """初始化前缀复选框"""
         self.prefix_checkbox = QCheckBox(tr("添加文件名前缀"))
         self.prefix_checkbox.setObjectName("prefixCb")
         self.prefix_checkbox.setChecked(True)
-        layout.addWidget(self.prefix_checkbox)
 
-    def _add_prefix_input(self, layout):
-        """添加前缀输入框"""
-        layout.addSpacing(8)
-        self.prefix_input = QLineEdit()
-        self.prefix_input.setObjectName("prefixInput")
-        self.default_prefix = DEFAULT_PREFIX
-        self.prefix_input.setText(self.default_prefix)
-        self.prefix_input.focusInEvent = self.on_prefix_input_focus_in
-        self.prefix_input.focusOutEvent = self.on_prefix_input_focus_out
-        self.prefix_input.setMaximumWidth(120)
-        layout.addWidget(self.prefix_input)
+    def _create_options_menu(self, layout):
+        """创建选项下拉菜单按钮"""
+        from PyQt5.QtWidgets import QMenu, QAction
 
-    def on_prefix_input_focus_in(self, event):
-        """前缀输入框获得焦点"""
-        if self.prefix_input.text() == self.default_prefix:
-            self.prefix_input.setTextr("")
-            self.prefix_input.setProperty("placeholder", False)
-            self.prefix_input.style().unpolish(self.prefix_input)
-            self.prefix_input.style().polish(self.prefix_input)
-        QLineEdit.focusInEvent(self.prefix_input, event)
+        self.options_btn = QPushButton(tr("选项"))
+        self.options_btn.setObjectName("optionsBtn")
+        self.options_btn.setMinimumWidth(60)
+        self.options_btn.setToolTip(tr("选项设置"))
 
-    def on_prefix_input_focus_out(self, event):
-        """前缀输入框失去焦点"""
-        if not self.prefix_input.text().strip():
-            self.prefix_input.setText(self.default_prefix)
-            self.prefix_input.setProperty("placeholder", True)
-        else:
-            self.prefix_input.setProperty("placeholder", False)
-        self.prefix_input.style().unpolish(self.prefix_input)
-        self.prefix_input.style().polish(self.prefix_input)
-        QLineEdit.focusOutEvent(self.prefix_input, event)
+        self.options_menu = QMenu()
+        self.options_menu.setObjectName("optionsMenu")
+        self.options_menu.setMinimumWidth(200)
+
+        self._draw_box_action = QAction("  " + tr("绘制BOX"), self)
+        self._draw_box_action.setShortcut("W")
+        self._draw_box_action.triggered.connect(self.toggle_draw_mode)
+        self.options_menu.addAction(self._draw_box_action)
+        self.options_menu.addSeparator()
+
+        items = [
+            (tr("显示BOX"), "R", self.show_labels_checkbox),
+            (tr("显示Label"), "T", self.show_label_names_checkbox),
+            (tr("自动保存"), "G", self.auto_save_checkbox),
+            (tr("显示网格"), "Ctrl+G", self.show_grid_checkbox),
+            (tr("显示贴图名"), "F", self.show_paste_names_checkbox),
+            (tr("添加文件名前缀"), "", self.prefix_checkbox),
+        ]
+
+        self._menu_actions = []
+        for text, shortcut, checkbox in items:
+            action = QAction(text, self)
+            if shortcut:
+                action.setShortcut(shortcut)
+            action.setCheckable(True)
+            action.setChecked(checkbox.isChecked())
+            action.triggered.connect(lambda checked, cb=checkbox: cb.setChecked(checked))
+            checkbox.stateChanged.connect(lambda state, a=action: a.setChecked(state == Qt.Checked))
+            self.options_menu.addAction(action)
+            self._menu_actions.append((action, checkbox))
+
+        self.options_btn.setMenu(self.options_menu)
+        layout.addWidget(self.options_btn)
 
     def _validate_size_range(self):
         """验证尺寸范围，确保最小值不大于最大值"""
         min_size = self.min_size_spin.value()
         max_size = self.max_size_spin.value()
         if min_size > max_size:
-            self.status_label.setText(tr("最小值不能大于最大值"))
-            QTimer.singleShot(2000, lambda: self.status_label.setTextr(""))
+            self.status_label.setText("Min cannot exceed Max")
+            QTimer.singleShot(2000, lambda: self.status_label.setText(""))
             self.min_size_spin.setValue(max_size)
 
     def _on_min_size_changed(self, value):
@@ -511,8 +520,8 @@ class UIBuilderMixin:
         self.small_list.updateGeometry()
         self.small_list.repaint()
 
-        mode_text = tr("缩略图模式") if self.is_thumbnail_mode else tr("列表模式")
-        self.status_label.setText(f"已切换到{mode_text}")
+        mode_text = "Thumbnail" if self.is_thumbnail_mode else "List"
+        self.status_label.setText(f"View: {mode_text}")
         QTimer.singleShot(2000, lambda: self.status_label.setText(""))
 
     def _set_list_mode(self):

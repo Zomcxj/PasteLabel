@@ -4,7 +4,7 @@ Canvas 右键菜单 - 贴图标签管理
 from PyQt5.QtWidgets import QMenu, QAction, QInputDialog
 from PyQt5.QtCore import QPoint
 
-from .utils import extract_label_name
+from ..core.utils import extract_label_name
 
 
 class CanvasMenuMixin:
@@ -21,8 +21,8 @@ class CanvasMenuMixin:
         menu = QMenu(self)
 
         label_items = []
-        for i in range(self.parent.paste_label_list.count()):
-            label = self.parent.paste_label_list.item(i).text()
+        for i in range(self._editor.paste_label_list.count()):
+            label = self._editor.paste_label_list.item(i).text()
             pure_label = extract_label_name(label)
             label_items.append(pure_label)
 
@@ -44,9 +44,9 @@ class CanvasMenuMixin:
         menu.exec_(QPoint(self.mapToGlobal(mouse_pos)))
 
     def change_item_label(self, item_index, new_label):
-        if 0 <= item_index < len(self.parent.canvas_items):
-            pixmap, rect, _ = self.parent.canvas_items[item_index]
-            self.parent.canvas_items[item_index] = (pixmap, rect, new_label)
+        if 0 <= item_index < len(self._editor.canvas_items):
+            pixmap, rect, _ = self._editor.canvas_items[item_index]
+            self._editor.canvas_items[item_index] = (pixmap, rect, new_label)
             self.update()
 
     def add_new_label(self, item_index):
@@ -55,9 +55,9 @@ class CanvasMenuMixin:
         )
         if ok and new_label.strip():
             new_label = new_label.strip()
-            self.parent.paste_label_list.addItem(new_label)
+            self._editor.paste_label_list.addItem(new_label)
 
-            if 0 <= item_index < len(self.parent.canvas_items):
-                pixmap, rect, _ = self.parent.canvas_items[item_index]
-                self.parent.canvas_items[item_index] = (pixmap, rect, new_label)
+            if 0 <= item_index < len(self._editor.canvas_items):
+                pixmap, rect, _ = self._editor.canvas_items[item_index]
+                self._editor.canvas_items[item_index] = (pixmap, rect, new_label)
                 self.update()

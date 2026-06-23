@@ -2,19 +2,21 @@
 主窗口模块 - ImageEditor 主窗口逻辑（协调器）
 """
 import os
-from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QApplication
+import sys
+from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtCore import QPoint
 
-from .config import WINDOW_CONFIG, THUMBNAIL_CONFIG
-from .utils import create_app_icon
-from .save_manager import SaveManager
-from .label_manager import LabelManager
+from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG
+from ..core.utils import create_app_icon
+from ..engine.save_manager import SaveManager
+from ..engine.label_manager import LabelManager
 from .ui_builder import UIBuilderMixin
-from .image_loader import ImageLoaderMixin
-from .paste_engine import PasteEngineMixin
-from .event_handler import EventHandlerMixin
-from .theme import ThemeManager
-from .dwm import set_titlebar_dark, is_available
+from ..engine.image_loader import ImageLoaderMixin
+from ..engine.paste_engine import PasteEngineMixin
+from ..engine.event_handler import EventHandlerMixin
+from .theme import ThemeManager, ThemeMode
+from .dwm import set_titlebar_dark
+from .settings_dialog import SettingsDialog
 
 
 class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
@@ -29,15 +31,34 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.setWindowIcon(create_app_icon(script_dir))
 
+        self._load_settings()
         self._init_data()
         self.init_ui()
         self._apply_theme()
+        self._refresh_ui_texts()
         self._connect_manager_signals()
         self.update_label_list()
         self.installEventFilterRecursive(self)
 
+    def _load_settings(self):
+        """从配置文件加载主题和语言设置"""
+        from ..core import config_manager
+        from . import i18n
+        from .theme import ThemeManager, ThemeMode
+
+        settings = config_manager.load_all()
+
+        theme = settings.get('theme', 'light')
+        ThemeManager.set_mode(ThemeMode.DARK if theme == 'dark' else ThemeMode.LIGHT)
+
+        language = settings.get('language', 'zh')
+        i18n.set_lang(language)
+
     def _init_data(self):
         """初始化数据结构"""
+        from PyQt5.QtWidgets import QLineEdit
+        from ..core.config import DEFAULT_PREFIX
+
         self.background_images = []
         self.current_background = None
         self.current_background_index = -1
@@ -54,6 +75,11 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.detection_boxes = []
         self.global_labels = set()
 
+        self.prefix_input = QLineEdit()
+        self.prefix_input.setText(DEFAULT_PREFIX)
+        self.prefix_checkbox_state = True
+        self.default_prefix = DEFAULT_PREFIX
+
         self.is_thumbnail_mode = True
         self.thumbnail_grid_width = THUMBNAIL_CONFIG['grid_width']
         self.thumbnail_grid_height = THUMBNAIL_CONFIG['grid_height']
@@ -61,6 +87,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
         self.save_manager = SaveManager(self, self)
         self.label_manager = LabelManager(self, self)
+
+        from ..engine.undo_manager import UndoManager
+        self.undo_manager = UndoManager()
 
     def _connect_manager_signals(self):
         """连接管理器信号 → 编辑器 UI 刷新（需在 init_ui 之后调用）"""
@@ -112,14 +141,20 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         if self.current_background_index >= 0:
             self.background_list.setCurrentRow(self.current_background_index)
         self.update_file_count()
+        self._update_status_info()
         self.canvas.update()
 
     def showEvent(self, event):
         """窗口显示后设置标题栏颜色（winId 必须在 show 之后获取）"""
         super().showEvent(event)
+        from PyQt5.QtCore import QTimer
         is_dark = ThemeManager.get_mode().value == "dark"
+        QTimer.singleShot(30, lambda: self._set_titlebar_dark(is_dark))
+
+    def _set_titlebar_dark(self, dark):
+        """设置系统标题栏颜色"""
         hwnd = int(self.winId())
-        set_titlebar_dark(hwnd, is_dark)
+        set_titlebar_dark(hwnd, dark)
 
     def _apply_theme(self):
         """应用当前主题样式"""
@@ -135,24 +170,37 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.prefix_input.style().polish(self.prefix_input)
         self.canvas.update()
 
+    def _update_status_info(self):
+        """更新状态栏信息"""
+        info = self.get_image_info()
+        if info:
+            stats = self.get_label_stats()
+            stats_text = " | ".join([f"{k}:{v}" for k, v in list(stats.items())[:3]])
+            self.status_label.setText(
+                f"{info['width']}x{info['height']} | Paste: {info['paste_count']} Box: {info['box_count']}"
+                + (f" | {stats_text}" if stats_text else "")
+            )
+
     def toggle_theme(self):
         """切换主题"""
+        from ..core import config_manager
         ThemeManager.toggle()
         self._apply_theme()
         is_dark = ThemeManager.get_mode().value == "dark"
-        hwnd = int(self.winId())
-        set_titlebar_dark(hwnd, is_dark)
-        mode_name = "深色" if is_dark else "浅色"
-        self.status_label.setText(f"已切换到{mode_name}主题")
+        self._set_titlebar_dark(is_dark)
+        config_manager.save_theme('dark' if is_dark else 'light')
+        self.status_label.setText(f"Theme: {'Dark' if is_dark else 'Light'}")
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(2000, lambda: self.status_label.setText(""))
 
     def toggle_language(self):
         """切换中英文"""
         from . import i18n
+        from ..core import config_manager
         i18n.toggle_lang()
+        config_manager.save_language(i18n.get_lang())
         self._refresh_ui_texts()
-        lang_name = "中文" if i18n.get_lang() == "zh" else "English"
+        lang_name = "Chinese" if i18n.get_lang() == "zh" else "English"
         self.status_label.setText(f"Language: {lang_name}")
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(2000, lambda: self.status_label.setText(""))
@@ -161,13 +209,16 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         """刷新所有界面文字"""
         from . import i18n
         tr = i18n.t
-        self.draw_box_btn.setText(tr("绘制BOX"))
-        self.draw_box_btn.setToolTip(tr("绘制检测框"))
+        if hasattr(self, 'draw_box_btn'):
+            self.draw_box_btn.setText(tr("绘制BOX"))
+            self.draw_box_btn.setToolTip(tr("绘制检测框"))
         self.auto_save_checkbox.setText(tr("自动保存"))
         self.show_labels_checkbox.setText(tr("显示BOX"))
         self.show_label_names_checkbox.setText(tr("显示Label"))
         self.auto_label_checkbox.setText(tr("贴图标签"))
         self.prefix_checkbox.setText(tr("添加文件名前缀"))
+        self.show_grid_checkbox.setText(tr("显示网格"))
+        self.show_paste_names_checkbox.setText(tr("显示贴图名"))
         self.random_paste_btn.setText(tr("随机贴图"))
         self.batch_paste_btn.setText(tr("一键贴图"))
         is_thumb = self.is_thumbnail_mode
@@ -197,6 +248,16 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.paste_count_lbl.setText(tr("贴图个数:"))
         if hasattr(self, 'size_lbl'):
             self.size_lbl.setText(tr("短边尺寸:"))
+        if hasattr(self, 'options_btn'):
+            self.options_btn.setText(tr("选项"))
+        if hasattr(self, '_draw_box_action'):
+            self._draw_box_action.setText("  " + tr("绘制BOX"))
+        if hasattr(self, '_menu_actions'):
+            menu_texts = [tr("显示BOX"), tr("显示Label"),
+                         tr("自动保存"), tr("显示网格"), tr("显示贴图名"), tr("添加文件名前缀")]
+            for i, (action, _) in enumerate(self._menu_actions):
+                if i < len(menu_texts):
+                    action.setText(menu_texts[i])
         if hasattr(self, 'upload_a_btn'):
             self.upload_a_btn.setToolTip(tr("选择背景图片"))
         if hasattr(self, 'load_folder_btn'):
@@ -218,6 +279,60 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         if hasattr(self, 'save_all_btn'):
             self.save_all_btn.setToolTip(tr("全部保存"))
 
+    def save_undo_state(self):
+        """保存撤销状态"""
+        self.undo_manager.save_state(self.canvas_items, self.detection_boxes)
+
+    def undo(self):
+        """撤销"""
+        self.canvas_items, self.detection_boxes = self.undo_manager.undo(
+            self.canvas_items, self.detection_boxes
+        )
+        self.canvas.update()
+        self.update_label_list()
+
+    def redo(self):
+        """重做"""
+        self.canvas_items, self.detection_boxes = self.undo_manager.redo(
+            self.canvas_items, self.detection_boxes
+        )
+        self.canvas.update()
+        self.update_label_list()
+
+    def toggle_grid(self):
+        """切换网格显示"""
+        if hasattr(self, 'show_grid_checkbox'):
+            self.show_grid_checkbox.setChecked(not self.show_grid_checkbox.isChecked())
+            self.canvas.update()
+
+    def open_settings(self):
+        """打开设置对话框"""
+        dialog = SettingsDialog(self)
+        dialog.exec_()
+
+    def get_image_info(self):
+        """获取当前图片信息"""
+        if self.current_background is None:
+            return None
+        info = {
+            'width': self.current_background.width(),
+            'height': self.current_background.height(),
+            'path': self.background_images[self.current_background_index] if self.current_background_index >= 0 else '',
+            'paste_count': len(self.canvas_items),
+            'box_count': len(self.detection_boxes),
+        }
+        return info
+
+    def get_label_stats(self):
+        """获取标签统计"""
+        stats = {}
+        for _, _, label in self.canvas_items:
+            stats[label] = stats.get(label, 0) + 1
+        for box in self.detection_boxes:
+            label = box.get('label', 'unknown')
+            stats[label] = stats.get(label, 0) + 1
+        return stats
+
 
 # 程序入口
 def main():
@@ -233,7 +348,7 @@ def main():
     if getattr(sys, 'frozen', False):
         base = sys._MEIPASS
     else:
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     font_dir = os.path.join(base, "ico_image", "fonts")
     for name in ["JetBrainsMono-Regular.ttf", "JetBrainsMono-Medium.ttf", "JetBrainsMono-Bold.ttf"]:
         fpath = os.path.join(font_dir, name)

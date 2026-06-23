@@ -7,13 +7,9 @@ from PyQt5.QtWidgets import QProgressDialog, QApplication
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt, QRectF
 
-from .config import RANDOM_POSITION_CONFIG, PASTE_ITEM_CONFIG
-from .utils import extract_label_name, calculate_iou
-from .dialogs import ProgressDialogFactory
-
-
-class PasteEngineMixin:
-    """贴图引擎混入类 - 管理贴图的添加、删除、随机和批量放置"""
+from ..core.config import RANDOM_POSITION_CONFIG, PASTE_ITEM_CONFIG
+from ..core.utils import extract_label_name, calculate_iou
+from ..ui.dialogs import ProgressDialogFactory
 
 
 class PasteEngineMixin:
@@ -23,6 +19,7 @@ class PasteEngineMixin:
         """添加贴图到画布"""
         if self._busy:
             return
+        self.save_undo_state()
         index = item.data(Qt.UserRole)
         pixmap = self.small_images[index][1]
 
@@ -34,6 +31,9 @@ class PasteEngineMixin:
 
         width = pixmap.width() * scale_factor
         height = pixmap.height() * scale_factor
+
+        if width <= 0 or height <= 0:
+            return
 
         min_edge = self.min_size_spin.value()
         aspect_ratio = width / height
@@ -95,6 +95,7 @@ class PasteEngineMixin:
         """清空画布"""
         if self._busy:
             return
+        self.save_undo_state()
         self.canvas_items.clear()
         if self.current_background_index >= 0:
             self.canvas_items_dict[self.current_background_index] = self.canvas_items.copy()
@@ -106,6 +107,7 @@ class PasteEngineMixin:
         if not self.small_images or not self.current_background:
             return
 
+        self.save_undo_state()
         self._validate_size_range()
 
         current_background = background if background else self.current_background
@@ -131,6 +133,9 @@ class PasteEngineMixin:
 
         for idx in selected_indices:
             file_path, pixmap = self.small_images[idx]
+
+            if pixmap.width() <= 0 or pixmap.height() <= 0:
+                continue
 
             aspect_ratio = pixmap.width() / pixmap.height()
             min_size = self.min_size_spin.value()
@@ -206,11 +211,16 @@ class PasteEngineMixin:
 
     def batch_paste_images(self):
         """从当前图片开始依次处理所有图片，应用随机贴图，然后返回当前图片"""
+        if self._busy:
+            return
+
         if not self.small_images:
             return
 
         if not self.background_images:
             return
+
+        self._busy = True
 
         total_count = len(self.background_images)
         start_index = self.current_background_index if self.current_background_index >= 0 else 0
@@ -263,3 +273,5 @@ class PasteEngineMixin:
             self.detection_boxes = original_detection_boxes
             self.canvas_items = self.canvas_items_dict.get(original_index, []).copy()
             self.canvas.update()
+
+        self._busy = False

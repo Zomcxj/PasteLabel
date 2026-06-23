@@ -4,11 +4,11 @@
 import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
-    QLineEdit, QPushButton, QInputDialog, QMessageBox
+    QLineEdit, QPushButton
 )
 from PyQt5.QtCore import Qt
 
-from .utils import extract_label_name
+from ..core.utils import extract_label_name
 from .theme import ThemeManager
 
 
@@ -147,7 +147,7 @@ class SaveTipDialog:
     def show_save_tip(parent, file_path, success=True):
         from PyQt5.QtWidgets import QLabel
         from PyQt5.QtCore import QTimer
-        from .utils import PathUtils
+        from ..core.utils import PathUtils
 
         t = ThemeManager.get_theme()
         formatted_file_path = PathUtils.to_display_path(file_path)
@@ -186,8 +186,12 @@ class SaveTipDialog:
         save_label.adjustSize()
 
         canvas_rect = parent.canvas.rect()
-        img_width = parent.current_background.width()
-        img_height = parent.current_background.height()
+        if parent.current_background:
+            img_width = parent.current_background.width()
+            img_height = parent.current_background.height()
+        else:
+            img_width = canvas_rect.width()
+            img_height = canvas_rect.height()
         img_x = (canvas_rect.width() - img_width) // 2
         img_y = (canvas_rect.height() - img_height) // 2
         img_center_x = img_x + img_width // 2

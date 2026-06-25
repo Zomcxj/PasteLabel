@@ -419,7 +419,31 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.is_manual_scale = True
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Delete or event.key() == Qt.Key_E:
+        from ..core.config import SHORTCUT_CONFIG
+
+        def _match(action):
+            shortcut = SHORTCUT_CONFIG.get(action, '')
+            if not shortcut:
+                return False
+            parts = shortcut.split('+')
+            key_str = parts[-1].strip()
+            modifiers_str = '+'.join(parts[:-1]).strip() if len(parts) > 1 else ''
+
+            key_map = {
+                'Delete': 0x01000007, 'Q': 0x0051, 'F': 0x0046,
+            }
+            target_key = key_map.get(key_str)
+            if target_key is None:
+                return False
+            if event.key() != target_key:
+                return False
+            modifiers = event.modifiers()
+            expected = Qt.NoModifier
+            if 'Ctrl' in modifiers_str:
+                expected |= Qt.ControlModifier
+            return modifiers == expected
+
+        if _match('delete_selected') or event.key() == Qt.Key_E:
             if (self._editor.selected_item is not None and
                 0 <= self._editor.selected_item < len(self._editor.canvas_items)):
                 del self._editor.canvas_items[self._editor.selected_item]
@@ -427,10 +451,10 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 self.selected_item_size = None
                 self.update_status_label()
                 self.update()
-        elif event.key() == Qt.Key_F and event.modifiers() & Qt.ControlModifier:
+        elif _match('fit_view'):
             self.reset_view()
             self.update()
-        elif event.key() == Qt.Key_Q:
+        elif _match('quit_draw'):
             if self.is_drawing_box:
                 self.is_drawing_box = False
                 self.draw_start_pos = None

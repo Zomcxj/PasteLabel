@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QGroupBox, QScrollArea, QWidget, QCheckBox
 )
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QEvent
 
 from ..core.config import SHORTCUT_CONFIG
 from .theme import ThemeManager, ThemeMode
@@ -33,11 +33,22 @@ class SettingsDialog(QDialog):
         self._init_ui()
         self._load_shortcuts()
         self._load_options()
+        self.installEventFilter(self)
 
     def showEvent(self, event):
-        """窗口显示后设置标题栏颜色"""
+        """窗口显示后禁用主窗口快捷键，避免冲突"""
         super().showEvent(event)
         QTimer.singleShot(30, self._sync_titlebar)
+        if self._editor and hasattr(self._editor, '_shortcuts'):
+            for sc in self._editor._shortcuts:
+                sc.setEnabled(False)
+
+    def hideEvent(self, event):
+        """窗口关闭后恢复主窗口快捷键"""
+        super().hideEvent(event)
+        if self._editor and hasattr(self._editor, '_shortcuts'):
+            for sc in self._editor._shortcuts:
+                sc.setEnabled(True)
 
     def _sync_titlebar(self):
         """同步标题栏颜色"""
@@ -63,7 +74,6 @@ class SettingsDialog(QDialog):
             'redo': tr("重做"),
             'save': tr("保存"),
             'save_all': tr("全部保存"),
-            'clear': tr("清空画布"),
             'toggle_grid': tr("显示网格"),
             'toggle_labels': tr("显示BOX"),
             'toggle_label_names': tr("显示Label"),
@@ -77,7 +87,6 @@ class SettingsDialog(QDialog):
             'fit_view': tr("适应视图"),
             'zoom_in': tr("放大"),
             'zoom_out': tr("缩小"),
-            'zoom_reset': tr("重置缩放"),
         }
 
         for key, name in shortcut_names.items():
@@ -89,6 +98,7 @@ class SettingsDialog(QDialog):
             input_field.setText(SHORTCUT_CONFIG.get(key, ''))
             input_field.setReadOnly(True)
             input_field.setMinimumWidth(150)
+            input_field.installEventFilter(self)
             input_field.keyPressEvent = lambda event, field=input_field: self._capture_key(event, field)
             self.shortcut_inputs[key] = input_field
             row.addWidget(input_field, 1)
@@ -137,6 +147,17 @@ class SettingsDialog(QDialog):
         btn_layout.addWidget(cancel_btn)
 
         layout.addLayout(btn_layout)
+
+    def eventFilter(self, obj, event):
+        """拦截快捷键输入框的按键事件（含Ctrl+组合键）"""
+        if event.type() == QEvent.KeyPress:
+            focused = self.focusWidget()
+            if focused is not None:
+                for key, field in self.shortcut_inputs.items():
+                    if focused is field or obj is field:
+                        self._capture_key(event, field)
+                        return True
+        return super().eventFilter(obj, event)
 
     def _capture_key(self, event, field):
         """捕获按键"""
@@ -189,7 +210,7 @@ class SettingsDialog(QDialog):
             self.prefix_input.setText(self._editor.prefix_input.text())
 
     def _save_shortcuts(self):
-        """保存快捷键到文件"""
+        """保存快捷键到文件并立即生效"""
         shortcuts = {}
         for key, field in self.shortcut_inputs.items():
             text = field.text().strip()
@@ -198,6 +219,11 @@ class SettingsDialog(QDialog):
 
         if self._editor:
             self._editor.prefix_input.setText(self.prefix_input.text())
+            self._editor.shortcut_config = shortcuts
+            if hasattr(self._editor, 'update_shortcuts'):
+                self._editor.update_shortcuts()
+            if hasattr(self._editor, '_refresh_menu_shortcuts'):
+                self._editor._refresh_menu_shortcuts()
 
         config_manager.save_shortcuts(shortcuts)
         self.accept()

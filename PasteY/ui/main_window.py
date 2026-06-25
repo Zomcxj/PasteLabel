@@ -39,6 +39,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._connect_manager_signals()
         self.update_label_list()
         self.installEventFilterRecursive(self)
+        self.setup_shortcuts()
 
     def _load_settings(self):
         """从配置文件加载主题和语言设置"""
@@ -212,7 +213,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         from . import i18n
         tr = i18n.t
         if hasattr(self, 'draw_box_btn'):
-            self.draw_box_btn.setText(tr("绘制BOX"))
+            sc = self._get_shortcut('draw_box')
+            self.draw_box_btn.setText(f"{tr('绘制BOX')}({sc})")
             self.draw_box_btn.setToolTip(tr("绘制检测框"))
         self.auto_save_checkbox.setText(tr("自动保存"))
         self.show_labels_checkbox.setText(tr("显示BOX"))
@@ -253,13 +255,18 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         if hasattr(self, 'options_btn'):
             self.options_btn.setText(tr("选项"))
         if hasattr(self, '_draw_box_action'):
-            self._draw_box_action.setText("  " + tr("绘制BOX"))
+            sc = self._get_shortcut('draw_box')
+            self._draw_box_action.setText(f"  {tr('绘制BOX')}\t{sc}")
         if hasattr(self, '_menu_actions'):
             menu_texts = [tr("显示BOX"), tr("显示Label"),
                          tr("自动保存"), tr("显示网格"), tr("显示贴图名"), tr("添加文件名前缀")]
-            for i, (action, _) in enumerate(self._menu_actions):
+            for i, item in enumerate(self._menu_actions):
+                action = item[0]
+                shortcut_action = item[2] if len(item) > 2 else None
                 if i < len(menu_texts):
-                    action.setText(menu_texts[i])
+                    text = menu_texts[i]
+                    sc = self._get_shortcut(shortcut_action) if shortcut_action else ''
+                    action.setText(f"{text}\t{sc}" if sc else text)
         if hasattr(self, 'upload_a_btn'):
             self.upload_a_btn.setToolTip(tr("选择背景图片"))
         if hasattr(self, 'load_folder_btn'):
@@ -280,6 +287,27 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.save_btn.setToolTip(tr("保存图片"))
         if hasattr(self, 'save_all_btn'):
             self.save_all_btn.setToolTip(tr("全部保存"))
+
+    def _refresh_menu_shortcuts(self):
+        """刷新选项菜单中的快捷键显示"""
+        from . import i18n
+        tr = i18n.t
+        if hasattr(self, '_draw_box_action'):
+            sc = self._get_shortcut('draw_box')
+            self._draw_box_action.setText(f"  {tr('绘制BOX')}\t{sc}")
+        if hasattr(self, '_menu_actions'):
+            menu_texts = [tr("显示BOX"), tr("显示Label"),
+                         tr("自动保存"), tr("显示网格"), tr("显示贴图名"), tr("添加文件名前缀")]
+            for i, item in enumerate(self._menu_actions):
+                action = item[0]
+                shortcut_action = item[2] if len(item) > 2 else None
+                if i < len(menu_texts):
+                    text = menu_texts[i]
+                    sc = self._get_shortcut(shortcut_action) if shortcut_action else ''
+                    action.setText(f"{text}\t{sc}" if sc else text)
+        if hasattr(self, 'draw_box_btn'):
+            sc = self._get_shortcut('draw_box')
+            self.draw_box_btn.setText(f"{tr('绘制BOX')}({sc})")
 
     def save_undo_state(self):
         """保存撤销状态"""

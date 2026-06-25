@@ -220,31 +220,30 @@ class UIBuilderMixin:
         self.options_menu.setMinimumWidth(200)
 
         self._draw_box_action = QAction("  " + tr("绘制BOX"), self)
-        self._draw_box_action.setShortcut("W")
         self._draw_box_action.triggered.connect(self.toggle_draw_mode)
         self.options_menu.addAction(self._draw_box_action)
         self.options_menu.addSeparator()
 
         items = [
-            (tr("显示BOX"), "R", self.show_labels_checkbox),
-            (tr("显示Label"), "T", self.show_label_names_checkbox),
-            (tr("自动保存"), "G", self.auto_save_checkbox),
-            (tr("显示网格"), "Ctrl+G", self.show_grid_checkbox),
-            (tr("显示贴图名"), "F", self.show_paste_names_checkbox),
-            (tr("添加文件名前缀"), "", self.prefix_checkbox),
+            (tr("显示BOX"), "toggle_labels", self.show_labels_checkbox),
+            (tr("显示Label"), "toggle_label_names", self.show_label_names_checkbox),
+            (tr("自动保存"), "toggle_auto_save", self.auto_save_checkbox),
+            (tr("显示网格"), "toggle_grid", self.show_grid_checkbox),
+            (tr("显示贴图名"), "toggle_paste_names", self.show_paste_names_checkbox),
+            (tr("添加文件名前缀"), None, self.prefix_checkbox),
         ]
 
         self._menu_actions = []
-        for text, shortcut, checkbox in items:
-            action = QAction(text, self)
-            if shortcut:
-                action.setShortcut(shortcut)
+        for text, shortcut_action, checkbox in items:
+            sc = self._get_shortcut(shortcut_action) if shortcut_action else ''
+            label = f"{text}\t{sc}" if sc else text
+            action = QAction(label, self)
             action.setCheckable(True)
             action.setChecked(checkbox.isChecked())
             action.triggered.connect(lambda checked, cb=checkbox: cb.setChecked(checked))
             checkbox.stateChanged.connect(lambda state, a=action: a.setChecked(state == Qt.Checked))
             self.options_menu.addAction(action)
-            self._menu_actions.append((action, checkbox))
+            self._menu_actions.append((action, checkbox, shortcut_action))
 
         self.options_btn.setMenu(self.options_menu)
         layout.addWidget(self.options_btn)

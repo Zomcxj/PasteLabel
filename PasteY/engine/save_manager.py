@@ -10,6 +10,7 @@ from PyQt5.QtGui import QPixmap, QPainter, QColor
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QApplication
 from ..core.config import LABELME_VERSION, DEFAULT_PREFIX
 from ..core.utils import PathUtils
+from ..ui.i18n import t as tr
 
 if TYPE_CHECKING:
     from ..core.editor_protocol import EditorProtocol
@@ -139,12 +140,12 @@ class SaveManager(QObject):
         from ..ui.dialogs import SaveTipDialog
         
         if self.editor.current_background is None:
-            _show_messagebox("warning", self.editor, "警告", "请先选择背景图片")
+            _show_messagebox("warning", self.editor, tr("警告"), tr("请先选择背景图片"))
             return
         
         save_info = self.get_save_info()
         if not save_info:
-            _show_messagebox("warning", self.editor, "警告", "无法获取保存信息")
+            _show_messagebox("warning", self.editor, tr("警告"), tr("无法获取保存信息"))
             return
         
         file_path, base_name, prefix = save_info
@@ -173,13 +174,13 @@ class SaveManager(QObject):
             return
 
         if not self.editor.background_images:
-            _show_messagebox("warning", self.editor, "警告", "没有背景图片可保存")
+            _show_messagebox("warning", self.editor, tr("警告"), tr("没有背景图片可保存"))
             return
         
         self.editor._busy = True
 
         progress_dialog = ProgressDialogFactory.create_progress_dialog(
-            self.editor, "保存进度", "正在保存所有图片...", len(self.editor.background_images)
+            self.editor, tr("保存进度"), tr("正在保存所有图片..."), len(self.editor.background_images)
         )
         progress_dialog.show()
         QApplication.processEvents()  # 确保进度条立即显示
@@ -243,12 +244,12 @@ class SaveManager(QObject):
         # 显示保存结果
         if saved_count > 0:
             _show_messagebox(
-                "information", self.editor, "保存完成",
+                "information", self.editor, tr("保存完成"),
                 f"全部保存完成！\n成功保存 {saved_count} 张图片。"
             )
         else:
             _show_messagebox(
-                "warning", self.editor, "保存结果",
+                "warning", self.editor, tr("保存结果"),
                 "没有保存任何图片。"
             )
         

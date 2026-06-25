@@ -7,6 +7,7 @@ from PyQt5.QtCore import pyqtSignal, QObject
 from PyQt5.QtWidgets import QMenu, QAction, QInputDialog, QMessageBox, QListWidgetItem
 
 from ..core.utils import extract_label_name
+from ..ui.i18n import t as tr
 
 if TYPE_CHECKING:
     from ..core.editor_protocol import EditorProtocol
@@ -34,15 +35,15 @@ class LabelManager(QObject):
         selected_items = self.editor.paste_label_list.selectedItems()
         
         if selected_items:
-            modify_action = menu.addAction("修改标签")
+            modify_action = menu.addAction(tr("修改标签"))
             modify_action.triggered.connect(self.modify_paste_label)
             
-            delete_action = menu.addAction("删除标签")
+            delete_action = menu.addAction(tr("删除标签"))
             delete_action.triggered.connect(self.delete_paste_label)
             
             menu.addSeparator()
         
-        add_action = menu.addAction("增加标签")
+        add_action = menu.addAction(tr("增加标签"))
         add_action.triggered.connect(self.add_paste_label)
         
         menu.exec_(self.editor.paste_label_list.mapToGlobal(position))
@@ -50,7 +51,7 @@ class LabelManager(QObject):
     def add_paste_label(self):
         """增加贴图标签"""
         label_name, ok = QInputDialog.getText(
-            self.editor, "增加贴图标签", "请输入新的贴图标签名称:"
+            self.editor, tr("增加贴图标签"), tr("请输入新的贴图标签名称:")
         )
         
         if ok and label_name.strip():
@@ -61,7 +62,7 @@ class LabelManager(QObject):
                 existing_labels.add(self.editor.paste_label_list.item(i).text())
             
             if label_name in existing_labels:
-                QMessageBox.warning(self.editor, "警告", "标签名称已存在，请输入不同的名称")
+                QMessageBox.warning(self.editor, tr("警告"), tr("标签名称已存在，请输入不同的名称"))
                 return
             
             self.editor.paste_label_list.addItem(label_name)
@@ -74,7 +75,7 @@ class LabelManager(QObject):
         
         old_label = selected_items[0].text()
         new_label, ok = QInputDialog.getText(
-            self.editor, "修改贴图标签", f"请输入新的贴图标签名称:", text=old_label
+            self.editor, tr("修改贴图标签"), tr("请输入新的贴图标签名称:"), text=old_label
         )
         
         if ok and new_label.strip():
@@ -85,7 +86,7 @@ class LabelManager(QObject):
                 existing_labels.add(self.editor.paste_label_list.item(i).text())
             
             if new_label in existing_labels and new_label != old_label:
-                QMessageBox.warning(self.editor, "警告", "标签名称已存在，请输入不同的名称")
+                QMessageBox.warning(self.editor, tr("警告"), tr("标签名称已存在，请输入不同的名称"))
                 return
             
             selected_items[0].setText(new_label)
@@ -117,7 +118,7 @@ class LabelManager(QObject):
         label_to_delete = selected_items[0].text()
         
         reply = QMessageBox.question(
-            self.editor, "确认删除", 
+            self.editor, tr("确认删除"), 
             f"确定要删除贴图标签 '{label_to_delete}' 吗？删除后，所有使用该标签的贴图也会被删除。",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
@@ -154,15 +155,15 @@ class LabelManager(QObject):
         selected_items = self.editor.label_list.selectedItems()
         
         if selected_items:
-            modify_action = menu.addAction("修改标签")
+            modify_action = menu.addAction(tr("修改标签"))
             modify_action.triggered.connect(self.modify_label)
             
-            delete_action = menu.addAction("删除标签")
+            delete_action = menu.addAction(tr("删除标签"))
             delete_action.triggered.connect(self.delete_label)
             
             menu.addSeparator()
         
-        add_action = menu.addAction("增加标签")
+        add_action = menu.addAction(tr("增加标签"))
         add_action.triggered.connect(self.add_label)
         
         menu.exec_(self.editor.label_list.mapToGlobal(position))
@@ -179,7 +180,7 @@ class LabelManager(QObject):
         
         # 输入新标签名称
         new_label, ok = QInputDialog.getText(
-            self.editor, "修改标签", f"请输入新的标签名称:", text=old_label
+            self.editor, tr("修改标签"), tr("请输入新的标签名称:"), text=old_label
         )
         
         if ok and new_label.strip():
@@ -214,7 +215,7 @@ class LabelManager(QObject):
         label_to_delete = extract_label_name(label_text)
         
         reply = QMessageBox.question(
-            self.editor, "确认删除",
+            self.editor, tr("确认删除"),
             f"确定要删除标签 '{label_to_delete}' 吗？\n将从所有背景中删除该标签的检测框。",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
@@ -245,7 +246,7 @@ class LabelManager(QObject):
         """添加标签"""
         if label_name is None:
             label_name, ok = QInputDialog.getText(
-                self.editor, "增加标签", "请输入新的标签名称:"
+                self.editor, tr("增加标签"), tr("请输入新的标签名称:")
             )
             if not (ok and label_name.strip()):
                 return

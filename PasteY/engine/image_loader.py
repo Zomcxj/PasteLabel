@@ -11,6 +11,7 @@ from PyQt5.QtCore import Qt, QSize
 
 from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
 from ..core.utils import PathUtils, natural_sort_key, create_thumbnail
+from ..ui.i18n import t as tr
 
 
 class ImageLoaderMixin:
@@ -55,7 +56,7 @@ class ImageLoaderMixin:
 
     def load_folder_images(self):
         """从文件夹加载背景图"""
-        folder_path = QFileDialog.getExistingDirectory(self, "选择图片文件夹", "")
+        folder_path = QFileDialog.getExistingDirectory(self, tr("选择图片文件夹"), "")
         if not folder_path:
             return
 
@@ -85,7 +86,7 @@ class ImageLoaderMixin:
             self.update_label_list()
             self.update_file_count()
         else:
-            QMessageBox.warning(self, "警告", "该文件夹中没有找到支持的图片文件")
+            QMessageBox.warning(self, tr("警告"), tr("该文件夹中没有找到支持的图片文件"))
             self.update_file_count()
 
     def upload_small_images(self):
@@ -109,7 +110,7 @@ class ImageLoaderMixin:
 
     def load_small_folder_images(self):
         """从文件夹加载贴图"""
-        folder_path = QFileDialog.getExistingDirectory(self, "选择贴图文件夹", "")
+        folder_path = QFileDialog.getExistingDirectory(self, tr("选择贴图文件夹"), "")
         if not folder_path:
             return
 
@@ -128,7 +129,7 @@ class ImageLoaderMixin:
                     loaded_count += 1
 
         if loaded_count == 0:
-            QMessageBox.warning(self, "警告", "该文件夹中没有找到支持的图片文件")
+            QMessageBox.warning(self, tr("警告"), tr("该文件夹中没有找到支持的图片文件"))
 
         self._update_paste_count_spin()
         self._refresh_small_list_view()
@@ -209,9 +210,9 @@ class ImageLoaderMixin:
                     for label in labels:
                         self.paste_label_list.addItem(label)
                 else:
-                    QMessageBox.warning(self, "警告", "未找到有效的标签")
+                    QMessageBox.warning(self, tr("警告"), tr("未找到有效的标签"))
             except Exception as e:
-                QMessageBox.critical(self, "错误", f"读取标签文件失败：{e}")
+                QMessageBox.critical(self, tr("错误"), f"读取标签文件失败：{e}")
 
     def _load_detection_boxes_for_index(self, index, file_path):
         """加载指定索引的检测框（优先从缓存，否则从文件）"""

@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import QShortcut
 
 from ..core.utils import extract_label_name
 from ..core.config import SHORTCUT_CONFIG
+from ..ui.i18n import t as tr
 
 
 class EventHandlerMixin:
@@ -122,7 +123,7 @@ class EventHandlerMixin:
             self.canvas.setCursor(Qt.ArrowCursor)
             if hasattr(self, 'draw_box_btn'):
                 sc = self._get_shortcut('draw_box')
-                self.draw_box_btn.setText(f"绘制BOX({sc})")
+                self.draw_box_btn.setText(f"{tr('绘制BOX')}({sc})")
             self.canvas.update()
 
     def _delete_selected_box(self):

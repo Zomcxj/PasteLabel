@@ -9,6 +9,7 @@ from PyQt5.QtCore import Qt, QRectF
 
 from ..core.config import RANDOM_POSITION_CONFIG, PASTE_ITEM_CONFIG
 from ..core.utils import extract_label_name, calculate_iou
+from ..ui.i18n import t as tr
 
 
 class PasteEngineMixin:
@@ -227,7 +228,7 @@ class PasteEngineMixin:
 
         from ..ui.dialogs import ProgressDialogFactory
         progress_dialog = ProgressDialogFactory.create_progress_dialog(
-            self, "一键贴图进度", "正在一键贴图...", process_count
+            self, tr("一键贴图进度"), tr("正在一键贴图..."), process_count
         )
         progress_dialog.show()
 

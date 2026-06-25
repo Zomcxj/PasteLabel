@@ -422,7 +422,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         from ..core.config import SHORTCUT_CONFIG
 
         def _match(action):
-            shortcut = SHORTCUT_CONFIG.get(action, '')
+            sc = getattr(self._editor, 'shortcut_config', SHORTCUT_CONFIG)
+            shortcut = sc.get(action, SHORTCUT_CONFIG.get(action, ''))
             if not shortcut:
                 return False
             parts = shortcut.split('+')

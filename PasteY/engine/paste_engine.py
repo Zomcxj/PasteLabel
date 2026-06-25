@@ -9,7 +9,6 @@ from PyQt5.QtCore import Qt, QRectF
 
 from ..core.config import RANDOM_POSITION_CONFIG, PASTE_ITEM_CONFIG
 from ..core.utils import extract_label_name, calculate_iou
-from ..ui.dialogs import ProgressDialogFactory
 
 
 class PasteEngineMixin:
@@ -226,6 +225,7 @@ class PasteEngineMixin:
         start_index = self.current_background_index if self.current_background_index >= 0 else 0
         process_count = total_count - start_index
 
+        from ..ui.dialogs import ProgressDialogFactory
         progress_dialog = ProgressDialogFactory.create_progress_dialog(
             self, "一键贴图进度", "正在一键贴图...", process_count
         )

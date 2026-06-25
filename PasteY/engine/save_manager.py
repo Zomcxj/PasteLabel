@@ -10,8 +10,6 @@ from PyQt5.QtGui import QPixmap, QPainter, QColor
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QApplication
 from ..core.config import LABELME_VERSION, DEFAULT_PREFIX
 from ..core.utils import PathUtils
-from ..ui.dwm import set_titlebar_dark
-from ..ui.theme import ThemeManager
 
 if TYPE_CHECKING:
     from ..core.editor_protocol import EditorProtocol
@@ -61,6 +59,8 @@ class _SyncTitleBarDialog(QDialog):
         QTimer.singleShot(30, self._sync)
 
     def _sync(self):
+        from ..ui.dwm import set_titlebar_dark
+        from ..ui.theme import ThemeManager
         is_dark = ThemeManager.get_mode().value == "dark"
         hwnd = int(self.winId())
         set_titlebar_dark(hwnd, is_dark)

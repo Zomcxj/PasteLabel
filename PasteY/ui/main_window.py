@@ -54,6 +54,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         language = settings.get('language', 'zh')
         i18n.set_lang(language)
 
+        self.shortcut_config = settings.get('shortcuts', {})
+
     def _init_data(self):
         """初始化数据结构"""
         from PyQt5.QtWidgets import QLineEdit

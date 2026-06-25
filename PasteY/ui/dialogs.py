@@ -40,7 +40,7 @@ class LabelSelectionDialog(QDialog):
 
         button_layout = QHBoxLayout()
         self.ok_btn = QPushButton("确定")
-        self.ok_btn.setStyleSheet(ThemeManager.get_button_style())
+        self.ok_btn.setObjectName("successBtn")
         self.cancel_btn = QPushButton("取消")
         self.cancel_btn.setStyleSheet(ThemeManager.get_button_style())
 

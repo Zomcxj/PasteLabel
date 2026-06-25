@@ -2,8 +2,9 @@
 事件处理混入 - 负责键盘、窗口事件和绘制模式切换
 """
 import os
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QKeySequence
 from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtWidgets import QShortcut
 
 from ..core.utils import extract_label_name
 from ..core.config import SHORTCUT_CONFIG
@@ -14,8 +15,9 @@ class EventHandlerMixin:
 
     def _get_shortcut(self, action):
         """获取快捷键配置"""
-        if hasattr(self, 'shortcut_config'):
-            return self.shortcut_config.get(action, SHORTCUT_CONFIG.get(action, ''))
+        sc = getattr(self, 'shortcut_config', None)
+        if sc is not None and sc:
+            return sc.get(action, SHORTCUT_CONFIG.get(action, ''))
         return SHORTCUT_CONFIG.get(action, '')
 
     def _match_shortcut(self, event, action):
@@ -63,59 +65,84 @@ class EventHandlerMixin:
 
         return modifiers == expected_modifiers
 
+    def setup_shortcuts(self):
+        """用 QShortcut 注册所有快捷键（全局生效，不受焦点影响）"""
+        action_handlers = {
+            'prev_image': lambda: self.switch_background(-1),
+            'next_image': lambda: self.switch_background(1),
+            'toggle_labels': self._toggle_labels,
+            'toggle_label_names': self._toggle_label_names,
+            'toggle_grid': self.toggle_grid,
+            'toggle_auto_save': self._toggle_auto_save,
+            'toggle_paste_names': self._toggle_paste_names,
+            'draw_box': self.toggle_draw_mode,
+            'quit_draw': self._quit_draw,
+            'delete_selected': self._delete_selected_box,
+            'undo': self.undo,
+            'redo': self.redo,
+            'fit_view': lambda: (self.canvas.reset_view(), self.canvas.update()),
+        }
+        self._shortcuts = []
+        for action, handler in action_handlers.items():
+            sc_str = self._get_shortcut(action)
+            if sc_str:
+                seq = QKeySequence(sc_str)
+                shortcut = QShortcut(seq, self)
+                shortcut.activated.connect(handler)
+                self._shortcuts.append(shortcut)
+
+    def update_shortcuts(self):
+        """快捷键配置变更后重新注册"""
+        for sc in getattr(self, '_shortcuts', []):
+            sc.setEnabled(False)
+            sc.deleteLater()
+        self._shortcuts = []
+        self.setup_shortcuts()
+
+    def _toggle_labels(self):
+        self.show_labels_checkbox.setChecked(not self.show_labels_checkbox.isChecked())
+
+    def _toggle_label_names(self):
+        if hasattr(self, 'show_label_names_checkbox'):
+            self.show_label_names_checkbox.setChecked(not self.show_label_names_checkbox.isChecked())
+
+    def _toggle_auto_save(self):
+        self.auto_save_checkbox.setChecked(not self.auto_save_checkbox.isChecked())
+        self.auto_save_current_canvas()
+
+    def _toggle_paste_names(self):
+        self.show_paste_names_checkbox.setChecked(not self.show_paste_names_checkbox.isChecked())
+        self.canvas.update()
+
+    def _quit_draw(self):
+        if self.canvas.is_drawing_box:
+            self.canvas.is_drawing_box = False
+            self.canvas.draw_start_pos = None
+            self.canvas.temp_draw_box = None
+            self.canvas.setCursor(Qt.ArrowCursor)
+            if hasattr(self, 'draw_box_btn'):
+                sc = self._get_shortcut('draw_box')
+                self.draw_box_btn.setText(f"绘制BOX({sc})")
+            self.canvas.update()
+
+    def _delete_selected_box(self):
+        if (self.canvas.selected_box is not None and
+                0 <= self.canvas.selected_box < len(self.detection_boxes)):
+            self.save_undo_state()
+            del self.detection_boxes[self.canvas.selected_box]
+            self.canvas.selected_box = None
+            if self.current_background_index >= 0:
+                self.detection_boxes_dict[self.current_background_index] = \
+                    self.detection_boxes.copy()
+            self.update_label_list()
+            self.canvas.update()
+            if self.current_background and self.current_background_index >= 0:
+                background_path = self.background_images[self.current_background_index]
+                background_name = os.path.basename(background_path)
+                self.save_json(background_path, background_name, "", canvas_items=[])
+
     def keyPressEvent(self, event):
         """键盘按下事件"""
-        if self._match_shortcut(event, 'prev_image'):
-            self.switch_background(-1)
-        elif self._match_shortcut(event, 'next_image'):
-            self.switch_background(1)
-        elif self._match_shortcut(event, 'toggle_labels'):
-            current_state = self.show_labels_checkbox.isChecked()
-            self.show_labels_checkbox.setChecked(not current_state)
-        elif self._match_shortcut(event, 'toggle_label_names'):
-            if hasattr(self, 'show_label_names_checkbox'):
-                current_state = self.show_label_names_checkbox.isChecked()
-                self.show_label_names_checkbox.setChecked(not current_state)
-        elif self._match_shortcut(event, 'toggle_grid'):
-            self.toggle_grid()
-        elif self._match_shortcut(event, 'toggle_auto_save'):
-            current_state = self.auto_save_checkbox.isChecked()
-            self.auto_save_checkbox.setChecked(not current_state)
-            self.auto_save_current_canvas()
-        elif self._match_shortcut(event, 'toggle_paste_names'):
-            current_state = self.show_paste_names_checkbox.isChecked()
-            self.show_paste_names_checkbox.setChecked(not current_state)
-            self.canvas.update()
-        elif self._match_shortcut(event, 'draw_box'):
-            self.toggle_draw_mode()
-        elif self._match_shortcut(event, 'quit_draw'):
-            if self.canvas.is_drawing_box:
-                self.canvas.is_drawing_box = False
-                self.canvas.draw_start_pos = None
-                self.canvas.temp_draw_box = None
-                self.canvas.setCursor(Qt.ArrowCursor)
-                if hasattr(self, 'draw_box_btn'):
-                    self.draw_box_btn.setText("绘制BOX(W)")
-                self.canvas.update()
-        elif self._match_shortcut(event, 'delete_selected'):
-            if self.canvas.selected_box is not None and 0 <= self.canvas.selected_box < len(self.detection_boxes):
-                self.save_undo_state()
-                del self.detection_boxes[self.canvas.selected_box]
-                self.canvas.selected_box = None
-                if self.current_background_index >= 0:
-                    self.detection_boxes_dict[self.current_background_index] = self.detection_boxes.copy()
-                self.update_label_list()
-                self.canvas.update()
-
-                if self.current_background and self.current_background_index >= 0:
-                    background_path = self.background_images[self.current_background_index]
-                    background_name = os.path.basename(background_path)
-                    self.save_json(background_path, background_name, "", canvas_items=[])
-        elif self._match_shortcut(event, 'undo'):
-            self.undo()
-        elif self._match_shortcut(event, 'redo'):
-            self.redo()
-
         super().keyPressEvent(event)
 
     def installEventFilterRecursive(self, widget):
@@ -125,15 +152,6 @@ class EventHandlerMixin:
             self.installEventFilterRecursive(child)
 
     def eventFilter(self, obj, event):
-        """事件过滤器"""
-        if event.type() == QEvent.KeyPress:
-            key = event.key()
-            if key == Qt.Key_A:
-                self.switch_background(-1)
-                return True
-            elif key == Qt.Key_D:
-                self.switch_background(1)
-                return True
         return super().eventFilter(obj, event)
 
     def toggle_draw_mode(self):

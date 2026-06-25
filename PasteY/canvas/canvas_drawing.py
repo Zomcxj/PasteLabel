@@ -96,7 +96,8 @@ class CanvasDrawingMixin:
         self.setCursor(Qt.ArrowCursor)
 
         if hasattr(self._editor, 'draw_box_btn'):
-            self._editor.draw_box_btn.setText("绘制 BOX(W)")
+            sc = self._editor._get_shortcut('draw_box')
+            self._editor.draw_box_btn.setText(f"绘制 BOX({sc})")
 
         self.update()
 

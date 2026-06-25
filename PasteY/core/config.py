@@ -113,7 +113,6 @@ SHORTCUT_CONFIG = {
     'redo': 'Ctrl+Y',
     'save': 'Ctrl+S',
     'save_all': 'Ctrl+Shift+S',
-    'clear': 'Ctrl+Delete',
     'toggle_grid': 'Ctrl+G',
     'toggle_labels': 'R',
     'toggle_label_names': 'T',
@@ -127,7 +126,6 @@ SHORTCUT_CONFIG = {
     'fit_view': 'Ctrl+F',
     'zoom_in': 'Ctrl++',
     'zoom_out': 'Ctrl+-',
-    'zoom_reset': 'Ctrl+0',
 }
 
 # 撤销/重做配置

@@ -137,6 +137,29 @@ class SettingsDialog(QDialog):
         prefix_row.addStretch()
         opt_layout.addLayout(prefix_row)
 
+        from ..core.config import GRID_CONFIG
+        grid_width_row = QHBoxLayout()
+        grid_width_label = QLabel(tr("网格线粗细") + ":")
+        grid_width_row.addWidget(grid_width_label, 2)
+        self.grid_width_spin = QSpinBox()
+        self.grid_width_spin.setRange(1, 10)
+        self.grid_width_spin.setValue(GRID_CONFIG.get('line_width', 1))
+        self.grid_width_spin.setMinimumWidth(80)
+        grid_width_row.addWidget(self.grid_width_spin)
+        grid_width_row.addStretch()
+        opt_layout.addLayout(grid_width_row)
+
+        grid_alpha_row = QHBoxLayout()
+        grid_alpha_label = QLabel(tr("网格线灰度") + ":")
+        grid_alpha_row.addWidget(grid_alpha_label, 2)
+        self.grid_alpha_spin = QSpinBox()
+        self.grid_alpha_spin.setRange(0, 255)
+        self.grid_alpha_spin.setValue(GRID_CONFIG.get('alpha', 120))
+        self.grid_alpha_spin.setMinimumWidth(80)
+        grid_alpha_row.addWidget(self.grid_alpha_spin)
+        grid_alpha_row.addStretch()
+        opt_layout.addLayout(grid_alpha_row)
+
         layout.addWidget(opt_group)
 
         layout.addStretch()
@@ -215,6 +238,9 @@ class SettingsDialog(QDialog):
         """加载选项状态"""
         if self._editor:
             self.prefix_input.setText(self._editor.prefix_input.text())
+        from ..core.config import GRID_CONFIG
+        self.grid_width_spin.setValue(GRID_CONFIG.get('line_width', 1))
+        self.grid_alpha_spin.setValue(GRID_CONFIG.get('alpha', 120))
 
     def _save_shortcuts(self):
         """保存快捷键到文件并立即生效"""
@@ -231,6 +257,10 @@ class SettingsDialog(QDialog):
                 self._editor.update_shortcuts()
             if hasattr(self._editor, '_refresh_menu_shortcuts'):
                 self._editor._refresh_menu_shortcuts()
+
+        from ..core.config import GRID_CONFIG
+        GRID_CONFIG['line_width'] = self.grid_width_spin.value()
+        GRID_CONFIG['alpha'] = self.grid_alpha_spin.value()
 
         config_manager.save_shortcuts(shortcuts)
         self.accept()

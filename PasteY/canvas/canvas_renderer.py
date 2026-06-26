@@ -78,8 +78,8 @@ class CanvasRendererMixin:
         g = int(grid_color[3:5], 16)
         b = int(grid_color[5:7], 16)
 
-        pen = QPen(QColor(r, g, b, 120))
-        pen.setWidth(1)
+        pen = QPen(QColor(r, g, b, GRID_CONFIG.get('alpha', 120)))
+        pen.setWidth(GRID_CONFIG.get('line_width', 1))
         pen.setStyle(Qt.DotLine)
         painter.setPen(pen)
 

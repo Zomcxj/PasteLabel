@@ -32,6 +32,12 @@ PasteLabel 是一个基于 PyQt5 的图像标注工具，支持**贴图**（合�
 pip install PyQt5 opencv-python pyinstaller
 ```
 
+### 运行
+
+```bash
+python PasteY/main.py
+```
+
 ## 项目结构
 
 ```

@@ -160,13 +160,37 @@ echo "    --icon=\"${ICON_FILE}\" \\"
 echo "    --add-data \"${RESOURCE_DIR}${ADD_DATA_SEP}${DEST_DIR}\" \\"
 [ "$CLEAN_BUILD" = true ] && echo "    --clean \\"
 echo "    --noconfirm \\"
+echo "    --hidden-import PasteY \\"
+echo "    --hidden-import PasteY.ui \\"
+echo "    --hidden-import PasteY.ui.main_window \\"
+echo "    --hidden-import PasteY.ui.ui_builder \\"
 echo "    --hidden-import PasteY.ui.settings_dialog \\"
+echo "    --hidden-import PasteY.ui.theme \\"
+echo "    --hidden-import PasteY.ui.dwm \\"
+echo "    --hidden-import PasteY.ui.dialogs \\"
+echo "    --hidden-import PasteY.ui.widgets \\"
+echo "    --hidden-import PasteY.ui.i18n \\"
+echo "    --hidden-import PasteY.ui.styles \\"
+echo "    --hidden-import PasteY.engine \\"
 echo "    --hidden-import PasteY.engine.save_manager \\"
 echo "    --hidden-import PasteY.engine.undo_manager \\"
 echo "    --hidden-import PasteY.engine.label_manager \\"
+echo "    --hidden-import PasteY.engine.image_loader \\"
+echo "    --hidden-import PasteY.engine.paste_engine \\"
+echo "    --hidden-import PasteY.engine.event_handler \\"
+echo "    --hidden-import PasteY.canvas \\"
+echo "    --hidden-import PasteY.canvas.canvas \\"
+echo "    --hidden-import PasteY.canvas.canvas_renderer \\"
+echo "    --hidden-import PasteY.canvas.canvas_interaction \\"
 echo "    --hidden-import PasteY.canvas.canvas_drawing \\"
 echo "    --hidden-import PasteY.canvas.canvas_menu \\"
+echo "    --hidden-import PasteY.core \\"
+echo "    --hidden-import PasteY.core.config \\"
 echo "    --hidden-import PasteY.core.config_manager \\"
+echo "    --hidden-import PasteY.core.utils \\"
+echo "    --hidden-import PasteY.core.models \\"
+echo "    --hidden-import PasteY.core.editor_protocol \\"
+echo "    --hidden-import PasteY.core.exception_hook \\"
 echo "    --exclude-module tkinter \\"
 echo "    --exclude-module matplotlib \\"
 echo "    --exclude-module pandas \\"
@@ -186,13 +210,37 @@ PYINSTALLER_BASE_CMD="$PYINSTALLER_CMD \
     --icon=\"${ICON_FILE}\" \
     --add-data \"${RESOURCE_DIR}${ADD_DATA_SEP}${DEST_DIR}\" \
     --noconfirm \
+    --hidden-import PasteY \
+    --hidden-import PasteY.ui \
+    --hidden-import PasteY.ui.main_window \
+    --hidden-import PasteY.ui.ui_builder \
     --hidden-import PasteY.ui.settings_dialog \
+    --hidden-import PasteY.ui.theme \
+    --hidden-import PasteY.ui.dwm \
+    --hidden-import PasteY.ui.dialogs \
+    --hidden-import PasteY.ui.widgets \
+    --hidden-import PasteY.ui.i18n \
+    --hidden-import PasteY.ui.styles \
+    --hidden-import PasteY.engine \
     --hidden-import PasteY.engine.save_manager \
     --hidden-import PasteY.engine.undo_manager \
     --hidden-import PasteY.engine.label_manager \
+    --hidden-import PasteY.engine.image_loader \
+    --hidden-import PasteY.engine.paste_engine \
+    --hidden-import PasteY.engine.event_handler \
+    --hidden-import PasteY.canvas \
+    --hidden-import PasteY.canvas.canvas \
+    --hidden-import PasteY.canvas.canvas_renderer \
+    --hidden-import PasteY.canvas.canvas_interaction \
     --hidden-import PasteY.canvas.canvas_drawing \
     --hidden-import PasteY.canvas.canvas_menu \
+    --hidden-import PasteY.core \
+    --hidden-import PasteY.core.config \
     --hidden-import PasteY.core.config_manager \
+    --hidden-import PasteY.core.utils \
+    --hidden-import PasteY.core.models \
+    --hidden-import PasteY.core.editor_protocol \
+    --hidden-import PasteY.core.exception_hook \
     --exclude-module tkinter \
     --exclude-module matplotlib \
     --exclude-module pandas \

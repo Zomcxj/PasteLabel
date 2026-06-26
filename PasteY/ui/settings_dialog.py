@@ -5,7 +5,8 @@ import json
 import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QGroupBox, QScrollArea, QWidget, QCheckBox
+    QPushButton, QGroupBox, QScrollArea, QWidget, QCheckBox,
+    QSpinBox
 )
 from PyQt5.QtCore import Qt, QTimer, QEvent
 

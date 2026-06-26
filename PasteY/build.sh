@@ -116,9 +116,9 @@ fi
 log_ok "PyInstaller 可用"
 
 # 检查主脚本是否存在
-MAIN_SCRIPT="main.py"
+MAIN_SCRIPT="${PROJECT_ROOT}/PasteY/main.py"
 if [ ! -f "$MAIN_SCRIPT" ]; then
-    log_error "主脚本 '$MAIN_SCRIPT' 不存在于 $(pwd)"
+    log_error "主脚本 '$MAIN_SCRIPT' 不存在"
     exit 1
 fi
 log_ok "主脚本 '$MAIN_SCRIPT' 存在"

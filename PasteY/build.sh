@@ -160,6 +160,13 @@ echo "    --icon=\"${ICON_FILE}\" \\"
 echo "    --add-data \"${RESOURCE_DIR}${ADD_DATA_SEP}${DEST_DIR}\" \\"
 [ "$CLEAN_BUILD" = true ] && echo "    --clean \\"
 echo "    --noconfirm \\"
+echo "    --hidden-import PasteY.ui.settings_dialog \\"
+echo "    --hidden-import PasteY.engine.save_manager \\"
+echo "    --hidden-import PasteY.engine.undo_manager \\"
+echo "    --hidden-import PasteY.engine.label_manager \\"
+echo "    --hidden-import PasteY.canvas.canvas_drawing \\"
+echo "    --hidden-import PasteY.canvas.canvas_menu \\"
+echo "    --hidden-import PasteY.core.config_manager \\"
 echo "    --exclude-module tkinter \\"
 echo "    --exclude-module matplotlib \\"
 echo "    --exclude-module pandas \\"
@@ -179,6 +186,13 @@ PYINSTALLER_BASE_CMD="$PYINSTALLER_CMD \
     --icon=\"${ICON_FILE}\" \
     --add-data \"${RESOURCE_DIR}${ADD_DATA_SEP}${DEST_DIR}\" \
     --noconfirm \
+    --hidden-import PasteY.ui.settings_dialog \
+    --hidden-import PasteY.engine.save_manager \
+    --hidden-import PasteY.engine.undo_manager \
+    --hidden-import PasteY.engine.label_manager \
+    --hidden-import PasteY.canvas.canvas_drawing \
+    --hidden-import PasteY.canvas.canvas_menu \
+    --hidden-import PasteY.core.config_manager \
     --exclude-module tkinter \
     --exclude-module matplotlib \
     --exclude-module pandas \

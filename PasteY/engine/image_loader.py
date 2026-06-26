@@ -20,7 +20,7 @@ class ImageLoaderMixin:
     def upload_background(self):
         """上传背景图片"""
         files, _ = QFileDialog.getOpenFileNames(
-            self, "选择背景图片", "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)"
+            self, tr("选择背景图片"), "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)"
         )
         if files:
             self.background_images.clear()
@@ -92,7 +92,7 @@ class ImageLoaderMixin:
     def upload_small_images(self):
         """上传贴图"""
         files, _ = QFileDialog.getOpenFileNames(
-            self, "选择贴图片", "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)"
+            self, tr("选择贴图片"), "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)"
         )
         if files:
             self.small_images.clear()
@@ -192,7 +192,7 @@ class ImageLoaderMixin:
     def upload_paste_labels(self):
         """上传贴图标签文件"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择贴图标签文件", "", "Text Files (*.txt)"
+            self, tr("选择贴图标签文件"), "", "Text Files (*.txt)"
         )
         if file_path:
             try:
@@ -212,7 +212,7 @@ class ImageLoaderMixin:
                 else:
                     QMessageBox.warning(self, tr("警告"), tr("未找到有效的标签"))
             except Exception as e:
-                QMessageBox.critical(self, tr("错误"), f"读取标签文件失败：{e}")
+                QMessageBox.critical(self, tr("错误"), f"{tr('读取标签文件失败：')}{e}")
 
     def _load_detection_boxes_for_index(self, index, file_path):
         """加载指定索引的检测框（优先从缓存，否则从文件）"""

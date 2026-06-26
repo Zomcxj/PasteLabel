@@ -119,7 +119,7 @@ class LabelManager(QObject):
         
         reply = QMessageBox.question(
             self.editor, tr("确认删除"), 
-            f"确定要删除贴图标签 '{label_to_delete}' 吗？删除后，所有使用该标签的贴图也会被删除。",
+            f"{tr('确定要删除贴图标签')} '{label_to_delete}' {tr('吗？删除后，所有使用该标签的贴图也会被删除。')}",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         
@@ -216,7 +216,7 @@ class LabelManager(QObject):
         
         reply = QMessageBox.question(
             self.editor, tr("确认删除"),
-            f"确定要删除标签 '{label_to_delete}' 吗？\n将从所有背景中删除该标签的检测框。",
+            f"{tr('确定要删除标签')} '{label_to_delete}' {tr('吗？\\n将从所有背景中删除该标签的检测框。')}",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         

@@ -195,7 +195,7 @@ class SaveManager(QObject):
                 break
             
             progress_dialog.setValue(i)
-            progress_dialog.setLabelText(f"正在保存第 {i+1} 张图片...")
+            progress_dialog.setLabelText(f"{tr('正在保存第')} {i+1} {tr('张图片')}...")
             
             pixmap = QPixmap(file_path)
             if pixmap.isNull():
@@ -245,12 +245,12 @@ class SaveManager(QObject):
         if saved_count > 0:
             _show_messagebox(
                 "information", self.editor, tr("保存完成"),
-                f"全部保存完成！\n成功保存 {saved_count} 张图片。"
+                f"{tr('全部保存完成！')}\n{tr('成功保存')} {saved_count} {tr('张图片')}。"
             )
         else:
             _show_messagebox(
                 "warning", self.editor, tr("保存结果"),
-                "没有保存任何图片。"
+                tr("没有保存任何图片。")
             )
         
         if original_index >= 0:

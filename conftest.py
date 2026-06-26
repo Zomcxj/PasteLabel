@@ -308,6 +308,9 @@ qtgui.QFontMetrics = type('QFontMetrics', (), {
     'width': lambda self, *a: 50,
     'height': lambda self: 20,
 })
+qtgui.QKeySequence = type('QKeySequence', (), {
+    '__init__': lambda self, *a: None,
+})
 
 qtwidgets = types.ModuleType('PyQt5.QtWidgets')
 qtwidgets.QWidget = _MockQWidget
@@ -350,6 +353,11 @@ qtwidgets.QComboBox = type('QComboBox', (_MockQWidget,), {
     'setCurrentIndex': lambda self, *a: None,
     'currentIndex': lambda self: 0,
     'setMaximumWidth': lambda self, *a: None,
+})
+qtwidgets.QShortcut = type('QShortcut', (_MockQWidget,), {
+    '__init__': lambda self, *a, **kw: None,
+    'setContext': lambda self, *a: None,
+    'activated': type('Signal', (), {'connect': lambda self, f: None})(),
 })
 
 # 注册模块

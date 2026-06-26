@@ -262,7 +262,7 @@ class PasteEngineMixin:
                 processed_count += 1
 
                 progress_dialog.setValue(processed_count)
-                progress_dialog.setLabelText(f"正在处理第 {i+1} 张图片，共 {total_count} 张")
+                progress_dialog.setLabelText(f"{tr('正在处理第')} {i+1} {tr('张图片，共')} {total_count} {tr('张')}")
 
                 QApplication.processEvents()
 

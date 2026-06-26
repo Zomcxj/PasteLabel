@@ -100,3 +100,30 @@ class TestExtractLabelName:
 
     def test_no_parens(self):
         assert extract_label_name("person_01") == "person_01"
+
+
+class TestPathUtils:
+    """PathUtils 测试"""
+
+    def test_normalize_path(self):
+        assert _utils.PathUtils.normalize_path("a/b/../c") == os.path.normpath("a/b/../c")
+
+    def test_normalize_path_empty(self):
+        assert _utils.PathUtils.normalize_path("") == ""
+
+    def test_to_display_path(self):
+        result = _utils.PathUtils.to_display_path("some/path")
+        assert isinstance(result, str)
+
+    def test_to_file_path(self):
+        result = _utils.PathUtils.to_file_path("some\\path")
+        assert isinstance(result, str)
+
+    def test_join_path(self):
+        assert _utils.PathUtils.join_path("a", "b") == os.path.join("a", "b")
+
+    def test_join_path_single(self):
+        assert _utils.PathUtils.join_path("a") == "a"
+
+    def test_get_path_separator(self):
+        assert _utils.PathUtils.get_path_separator() == os.sep

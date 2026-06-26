@@ -34,17 +34,24 @@ class SettingsDialog(QDialog):
         self._load_shortcuts()
         self._load_options()
         self.installEventFilter(self)
-
-    def showEvent(self, event):
-        """窗口显示后禁用主窗口快捷键，避免冲突"""
-        super().showEvent(event)
-        QTimer.singleShot(30, self._sync_titlebar)
         if self._editor and hasattr(self._editor, '_shortcuts'):
             for sc in self._editor._shortcuts:
                 sc.setEnabled(False)
 
+    def showEvent(self, event):
+        """窗口显示后设置标题栏颜色"""
+        super().showEvent(event)
+        QTimer.singleShot(30, self._sync_titlebar)
+
+    def closeEvent(self, event):
+        """关闭时恢复主窗口快捷键"""
+        super().closeEvent(event)
+        if self._editor and hasattr(self._editor, '_shortcuts'):
+            for sc in self._editor._shortcuts:
+                sc.setEnabled(True)
+
     def hideEvent(self, event):
-        """窗口关闭后恢复主窗口快捷键"""
+        """隐藏时也恢复快捷键"""
         super().hideEvent(event)
         if self._editor and hasattr(self._editor, '_shortcuts'):
             for sc in self._editor._shortcuts:

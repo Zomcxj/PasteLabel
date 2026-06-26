@@ -97,6 +97,13 @@ _strings = {
         "张": "张",
         "正在保存第": "正在保存第",
         "自动保存失败": "自动保存失败",
+        "选择贴图片": "选择贴图片",
+        "读取标签文件失败：": "读取标签文件失败：",
+        "确定要删除贴图标签": "确定要删除贴图标签",
+        "吗？删除后，所有使用该标签的贴图也会被删除。": "吗？删除后，所有使用该标签的贴图也会被删除。",
+        "确定要删除标签": "确定要删除标签",
+        "吗？\\n将从所有背景中删除该标签的检测框。": "吗？\\n将从所有背景中删除该标签的检测框。",
+        "没有保存任何图片。": "没有保存任何图片。",
         "确定": "确定",
     },
     "en": {
@@ -194,6 +201,13 @@ _strings = {
         "张": "",
         "正在保存第": "Saving image",
         "自动保存失败": "Auto-save failed",
+        "选择贴图片": "Select paste image",
+        "读取标签文件失败：": "Failed to read label file: ",
+        "确定要删除贴图标签": "Are you sure to delete paste label",
+        "吗？删除后，所有使用该标签的贴图也会被删除。": "? All pastes using this label will also be deleted.",
+        "确定要删除标签": "Are you sure to delete label",
+        "吗？\\n将从所有背景中删除该标签的检测框。": "?\\nDetection boxes of this label will be removed from all backgrounds.",
+        "没有保存任何图片。": "No images were saved.",
         "确定": "OK",
     }
 }

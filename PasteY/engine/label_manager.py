@@ -214,9 +214,10 @@ class LabelManager(QObject):
         label_text = selected_items[0].text()
         label_to_delete = extract_label_name(label_text)
         
+        delete_msg = tr('吗？\\n将从所有背景中删除该标签的检测框。')
         reply = QMessageBox.question(
             self.editor, tr("确认删除"),
-            f"{tr('确定要删除标签')} '{label_to_delete}' {tr('吗？\\n将从所有背景中删除该标签的检测框。')}",
+            f"{tr('确定要删除标签')} '{label_to_delete}' {delete_msg}",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         

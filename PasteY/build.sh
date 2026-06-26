@@ -77,28 +77,26 @@ log_ok "当前平台: $PLATFORM (uname: $OS)"
 # ==================== 平台相关配置 ====================
 if [ "$PLATFORM" = "windows" ]; then
     PYINSTALLER_CMD="python -m PyInstaller"
-    ADD_DATA_SEP=";"
-    EXTRA_ARGS="--python-option=-O2"
+    PYTHON_OPTIMIZE=2
+    SEP="\\\\"
     # Git Bash/MSYS2 下需将 Unix 路径转为 Windows 路径（否则 Python 不认识）
     PROJECT_ROOT="$(cygpath -w "$PROJECT_ROOT" 2>/dev/null || echo "$PROJECT_ROOT")"
     OUTPUT_FILE="${PROJECT_ROOT}\\dist\\PasteLabel.exe"
 else
     PYINSTALLER_CMD="pyinstaller"
-    ADD_DATA_SEP=":"
-    EXTRA_ARGS=""
+    PYTHON_OPTIMIZE=0
+    SEP="/"
     OUTPUT_FILE="${PROJECT_ROOT}/dist/PasteLabel"
 fi
 
 log_info "PyInstaller 命令: $PYINSTALLER_CMD"
-log_info "资源路径分隔符:   '$ADD_DATA_SEP'"
-log_info "额外参数:         ${EXTRA_ARGS:-<无>}"
+log_info "Python optimize:  $PYTHON_OPTIMIZE"
 
 # ==================== 前置检查 ====================
 log_info "执行前置检查..."
 
 # 检查 PyInstaller 是否可用
 if ! command -v $PYINSTALLER_CMD &> /dev/null; then
-    # Windows 下 python -m 不能直接用 command -v 检查，改为检查 python
     if [ "$PLATFORM" = "windows" ]; then
         if ! command -v python &> /dev/null; then
             log_error "未找到 python，请确保 Python 已安装并加入 PATH"
@@ -116,15 +114,15 @@ fi
 log_ok "PyInstaller 可用"
 
 # 检查主脚本是否存在
-MAIN_SCRIPT="${PROJECT_ROOT}/PasteY/main.py"
-if [ ! -f "$MAIN_SCRIPT" ]; then
-    log_error "主脚本 '$MAIN_SCRIPT' 不存在"
+MAIN_SCRIPT_PATH="${PROJECT_ROOT}${SEP}PasteY${SEP}main.py"
+if [ ! -f "$MAIN_SCRIPT_PATH" ]; then
+    log_error "主脚本 '$MAIN_SCRIPT_PATH' 不存在"
     exit 1
 fi
-log_ok "主脚本 '$MAIN_SCRIPT' 存在"
+log_ok "主脚本 '$MAIN_SCRIPT_PATH' 存在"
 
-# 检查图标文件（从 PasteY/ 看，ico_image 在上级目录）
-ICON_FILE="${PROJECT_ROOT}/ico_image/icoo.png"
+# 检查图标文件
+ICON_FILE="${PROJECT_ROOT}${SEP}ico_image${SEP}icoo.png"
 if [ ! -f "$ICON_FILE" ]; then
     log_warn "图标文件 '$ICON_FILE' 不存在，构建将继续但可能缺少图标"
 else
@@ -132,18 +130,83 @@ else
 fi
 
 # 检查资源目录
-RESOURCE_DIR="${PROJECT_ROOT}/ico_image"
-DEST_DIR="ico_image"  # PyInstaller 打包后的目标路径（相对于临时目录）
+RESOURCE_DIR="${PROJECT_ROOT}${SEP}ico_image"
 if [ ! -d "$RESOURCE_DIR" ]; then
     log_warn "资源目录 '$RESOURCE_DIR' 不存在，构建将继续但可能缺少资源"
 else
-    if [ "$CLEAN_BUILD" = true ]; then
-        FILE_COUNT=$(find "$RESOURCE_DIR" -type f 2>/dev/null | wc -l)
-        log_ok "资源目录 '$RESOURCE_DIR' 存在，包含 $FILE_COUNT 个文件"
-    else
-        log_ok "资源目录 '$RESOURCE_DIR' 存在"
-    fi
+    log_ok "资源目录 '$RESOURCE_DIR' 存在"
 fi
+
+# ==================== 生成 spec 文件 ====================
+# 策略：动态生成 spec 文件，与 Windows 已验证的方案一致
+# 确保 pathex 指向项目根目录，让 PyInstaller 能正确发现 PasteY 包结构
+
+SPEC_FILE="${PROJECT_ROOT}${SEP}PasteY${SEP}PasteLabel_build.spec"
+
+log_info "生成 spec 文件..."
+
+cat > "$SPEC_FILE" << 'SPECEOF'
+# -*- mode: python ; coding: utf-8 -*-
+# 自动生成 - 请勿手动修改
+
+SPECEOF
+
+# 用追加方式写入 Python 列表和 Analysis 块（需要变量展开的部分）
+cat >> "$SPEC_FILE" << SPECEOF
+
+a = Analysis(
+    ['${MAIN_SCRIPT_PATH}'],
+    pathex=['${PROJECT_ROOT}'],
+    binaries=[],
+    datas=[('${RESOURCE_DIR}', 'ico_image')],
+    hiddenimports=[
+        'PasteY', 'PasteY.ui', 'PasteY.ui.main_window', 'PasteY.ui.ui_builder',
+        'PasteY.ui.settings_dialog', 'PasteY.ui.theme', 'PasteY.ui.dwm',
+        'PasteY.ui.dialogs', 'PasteY.ui.widgets', 'PasteY.ui.i18n', 'PasteY.ui.styles',
+        'PasteY.engine', 'PasteY.engine.save_manager',
+        'PasteY.engine.undo_manager', 'PasteY.engine.label_manager',
+        'PasteY.engine.image_loader', 'PasteY.engine.paste_engine',
+        'PasteY.engine.event_handler',
+        'PasteY.canvas', 'PasteY.canvas.canvas', 'PasteY.canvas.canvas_renderer',
+        'PasteY.canvas.canvas_interaction', 'PasteY.canvas.canvas_drawing',
+        'PasteY.canvas.canvas_menu',
+        'PasteY.core', 'PasteY.core.config', 'PasteY.core.config_manager',
+        'PasteY.core.utils', 'PasteY.core.models', 'PasteY.core.editor_protocol',
+        'PasteY.core.exception_hook',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=['tkinter', 'matplotlib', 'pandas', 'numpy', 'pytest'],
+    noarchive=False,
+    optimize=${PYTHON_OPTIMIZE},
+)
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+$(if [ "$PLATFORM" = "windows" ]; then echo "    [('-O2', None, 'OPTION')],"; else echo "    [],"; fi)
+    name='PasteLabel',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=['${ICON_FILE}'],
+)
+SPECEOF
+
+log_ok "spec 文件已生成: $SPEC_FILE"
 
 # ==================== 执行打包 ====================
 log_info "开始打包 ${PLATFORM} 应用程序..."
@@ -151,116 +214,31 @@ log_info "开始打包 ${PLATFORM} 应用程序..."
 log_info "执行命令:"
 echo "─────────────────────────────────────────"
 echo "$PYINSTALLER_CMD \\"
-echo "    -F \\"
-echo "    -w \\"
-echo "    -n PasteLabel \\"
+echo "    $SPEC_FILE \\"
 echo "    --distpath \"${PROJECT_ROOT}/dist\" \\"
 echo "    --workpath \"${PROJECT_ROOT}/build\" \\"
-echo "    --paths \"${PROJECT_ROOT}\" \\"
-echo "    --icon=\"${ICON_FILE}\" \\"
-echo "    --add-data \"${RESOURCE_DIR}${ADD_DATA_SEP}${DEST_DIR}\" \\"
 [ "$CLEAN_BUILD" = true ] && echo "    --clean \\"
-echo "    --noconfirm \\"
-echo "    --hidden-import PasteY \\"
-echo "    --hidden-import PasteY.ui \\"
-echo "    --hidden-import PasteY.ui.main_window \\"
-echo "    --hidden-import PasteY.ui.ui_builder \\"
-echo "    --hidden-import PasteY.ui.settings_dialog \\"
-echo "    --hidden-import PasteY.ui.theme \\"
-echo "    --hidden-import PasteY.ui.dwm \\"
-echo "    --hidden-import PasteY.ui.dialogs \\"
-echo "    --hidden-import PasteY.ui.widgets \\"
-echo "    --hidden-import PasteY.ui.i18n \\"
-echo "    --hidden-import PasteY.ui.styles \\"
-echo "    --hidden-import PasteY.engine \\"
-echo "    --hidden-import PasteY.engine.save_manager \\"
-echo "    --hidden-import PasteY.engine.undo_manager \\"
-echo "    --hidden-import PasteY.engine.label_manager \\"
-echo "    --hidden-import PasteY.engine.image_loader \\"
-echo "    --hidden-import PasteY.engine.paste_engine \\"
-echo "    --hidden-import PasteY.engine.event_handler \\"
-echo "    --hidden-import PasteY.canvas \\"
-echo "    --hidden-import PasteY.canvas.canvas \\"
-echo "    --hidden-import PasteY.canvas.canvas_renderer \\"
-echo "    --hidden-import PasteY.canvas.canvas_interaction \\"
-echo "    --hidden-import PasteY.canvas.canvas_drawing \\"
-echo "    --hidden-import PasteY.canvas.canvas_menu \\"
-echo "    --hidden-import PasteY.core \\"
-echo "    --hidden-import PasteY.core.config \\"
-echo "    --hidden-import PasteY.core.config_manager \\"
-echo "    --hidden-import PasteY.core.utils \\"
-echo "    --hidden-import PasteY.core.models \\"
-echo "    --hidden-import PasteY.core.editor_protocol \\"
-echo "    --hidden-import PasteY.core.exception_hook \\"
-echo "    --exclude-module tkinter \\"
-echo "    --exclude-module matplotlib \\"
-echo "    --exclude-module pandas \\"
-echo "    --exclude-module numpy \\"
-echo "    --exclude-module pytest \\"
-[ -n "$EXTRA_ARGS" ] && echo "    $EXTRA_ARGS \\"
-echo "    $MAIN_SCRIPT"
+echo "    --noconfirm"
 echo "─────────────────────────────────────────"
 
-# 构建基础命令
-PYINSTALLER_BASE_CMD="$PYINSTALLER_CMD \
-    -F \
-    -w \
-    -n PasteLabel \
+PYINSTALLER_SPEC_CMD="$PYINSTALLER_CMD \
+    \"$SPEC_FILE\" \
     --distpath \"${PROJECT_ROOT}/dist\" \
     --workpath \"${PROJECT_ROOT}/build\" \
-    --paths \"${PROJECT_ROOT}\" \
-    --icon=\"${ICON_FILE}\" \
-    --add-data \"${RESOURCE_DIR}${ADD_DATA_SEP}${DEST_DIR}\" \
-    --noconfirm \
-    --hidden-import PasteY \
-    --hidden-import PasteY.ui \
-    --hidden-import PasteY.ui.main_window \
-    --hidden-import PasteY.ui.ui_builder \
-    --hidden-import PasteY.ui.settings_dialog \
-    --hidden-import PasteY.ui.theme \
-    --hidden-import PasteY.ui.dwm \
-    --hidden-import PasteY.ui.dialogs \
-    --hidden-import PasteY.ui.widgets \
-    --hidden-import PasteY.ui.i18n \
-    --hidden-import PasteY.ui.styles \
-    --hidden-import PasteY.engine \
-    --hidden-import PasteY.engine.save_manager \
-    --hidden-import PasteY.engine.undo_manager \
-    --hidden-import PasteY.engine.label_manager \
-    --hidden-import PasteY.engine.image_loader \
-    --hidden-import PasteY.engine.paste_engine \
-    --hidden-import PasteY.engine.event_handler \
-    --hidden-import PasteY.canvas \
-    --hidden-import PasteY.canvas.canvas \
-    --hidden-import PasteY.canvas.canvas_renderer \
-    --hidden-import PasteY.canvas.canvas_interaction \
-    --hidden-import PasteY.canvas.canvas_drawing \
-    --hidden-import PasteY.canvas.canvas_menu \
-    --hidden-import PasteY.core \
-    --hidden-import PasteY.core.config \
-    --hidden-import PasteY.core.config_manager \
-    --hidden-import PasteY.core.utils \
-    --hidden-import PasteY.core.models \
-    --hidden-import PasteY.core.editor_protocol \
-    --hidden-import PasteY.core.exception_hook \
-    --exclude-module tkinter \
-    --exclude-module matplotlib \
-    --exclude-module pandas \
-    --exclude-module numpy \
-    --exclude-module pytest \
-    $EXTRA_ARGS \
-    \"$MAIN_SCRIPT\""
+    --noconfirm"
 
-# 根据参数决定是否清理
 if [ "$CLEAN_BUILD" = true ]; then
     log_info "清理模式：重新分析所有依赖（适合发布版本）"
-    eval "$PYINSTALLER_BASE_CMD --clean"
+    eval "$PYINSTALLER_SPEC_CMD --clean"
 else
     log_info "快速模式：使用缓存构建（适合日常开发）"
-    eval "$PYINSTALLER_BASE_CMD"
+    eval "$PYINSTALLER_SPEC_CMD"
 fi
 
 BUILD_EXIT_CODE=$?
+
+# 清理临时 spec 文件
+rm -f "$SPEC_FILE"
 
 # ==================== 结果处理 ====================
 echo ""

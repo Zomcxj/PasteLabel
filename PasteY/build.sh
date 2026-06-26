@@ -156,6 +156,7 @@ echo "    -w \\"
 echo "    -n PasteLabel \\"
 echo "    --distpath \"${PROJECT_ROOT}/dist\" \\"
 echo "    --workpath \"${PROJECT_ROOT}/build\" \\"
+echo "    --paths \"${PROJECT_ROOT}\" \\"
 echo "    --icon=\"${ICON_FILE}\" \\"
 echo "    --add-data \"${RESOURCE_DIR}${ADD_DATA_SEP}${DEST_DIR}\" \\"
 [ "$CLEAN_BUILD" = true ] && echo "    --clean \\"
@@ -207,6 +208,7 @@ PYINSTALLER_BASE_CMD="$PYINSTALLER_CMD \
     -n PasteLabel \
     --distpath \"${PROJECT_ROOT}/dist\" \
     --workpath \"${PROJECT_ROOT}/build\" \
+    --paths \"${PROJECT_ROOT}\" \
     --icon=\"${ICON_FILE}\" \
     --add-data \"${RESOURCE_DIR}${ADD_DATA_SEP}${DEST_DIR}\" \
     --noconfirm \

@@ -10,6 +10,7 @@ build/
 
 AGENTS.md
 .atomcode/
+.mimocode/
 .vscode/
 .idea/
 *.swp

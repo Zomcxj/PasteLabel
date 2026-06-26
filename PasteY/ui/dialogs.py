@@ -124,6 +124,7 @@ class ProgressDialogFactory:
         """)
 
         ProgressDialogFactory._center_dialog(progress_dialog)
+        ProgressDialogFactory._sync_titlebar(progress_dialog)
         return progress_dialog
     
     @staticmethod
@@ -138,6 +139,17 @@ class ProgressDialogFactory:
         x = (screen_geometry.width() - dialog_geometry.width()) // 2
         y = (screen_geometry.height() - dialog_geometry.height()) // 2
         dialog.move(x, y)
+
+    @staticmethod
+    def _sync_titlebar(dialog):
+        from PyQt5.QtCore import QTimer
+        from .dwm import set_titlebar_dark, is_available
+        if not is_available():
+            return
+        is_dark = ThemeManager.get_mode().value == 'dark'
+        def _apply():
+            set_titlebar_dark(int(dialog.winId()), is_dark)
+        QTimer.singleShot(30, _apply)
 
 
 class SaveTipDialog:

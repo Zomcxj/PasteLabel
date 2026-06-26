@@ -97,6 +97,8 @@ GRID_CONFIG = {
     'color_light': '#E0E0E0',   # 浅色模式网格线颜色
     'color_dark': '#3E3E3E',    # 深色模式网格线颜色
     'color_ink': '#C8BFB0',     # 水墨模式网格线颜色
+    'line_width': 1,            # 网格线粗细（像素）
+    'alpha': 120,               # 网格线透明度（0-255）
 }
 
 # 标签颜色配置 - 高对比度颜色

@@ -104,6 +104,8 @@ _strings = {
         "确定要删除标签": "确定要删除标签",
         "吗？\\n将从所有背景中删除该标签的检测框。": "吗？\\n将从所有背景中删除该标签的检测框。",
         "没有保存任何图片。": "没有保存任何图片。",
+        "网格线粗细": "网格线粗细",
+        "网格线灰度": "网格线灰度",
         "确定": "确定",
     },
     "en": {
@@ -208,6 +210,8 @@ _strings = {
         "确定要删除标签": "Are you sure to delete label",
         "吗？\\n将从所有背景中删除该标签的检测框。": "?\\nDetection boxes of this label will be removed from all backgrounds.",
         "没有保存任何图片。": "No images were saved.",
+        "网格线粗细": "Grid Line Width",
+        "网格线灰度": "Grid Line Alpha",
         "确定": "OK",
     }
 }

@@ -1,7 +1,9 @@
 """
 Canvas 交互混入 - 鼠标/键盘事件入口、拖拽、缩放
 """
-from PyQt5.QtCore import Qt, QRectF
+import os
+from PyQt5.QtCore import Qt, QRectF, QUrl, QMimeData
+from PyQt5.QtGui import QDrag
 
 from ..core.config import BACKGROUND_SCALE_CONFIG
 from .canvas_drawing import CanvasDrawingMixin
@@ -19,6 +21,17 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
     def leaveEvent(self, event):
         self.mouse_inside = False
         self.update_status_label()
+        if (self._drag_out_pending and
+                self._editor.current_background_index >= 0 and
+                self._editor.background_images):
+            file_path = self._editor.background_images[self._editor.current_background_index]
+            if os.path.isfile(file_path):
+                drag = QDrag(self)
+                mime = QMimeData()
+                mime.setUrls([QUrl.fromLocalFile(file_path)])
+                drag.setMimeData(mime)
+                drag.exec_(Qt.CopyAction)
+        self._drag_out_pending = False
         super().leaveEvent(event)
 
     def mousePressEvent(self, event):
@@ -26,15 +39,19 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         mouse_pos = event.pos()
 
         if self.is_drawing_box and event.button() == Qt.LeftButton:
+            self._drag_out_pending = False
             if self._handle_drawing_press(mouse_pos):
                 return
 
         if event.button() == Qt.RightButton:
+            self._drag_out_pending = False
             if self._handle_right_click(mouse_pos):
                 return
         elif event.button() != Qt.LeftButton:
+            self._drag_out_pending = False
             return
 
+        self._drag_out_pending = True
         self._handle_left_click(mouse_pos)
 
     def _handle_left_click(self, mouse_pos):
@@ -294,6 +311,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self.update()
 
     def mouseReleaseEvent(self, event):
+        self._drag_out_pending = False
         if self.is_dragging_box or self.is_resizing_box:
             if hasattr(self, '_needs_save') and self._needs_save:
                 self._save_current_detection_boxes()

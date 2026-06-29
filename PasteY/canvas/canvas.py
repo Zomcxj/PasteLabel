@@ -50,6 +50,7 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         # 鼠标状态跟踪
         self.mouse_inside = False
         self.mouse_pos = QPoint(0, 0)
+        self._drag_out_pending = False
 
         # 设置焦点策略和鼠标追踪
         self.setFocusPolicy(Qt.StrongFocus)

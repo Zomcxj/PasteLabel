@@ -199,7 +199,7 @@ class EventHandlerMixin:
         self.current_background_index = new_index
 
         file_path = self.background_images[new_index]
-        pixmap = QPixmap(file_path)
+        pixmap = self._get_cached_pixmap(file_path)
         if not pixmap.isNull():
             self.current_background = pixmap
             self._load_detection_boxes_for_index(new_index, file_path)
@@ -216,7 +216,6 @@ class EventHandlerMixin:
 
         self.background_list.setCurrentRow(new_index)
         self.update_file_count()
-        self._update_status_info()
         self.selected_item = None
         self.canvas.update()
 

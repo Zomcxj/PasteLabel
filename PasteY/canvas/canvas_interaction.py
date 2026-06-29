@@ -55,7 +55,12 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self._drag_out_pending = False
             return
 
-        self._drag_out_pending = True
+        self._drag_out_pending = (
+            not self.is_drawing_box and
+            not self.is_dragging_background and
+            not self.is_dragging_box and
+            not self.is_dragging_item
+        )
         self._handle_left_click(mouse_pos)
 
     def _handle_left_click(self, mouse_pos):
@@ -184,12 +189,14 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             if idx >= 0 and idx < len(self._editor.background_images):
                 file_path = self._editor.background_images[idx]
                 if os.path.isfile(file_path):
+                    self._editor._canvas_drag_active = True
                     drag = QDrag(self)
                     mime = QMimeData()
                     mime.setUrls([QUrl.fromLocalFile(file_path)])
                     drag.setMimeData(mime)
                     self._drag_out_pending = False
                     drag.exec_(Qt.CopyAction)
+                    self._editor._canvas_drag_active = False
 
     def mouseMoveEvent(self, event):
         self.mouse_pos = event.pos()

@@ -395,12 +395,15 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self._append_background_images(images)
         if jsons:
             self._apply_dropped_json(jsons)
+        event.acceptProposedAction()
 
     def _append_background_images(self, files):
-        """追加背景图片（不替换已有）"""
+        """追加背景图片（不替换已有，自动去重）"""
         from PyQt5.QtGui import QPixmap
         from ..core.utils import PathUtils
         for file in files:
+            if file in self.background_images:
+                continue
             pixmap = QPixmap(file)
             if not pixmap.isNull():
                 new_index = len(self.background_images)

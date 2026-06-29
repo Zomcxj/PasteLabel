@@ -21,9 +21,15 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
     def leaveEvent(self, event):
         self.mouse_inside = False
         self.update_status_label()
-        if (self._drag_out_pending and
-                self._editor.current_background_index >= 0 and
-                self._editor.background_images):
+        self._drag_out_pending = False
+        super().leaveEvent(event)
+
+    def _do_canvas_drag_out(self):
+        """延迟执行 Canvas 拖出复制"""
+        from PyQt5.QtGui import QCursor
+        global_pos = QCursor.pos()
+        main_win = self._editor
+        if not main_win.geometry().contains(main_win.mapFromGlobal(global_pos)):
             file_path = self._editor.background_images[self._editor.current_background_index]
             if os.path.isfile(file_path):
                 drag = QDrag(self)
@@ -31,8 +37,6 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 mime.setUrls([QUrl.fromLocalFile(file_path)])
                 drag.setMimeData(mime)
                 drag.exec_(Qt.CopyAction)
-        self._drag_out_pending = False
-        super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         self.setFocus()
@@ -170,9 +174,34 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.update_status_label()
         self.update()
 
+    def _do_canvas_drag_out(self):
+        """检测鼠标是否离开窗口，触发拖出复制"""
+        from PyQt5.QtGui import QCursor
+        global_pos = QCursor.pos()
+        main_win = self._editor
+        if not main_win.geometry().contains(main_win.mapFromGlobal(global_pos)):
+            idx = self._editor.current_background_index
+            if idx >= 0 and idx < len(self._editor.background_images):
+                file_path = self._editor.background_images[idx]
+                if os.path.isfile(file_path):
+                    drag = QDrag(self)
+                    mime = QMimeData()
+                    mime.setUrls([QUrl.fromLocalFile(file_path)])
+                    drag.setMimeData(mime)
+                    self._drag_out_pending = False
+                    drag.exec_(Qt.CopyAction)
+
     def mouseMoveEvent(self, event):
         self.mouse_pos = event.pos()
         self.update_status_label()
+
+        if self._drag_out_pending:
+            from PyQt5.QtGui import QCursor
+            global_pos = QCursor.pos()
+            main_win = self._editor
+            if not main_win.geometry().contains(main_win.mapFromGlobal(global_pos)):
+                self._do_canvas_drag_out()
+                return
 
         if self.is_drawing_box:
             if self.draw_start_pos:

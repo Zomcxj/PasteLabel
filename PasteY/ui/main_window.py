@@ -42,7 +42,6 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.installEventFilterRecursive(self)
         self.setup_shortcuts()
         self.setAcceptDrops(True)
-        self.background_list.setDragEnabled(True)
 
     def _load_settings(self):
         """从配置文件加载主题和语言设置"""
@@ -74,6 +73,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.selected_item = None
         self.is_dragging = False
         self.is_resizing = False
+        self._canvas_drag_active = False
         self.drag_offset = QPoint(0, 0)
         self._busy = False
 
@@ -183,7 +183,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             stats = self.get_label_stats()
             stats_text = " | ".join([f"{k}:{v}" for k, v in list(stats.items())[:3]])
             self.status_label.setText(
-                f"{info['width']}x{info['height']} | Paste: {info['paste_count']} Box: {info['box_count']}"
+                f"Paste: {info['paste_count']} Box: {info['box_count']}"
                 + (f" | {stats_text}" if stats_text else "")
             )
 
@@ -382,13 +382,16 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
     def dropEvent(self, event: QDropEvent):
         """处理拖入的图片和JSON文件"""
         from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
+        existing = {os.path.normpath(p) for p in self.background_images}
         images = []
         jsons = []
         for url in event.mimeData().urls():
             path = url.toLocalFile()
+            norm_path = os.path.normpath(path)
             ext = os.path.splitext(path)[1].lower()
             if ext in SUPPORTED_IMAGE_EXTENSIONS:
-                images.append(path)
+                if norm_path not in existing:
+                    images.append(path)
             elif ext == '.json':
                 jsons.append(path)
         if images:
@@ -400,7 +403,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
     def _append_background_images(self, files):
         """追加背景图片（不替换已有，自动去重）"""
         from PyQt5.QtGui import QPixmap
+        from PyQt5.QtWidgets import QApplication
         from ..core.utils import PathUtils
+        first_new = len(self.background_images)
         for file in files:
             if file in self.background_images:
                 continue
@@ -411,6 +416,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 display_path = PathUtils.to_display_path(file)
                 from PyQt5.QtWidgets import QListWidgetItem
                 item = QListWidgetItem(display_path)
+                item.setData(Qt.UserRole, new_index)
                 item.setData(Qt.UserRole + 1, file)
                 self.background_list.addItem(item)
                 self.canvas_items_dict[new_index] = []
@@ -428,7 +434,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
         self.update_file_count()
         if self.background_images:
-            self.background_list.setCurrentRow(len(self.background_images) - 1)
+            self.background_list.setCurrentRow(first_new)
 
     def _apply_dropped_json(self, json_files):
         """将拖入的JSON标签文件按文件名匹配应用到对应背景图"""

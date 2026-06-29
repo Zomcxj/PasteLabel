@@ -17,6 +17,23 @@ from ..ui.i18n import t as tr
 class ImageLoaderMixin:
     """图片加载混入类 - 加载背景图、贴图、检测框"""
 
+    def _get_cached_pixmap(self, file_path):
+        """获取缓存的pixmap，缓存最近10张"""
+        if not hasattr(self, '_pixmap_cache'):
+            self._pixmap_cache = {}
+            self._pixmap_cache_order = []
+        cache_limit = 10
+        if file_path in self._pixmap_cache:
+            return self._pixmap_cache[file_path]
+        pixmap = QPixmap(file_path)
+        if not pixmap.isNull():
+            self._pixmap_cache[file_path] = pixmap
+            self._pixmap_cache_order.append(file_path)
+            while len(self._pixmap_cache_order) > cache_limit:
+                old = self._pixmap_cache_order.pop(0)
+                self._pixmap_cache.pop(old, None)
+        return pixmap
+
     def upload_background(self):
         """上传背景图片"""
         files, _ = QFileDialog.getOpenFileNames(
@@ -267,7 +284,7 @@ class ImageLoaderMixin:
         """加载指定索引的图片"""
         if 0 <= index < len(self.background_images):
             file_path = self.background_images[index]
-            pixmap = QPixmap(file_path)
+            pixmap = self._get_cached_pixmap(file_path)
             if not pixmap.isNull():
                 self.current_background = pixmap
                 self._load_detection_boxes_for_index(index, file_path)
@@ -304,7 +321,7 @@ class ImageLoaderMixin:
 
             if 0 <= index < len(self.background_images):
                 file_path = self.background_images[index]
-                pixmap = QPixmap(file_path)
+                pixmap = self._get_cached_pixmap(file_path)
                 if not pixmap.isNull():
                     self.current_background = pixmap
                     self._load_detection_boxes_for_index(index, file_path)
@@ -316,28 +333,30 @@ class ImageLoaderMixin:
             self.canvas.reset_view()
             self.selected_item = None
             self.canvas.update()
-
-            total = len(self.background_images)
-            if total > 0:
-                current = index + 1
-                self.file_count_label.setText(f"[ {current} / {total} ]")
-                self.file_count_label.show()
-            else:
-                self.file_count_label.hide()
+            self.update_file_count()
         except Exception as e:
             import traceback
             error_msg = traceback.format_exc()
             self._log_error(f"select_background 错误: {e}\n{error_msg}")
 
     def update_file_count(self):
-        """更新文件计数显示"""
+        """更新文件计数显示和标题栏"""
+        import os as _os
         total = len(self.background_images)
-        if total > 0:
+        if total > 0 and self.current_background is not None:
             current = self.current_background_index + 1 if self.current_background_index >= 0 else 1
             self.file_count_label.setText(f"[ {current} / {total} ]")
             self.file_count_label.show()
+            if 0 <= self.current_background_index < total:
+                filename = _os.path.basename(self.background_images[self.current_background_index])
+                w = self.current_background.width()
+                h = self.current_background.height()
+                self.setWindowTitle(f"PasteLabel - {filename} [{w} x {h}] [{current} / {total}]")
+            else:
+                self.setWindowTitle(f"PasteLabel [{current} / {total}]")
         else:
             self.file_count_label.hide()
+            self.setWindowTitle("PasteLabel")
 
     def _log_error(self, message):
         """记录错误信息"""

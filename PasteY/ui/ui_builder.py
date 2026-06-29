@@ -42,18 +42,33 @@ SVG_FOLDER = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path 
 
 class DragOutListWidget(QListWidget):
     """支持拖出文件的列表控件"""
+    _drag_start_pos = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_start_pos = event.pos()
+        super().mousePressEvent(event)
+
     def mouseMoveEvent(self, event):
-        item = self.itemAt(event.pos())
-        if item and event.buttons() & Qt.LeftButton:
-            file_path = item.data(Qt.UserRole + 1)
-            if file_path and os.path.isfile(file_path):
-                drag = QDrag(self)
-                mime = QMimeData()
-                mime.setUrls([QUrl.fromLocalFile(file_path)])
-                drag.setMimeData(mime)
-                drag.exec_(Qt.CopyAction)
-                return
+        if self._drag_start_pos and event.buttons() & Qt.LeftButton:
+            delta = event.pos() - self._drag_start_pos
+            if abs(delta.x()) > 20 or abs(delta.y()) > 20:
+                item = self.itemAt(self._drag_start_pos)
+                if item:
+                    file_path = item.data(Qt.UserRole + 1)
+                    if file_path and os.path.isfile(file_path):
+                        drag = QDrag(self)
+                        mime = QMimeData()
+                        mime.setUrls([QUrl.fromLocalFile(file_path)])
+                        drag.setMimeData(mime)
+                        drag.exec_(Qt.CopyAction)
+                        self._drag_start_pos = None
+                        return
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_start_pos = None
+        super().mouseReleaseEvent(event)
 
 
 class UIBuilderMixin:
@@ -327,10 +342,26 @@ class UIBuilderMixin:
         group_layout.setContentsMargins(6, 14, 6, 6)
 
         header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
         self.file_count_label = QLabel()
         self.file_count_label.setObjectName("fileCountLabel")
         self.file_count_label.hide()
         header_layout.addWidget(self.file_count_label)
+
+        self.prev_img_btn = QPushButton("◀")
+        self.prev_img_btn.setObjectName("navBtn")
+        self.prev_img_btn.setFixedSize(24, 20)
+        self.prev_img_btn.setToolTip(tr("上一张"))
+        self.prev_img_btn.clicked.connect(lambda: self.switch_background(-1))
+        header_layout.addWidget(self.prev_img_btn)
+
+        self.next_img_btn = QPushButton("▶")
+        self.next_img_btn.setObjectName("navBtn")
+        self.next_img_btn.setFixedSize(24, 20)
+        self.next_img_btn.setToolTip(tr("下一张"))
+        self.next_img_btn.clicked.connect(lambda: self.switch_background(1))
+        header_layout.addWidget(self.next_img_btn)
+
         header_layout.addStretch()
         group_layout.addLayout(header_layout)
 

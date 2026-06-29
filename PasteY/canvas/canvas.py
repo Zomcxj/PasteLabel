@@ -110,7 +110,7 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         return None
 
     def update_status_label(self):
-        """更新状态栏显示 - 追加鼠标坐标到已有信息"""
+        """更新状态栏显示"""
         if not self._editor.current_background or not self.mouse_inside:
             return
 
@@ -123,27 +123,30 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         orig_x = rel_x / self.background_scale
         orig_y = rel_y / self.background_scale
 
-        coord_text = f"X: {int(orig_x)}, Y: {int(orig_y)}"
-
-        if self.selected_item_size:
-            w, h = self.selected_item_size
-            coord_text += f" | W: {int(w)}, H: {int(h)}"
-        elif (self.selected_box is not None and
-              0 <= self.selected_box < len(self._editor.detection_boxes)):
-            box = self._editor.detection_boxes[self.selected_box]
-            coord_text += f" | W: {int(box['width'])}, H: {int(box['height'])}"
-        elif self.is_drawing_box and self.temp_draw_box:
-            w = self.temp_draw_box.width() / self.background_scale
-            h = self.temp_draw_box.height() / self.background_scale
-            coord_text += f" | W: {int(w)}, H: {int(h)}"
+        parts = []
 
         info = self._editor.get_image_info()
         if info:
+            parts.append(f"Paste:{info['paste_count']} Box:{info['box_count']}")
+
+        parts.append(f"X:{int(orig_x)} Y:{int(orig_y)}")
+
+        if self.selected_item_size:
+            w, h = self.selected_item_size
+            parts.append(f"W:{int(w)} H:{int(h)}")
+        elif (self.selected_box is not None and
+              0 <= self.selected_box < len(self._editor.detection_boxes)):
+            box = self._editor.detection_boxes[self.selected_box]
+            parts.append(f"W:{int(box['width'])} H:{int(box['height'])}")
+        elif self.is_drawing_box and self.temp_draw_box:
+            w = self.temp_draw_box.width() / self.background_scale
+            h = self.temp_draw_box.height() / self.background_scale
+            parts.append(f"W:{int(w)} H:{int(h)}")
+
+        if info:
             stats = self._editor.get_label_stats()
-            stats_text = " | ".join([f"{k}:{v}" for k, v in list(stats.items())[:3]])
-            base = f"{info['width']}x{info['height']} | Paste: {info['paste_count']} Box: {info['box_count']}"
-            if stats_text:
-                base += f" | {stats_text}"
-            self._editor.status_label.setText(f"{base}  {coord_text}")
-        else:
-            self._editor.status_label.setText(coord_text)
+            stats_parts = [f"{k}:{v}" for k, v in list(stats.items())[:3]]
+            if stats_parts:
+                parts.append(" ".join(stats_parts))
+
+        self._editor.status_label.setText(" | ".join(parts))

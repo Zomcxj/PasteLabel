@@ -357,6 +357,22 @@ class ThemeManager:
             QPushButton#iconBtn:pressed {{
                 background-color: {t['accent']};
             }}
+            QPushButton#navBtn {{
+                background-color: transparent;
+                border: 1px solid {t['border_color']};
+                border-radius: 4px;
+                font-size: 10px;
+                color: {t['text_secondary']};
+            }}
+            QPushButton#navBtn:hover {{
+                background-color: {t['accent_light']};
+                border-color: {t['accent']};
+                color: {t['accent']};
+            }}
+            QPushButton#navBtn:pressed {{
+                background-color: {t['accent']};
+                color: {t['widget_bg']};
+            }}
             QPushButton#bgBtn {{
                 background-color: transparent;
                 border: 1px solid transparent;

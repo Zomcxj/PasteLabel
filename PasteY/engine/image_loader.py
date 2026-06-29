@@ -37,6 +37,7 @@ class ImageLoaderMixin:
                     display_path = PathUtils.to_display_path(file)
                     item = QListWidgetItem(display_path)
                     item.setData(Qt.UserRole, new_index)
+                    item.setData(Qt.UserRole + 1, file)
                     self.background_list.addItem(item)
 
                     self.canvas_items_dict[new_index] = []
@@ -74,6 +75,7 @@ class ImageLoaderMixin:
                 display_path = PathUtils.to_display_path(file_path)
                 item = QListWidgetItem(display_path)
                 item.setData(Qt.UserRole, new_index)
+                item.setData(Qt.UserRole + 1, file_path)
                 self.background_list.addItem(item)
 
                 self.canvas_items_dict[new_index] = []

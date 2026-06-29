@@ -7,8 +7,8 @@ from PyQt5.QtWidgets import (
     QListWidget, QListWidgetItem, QSplitter, QScrollArea,
     QLineEdit, QCheckBox, QSpinBox, QGroupBox, QFrame
 )
-from PyQt5.QtGui import QIcon, QPixmap, QPainter
-from PyQt5.QtCore import Qt, QSize, QTimer, QPoint
+from PyQt5.QtGui import QIcon, QPixmap, QPainter, QDrag
+from PyQt5.QtCore import Qt, QSize, QTimer, QPoint, QMimeData, QUrl
 
 from ..core.config import WINDOW_CONFIG, PASTE_PARAMS, THUMBNAIL_CONFIG, DEFAULT_PREFIX
 from ..core.utils import create_thumbnail
@@ -38,6 +38,22 @@ def _load_svg_icon(svg_data, size=16, color="#999"):
 
 SVG_FILE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/></svg>'
 SVG_FOLDER = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/></svg>'
+
+
+class DragOutListWidget(QListWidget):
+    """支持拖出文件的列表控件"""
+    def mouseMoveEvent(self, event):
+        item = self.itemAt(event.pos())
+        if item and event.buttons() & Qt.LeftButton:
+            file_path = item.data(Qt.UserRole + 1)
+            if file_path and os.path.isfile(file_path):
+                drag = QDrag(self)
+                mime = QMimeData()
+                mime.setUrls([QUrl.fromLocalFile(file_path)])
+                drag.setMimeData(mime)
+                drag.exec_(Qt.CopyAction)
+                return
+        super().mouseMoveEvent(event)
 
 
 class UIBuilderMixin:
@@ -318,7 +334,7 @@ class UIBuilderMixin:
         header_layout.addStretch()
         group_layout.addLayout(header_layout)
 
-        self.background_list = QListWidget()
+        self.background_list = DragOutListWidget()
         self.background_list.setObjectName("bgList")
         self.background_list.itemClicked.connect(self.select_background)
         self.background_list.setMinimumHeight(80)

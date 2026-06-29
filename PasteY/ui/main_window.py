@@ -4,7 +4,8 @@
 import os
 import sys
 from PyQt5.QtWidgets import QMainWindow, QApplication
-from PyQt5.QtCore import QPoint
+from PyQt5.QtCore import QPoint, Qt, QUrl
+from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDrag
 
 from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG
 from ..core.utils import create_app_icon
@@ -40,6 +41,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.update_label_list()
         self.installEventFilterRecursive(self)
         self.setup_shortcuts()
+        self.setAcceptDrops(True)
+        self.background_list.setDragEnabled(True)
 
     def _load_settings(self):
         """从配置文件加载主题和语言设置"""
@@ -365,6 +368,121 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
 
 # 程序入口
+    # ========== 拖拽：拖入图片文件上传 ==========
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """接受图片和JSON文件拖入"""
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                ext = os.path.splitext(url.toLocalFile())[1].lower()
+                if ext in ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.json'):
+                    event.acceptProposedAction()
+                    return
+
+    def dropEvent(self, event: QDropEvent):
+        """处理拖入的图片和JSON文件"""
+        from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
+        images = []
+        jsons = []
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            ext = os.path.splitext(path)[1].lower()
+            if ext in SUPPORTED_IMAGE_EXTENSIONS:
+                images.append(path)
+            elif ext == '.json':
+                jsons.append(path)
+        if images:
+            self._append_background_images(images)
+        if jsons:
+            self._apply_dropped_json(jsons)
+
+    def _append_background_images(self, files):
+        """追加背景图片（不替换已有）"""
+        from PyQt5.QtGui import QPixmap
+        from ..core.utils import PathUtils
+        for file in files:
+            pixmap = QPixmap(file)
+            if not pixmap.isNull():
+                new_index = len(self.background_images)
+                self.background_images.append(file)
+                display_path = PathUtils.to_display_path(file)
+                from PyQt5.QtWidgets import QListWidgetItem
+                item = QListWidgetItem(display_path)
+                item.setData(Qt.UserRole + 1, file)
+                self.background_list.addItem(item)
+                self.canvas_items_dict[new_index] = []
+                self.detection_boxes_dict[new_index] = self.load_detection_boxes(file)
+
+                if self.current_background is None:
+                    self.current_background = pixmap
+                    self.current_background_index = new_index
+                    self.canvas_items = []
+                    self.detection_boxes = self.detection_boxes_dict[new_index].copy()
+                    self.update_label_list()
+                    self.canvas.background_scale = 1.0
+                    self.canvas.is_manual_scale = False
+                    self.canvas.update()
+
+        self.update_file_count()
+        if self.background_images:
+            self.background_list.setCurrentRow(len(self.background_images) - 1)
+
+    def _apply_dropped_json(self, json_files):
+        """将拖入的JSON标签文件按文件名匹配应用到对应背景图"""
+        import json as _json
+        if not json_files:
+            return
+        for jf in json_files:
+            if not os.path.isfile(jf):
+                continue
+            try:
+                with open(jf, 'r', encoding='utf-8') as f:
+                    data = _json.load(f)
+                if not isinstance(data, dict) or 'shapes' not in data:
+                    continue
+                boxes = []
+                for shape in data['shapes']:
+                    if not isinstance(shape, dict):
+                        continue
+                    if not all(k in shape for k in ('label', 'points')):
+                        continue
+                    points = shape['points']
+                    if len(points) < 2:
+                        continue
+                    xs = [p[0] for p in points]
+                    ys = [p[1] for p in points]
+                    boxes.append({
+                        'x': min(xs), 'y': min(ys),
+                        'width': max(xs) - min(xs),
+                        'height': max(ys) - min(ys),
+                        'label': shape['label'],
+                    })
+                if not boxes:
+                    continue
+                json_stem = os.path.splitext(os.path.basename(jf))[0]
+                target_index = -1
+                for idx, img_path in enumerate(self.background_images):
+                    img_stem = os.path.splitext(os.path.basename(img_path))[0]
+                    if img_stem == json_stem:
+                        target_index = idx
+                        break
+                if target_index < 0:
+                    target_index = self.current_background_index
+                if target_index < 0:
+                    continue
+                existing = self.detection_boxes_dict.get(target_index, [])
+                existing.extend(boxes)
+                self.detection_boxes_dict[target_index] = existing
+                if target_index == self.current_background_index:
+                    self.detection_boxes = self.detection_boxes_dict[target_index].copy()
+            except Exception as e:
+                from ..core.exception_hook import _write_log
+                _write_log(f"拖入JSON加载失败: {jf}, {e}")
+
+        self.update_label_list()
+        self.canvas.update()
+
+
 def main():
     """程序入口函数"""
     import sys

@@ -6,15 +6,29 @@ import sys
 import types
 
 
-class _MockModule(types.ModuleType):
-    """支持 from X import Y 的 mock 模块"""
-    def __getattr__(self, name):
-        if name.startswith('_'):
-            raise AttributeError(name)
-        # 返回一个可继承的 mock 类
-        return type(f'Mock{name}', (), {
+def _make_mock_module(name):
+    """创建一个支持 from X import Y 的 mock 模块"""
+    mod = types.ModuleType(name)
+    mod.__path__ = []  # 标记为包
+    mod.__file__ = f"<mock {name}>"
+    # 预注册常用 Qt 名称，确保 from X import Y 可用
+    for attr in [
+        'QPoint', 'Qt', 'QUrl', 'QSize', 'QTimer', 'QRectF', 'QRect',
+        'pyqtSignal', 'QObject', 'QPixmap', 'QPainter', 'QColor', 'QIcon',
+        'QFont', 'QFontDatabase', 'QEvent', 'QKeySequence', 'QImage',
+        'QStandardItem', 'QStandardItemModel', 'QSortFilterProxyModel',
+        'QValidator', 'QRegExp', 'QDesktopWidget', 'QApplication',
+        'QMainWindow', 'QDialog', 'QWidget', 'QVBoxLayout', 'QHBoxLayout',
+        'QLabel', 'QPushButton', 'QListWidget', 'QListWidgetItem',
+        'QLineEdit', 'QCheckBox', 'QSpinBox', 'QGroupBox', 'QFrame',
+        'QSplitter', 'QScrollArea', 'QFileDialog', 'QMessageBox',
+        'QInputDialog', 'QMenu', 'QAction', 'QShortcut', 'QKeySequence',
+        'QProgressDialog', 'QSvgRenderer', 'QCursor',
+    ]:
+        setattr(mod, attr, type(f'Mock{attr}', (), {
             '__init__': lambda self, *a, **kw: None,
-        })
+        }))
+    return mod
 
 
 class _MockQWidget:
@@ -265,6 +279,13 @@ qtcore.QSize = type('QSize', (), {'__init__': lambda self, w=0, h=0: None})
 qtcore.QSizeF = type('QSizeF', (), {'__init__': lambda self, w=0, h=0: None})
 qtcore.QTimer = type('QTimer', (), {'singleShot': staticmethod(lambda *a: None)})
 qtcore.QEvent = type('QEvent', (), {'KeyPress': 6})
+qtcore.QUrl = type('QUrl', (), {'fromLocalFile': staticmethod(lambda f: f)})
+qtcore.QMimeData = type('QMimeData', (), {
+    '__init__': lambda self, *a, **kw: None,
+    'hasUrls': lambda self: False,
+    'setUrls': lambda self, *a: None,
+})
+qtcore.qInstallMessageHandler = lambda *a: None
 qtcore.pyqtSignal = lambda *a, **kw: type('Signal', (), {'connect': lambda self, f: None})()
 
 class _MockQObject:
@@ -311,6 +332,10 @@ qtgui.QFontMetrics = type('QFontMetrics', (), {
 qtgui.QKeySequence = type('QKeySequence', (), {
     '__init__': lambda self, *a: None,
 })
+qtgui.QDragEnterEvent = type('QDragEnterEvent', (), {'__init__': lambda self, *a: None})
+qtgui.QDropEvent = type('QDropEvent', (), {'__init__': lambda self, *a: None})
+qtgui.QDrag = type('QDrag', (), {'__init__': lambda self, *a: None, 'exec_': lambda self, *a: 0})
+qtgui.QFontDatabase = type('QFontDatabase', (), {'addApplicationFont': staticmethod(lambda *a: 0)})
 
 qtwidgets = types.ModuleType('PyQt5.QtWidgets')
 qtwidgets.QWidget = _MockQWidget

@@ -3,7 +3,7 @@
 """
 import os
 import json
-from .config import SHORTCUT_CONFIG
+from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG
 
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), '.pastelabel.json')
@@ -81,10 +81,14 @@ def load_all():
         'shortcuts': config.get('shortcuts', SHORTCUT_CONFIG),
         'theme': config.get('theme', 'light'),
         'language': config.get('language', 'zh'),
+        'max_labels': config.get('max_labels', STATUSBAR_CONFIG['max_labels']),
+        'grid_line_width': config.get('grid_line_width', None),
+        'grid_alpha': config.get('grid_alpha', None),
     }
 
 
-def save_all(shortcuts=None, theme=None, language=None):
+def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
+             grid_line_width=None, grid_alpha=None):
     """保存所有配置"""
     config = load_config()
     if shortcuts is not None:
@@ -93,4 +97,10 @@ def save_all(shortcuts=None, theme=None, language=None):
         config['theme'] = theme
     if language is not None:
         config['language'] = language
+    if max_labels is not None:
+        config['max_labels'] = max_labels
+    if grid_line_width is not None:
+        config['grid_line_width'] = grid_line_width
+    if grid_alpha is not None:
+        config['grid_alpha'] = grid_alpha
     return save_config(config)

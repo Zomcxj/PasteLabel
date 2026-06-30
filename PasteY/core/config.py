@@ -90,7 +90,10 @@ THEME_CONFIG = {
     'default_mode': 'light',  # 默认主题: 'light' 或 'dark'
 }
 
-# 网格配置
+# 状态栏配置
+STATUSBAR_CONFIG = {
+    'max_labels': 3,  # 状态栏最多显示的类别数
+}
 GRID_CONFIG = {
     'enabled': False,           # 默认关闭
     'spacing': 50,              # 网格间距（像素）

@@ -58,6 +58,13 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         i18n.set_lang(language)
 
         self.shortcut_config = settings.get('shortcuts', {})
+        self._max_labels = settings.get('max_labels', 3)
+
+        from ..core.config import GRID_CONFIG
+        if settings.get('grid_line_width') is not None:
+            GRID_CONFIG['line_width'] = settings['grid_line_width']
+        if settings.get('grid_alpha') is not None:
+            GRID_CONFIG['alpha'] = settings['grid_alpha']
 
     def _init_data(self):
         """初始化数据结构"""

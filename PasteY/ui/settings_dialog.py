@@ -161,6 +161,18 @@ class SettingsDialog(QDialog):
         grid_alpha_row.addStretch()
         opt_layout.addLayout(grid_alpha_row)
 
+        from ..core.config import STATUSBAR_CONFIG
+        max_labels_row = QHBoxLayout()
+        max_labels_label = QLabel(tr("状态栏类别数") + ":")
+        max_labels_row.addWidget(max_labels_label, 2)
+        self.max_labels_spin = QSpinBox()
+        self.max_labels_spin.setRange(1, 20)
+        self.max_labels_spin.setValue(getattr(self._editor, '_max_labels', STATUSBAR_CONFIG.get('max_labels', 3)))
+        self.max_labels_spin.setMinimumWidth(150)
+        max_labels_row.addWidget(self.max_labels_spin)
+        max_labels_row.addStretch()
+        opt_layout.addLayout(max_labels_row)
+
         layout.addWidget(opt_group)
 
         layout.addStretch()
@@ -263,7 +275,16 @@ class SettingsDialog(QDialog):
         GRID_CONFIG['line_width'] = self.grid_width_spin.value()
         GRID_CONFIG['alpha'] = self.grid_alpha_spin.value()
 
-        config_manager.save_shortcuts(shortcuts)
+        from ..core import config_manager as cm
+        max_labels = self.max_labels_spin.value()
+        cm.save_all(
+            shortcuts=shortcuts,
+            max_labels=max_labels,
+            grid_line_width=GRID_CONFIG['line_width'],
+            grid_alpha=GRID_CONFIG['alpha'],
+        )
+        if self._editor:
+            self._editor._max_labels = max_labels
         self.accept()
 
 

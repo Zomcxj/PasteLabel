@@ -111,42 +111,51 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
 
     def update_status_label(self):
         """更新状态栏显示"""
-        if not self._editor.current_background or not self.mouse_inside:
+        if not self._editor.current_background:
             return
-
-        background_rect = self.get_background_rect()
-        if background_rect is None:
-            return
-
-        rel_x = self.mouse_pos.x() - background_rect.left()
-        rel_y = self.mouse_pos.y() - background_rect.top()
-        orig_x = rel_x / self.background_scale
-        orig_y = rel_y / self.background_scale
-
-        parts = []
 
         info = self._editor.get_image_info()
+        stats = self._editor.get_label_stats()
+        stats_parts = [f"{k}:{v}" for k, v in list(stats.items())[
+            :self._editor._max_labels if hasattr(self._editor, '_max_labels') else 3
+        ]]
+
+        if self.mouse_inside:
+            background_rect = self.get_background_rect()
+            if background_rect:
+                rel_x = self.mouse_pos.x() - background_rect.left()
+                rel_y = self.mouse_pos.y() - background_rect.top()
+                orig_x = rel_x / self.background_scale
+                orig_y = rel_y / self.background_scale
+
+                parts = []
+                if info:
+                    parts.append(f"Paste:{info['paste_count']} Box:{info['box_count']}")
+                parts.append(f"X:{int(orig_x)} Y:{int(orig_y)}")
+
+                if self.selected_item_size:
+                    w, h = self.selected_item_size
+                    parts.append(f"W:{int(w)} H:{int(h)}")
+                elif (self.selected_box is not None and
+                      0 <= self.selected_box < len(self._editor.detection_boxes)):
+                    box = self._editor.detection_boxes[self.selected_box]
+                    parts.append(f"W:{int(box['width'])} H:{int(box['height'])}")
+                elif self.is_drawing_box and self.temp_draw_box:
+                    w = self.temp_draw_box.width() / self.background_scale
+                    h = self.temp_draw_box.height() / self.background_scale
+                    parts.append(f"W:{int(w)} H:{int(h)}")
+
+                if stats_parts:
+                    parts.append(" ".join(stats_parts))
+
+                self._editor.status_label.setText(" | ".join(parts))
+                return
+
+        # 鼠标不在canvas上：只显示 Paste/Box + 类别
+        parts = []
         if info:
             parts.append(f"Paste:{info['paste_count']} Box:{info['box_count']}")
-
-        parts.append(f"X:{int(orig_x)} Y:{int(orig_y)}")
-
-        if self.selected_item_size:
-            w, h = self.selected_item_size
-            parts.append(f"W:{int(w)} H:{int(h)}")
-        elif (self.selected_box is not None and
-              0 <= self.selected_box < len(self._editor.detection_boxes)):
-            box = self._editor.detection_boxes[self.selected_box]
-            parts.append(f"W:{int(box['width'])} H:{int(box['height'])}")
-        elif self.is_drawing_box and self.temp_draw_box:
-            w = self.temp_draw_box.width() / self.background_scale
-            h = self.temp_draw_box.height() / self.background_scale
-            parts.append(f"W:{int(w)} H:{int(h)}")
-
-        if info:
-            stats = self._editor.get_label_stats()
-            stats_parts = [f"{k}:{v}" for k, v in list(stats.items())[:3]]
-            if stats_parts:
-                parts.append(" ".join(stats_parts))
-
-        self._editor.status_label.setText(" | ".join(parts))
+        if stats_parts:
+            parts.append(" ".join(stats_parts))
+        if parts:
+            self._editor.status_label.setText(" | ".join(parts))

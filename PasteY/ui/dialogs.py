@@ -6,10 +6,11 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
     QLineEdit, QPushButton
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 
 from ..core.utils import extract_label_name
 from .theme import ThemeManager
+from .dwm import set_titlebar_dark
 
 
 class LabelSelectionDialog(QDialog):
@@ -56,6 +57,17 @@ class LabelSelectionDialog(QDialog):
 
         self.new_label_input.returnPressed.connect(self.accept)
         self.label_list.itemDoubleClicked.connect(self.accept)
+
+        if self.label_list.count() > 0:
+            self.label_list.setCurrentRow(0)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(30, self._sync_titlebar)
+
+    def _sync_titlebar(self):
+        is_dark = ThemeManager.get_mode().value == "dark"
+        set_titlebar_dark(int(self.winId()), is_dark)
     
     @staticmethod
     def _extract_pure_label(label_text):
@@ -64,12 +76,13 @@ class LabelSelectionDialog(QDialog):
     
     def get_selected_label(self):
         """获取选中的标签"""
-        # 优先返回列表中选中的标签
+        input_text = self.new_label_input.text().strip()
+        if input_text:
+            return input_text
         selected_items = self.label_list.selectedItems()
         if selected_items:
             return selected_items[0].text()
-        # 如果没有选中，返回输入框中的文本
-        return self.new_label_input.text().strip()
+        return ""
     
     @staticmethod
     def select_label(parent, labels):

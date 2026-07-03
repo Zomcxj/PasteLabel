@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QIcon, QPixmap, QPainter, QDrag
 from PyQt5.QtCore import Qt, QSize, QTimer, QPoint, QMimeData, QUrl
+from .segmented_control import AnimatedSegmentedControl
 
 from ..core.config import WINDOW_CONFIG, PASTE_PARAMS, THUMBNAIL_CONFIG, DEFAULT_PREFIX
 from ..core.utils import create_thumbnail
@@ -165,6 +166,7 @@ class UIBuilderMixin:
         self.theme_btn.setObjectName("themeBtn")
         self.theme_btn.setFixedSize(28, 28)
         self.theme_btn.setToolTip("切换深色/浅色主题")
+        self.theme_btn.setStyleSheet("font-size: 14px;")
         self.theme_btn.clicked.connect(self.toggle_theme)
         upload_layout.addWidget(self.theme_btn)
 
@@ -244,6 +246,8 @@ class UIBuilderMixin:
         self.options_btn = QPushButton(tr("选项"))
         self.options_btn.setObjectName("optionsBtn")
         self.options_btn.setMinimumWidth(60)
+        self.options_btn.setFixedHeight(24)
+        self.options_btn.setFixedWidth(70)
         self.options_btn.setToolTip(tr("选项设置"))
 
         self.options_menu = QMenu()
@@ -278,6 +282,61 @@ class UIBuilderMixin:
 
         self.options_btn.setMenu(self.options_menu)
         layout.addWidget(self.options_btn)
+
+        layout.addSpacing(4)
+
+        self.view_stats_btn = QPushButton(tr("查看"))
+        self.view_stats_btn.setObjectName("optionsBtn")
+        self.view_stats_btn.setMinimumWidth(60)
+        self.view_stats_btn.setFixedHeight(24)
+        self.view_stats_btn.setFixedWidth(70)
+        self.view_stats_btn.setToolTip(tr("标签统计"))
+        self.view_stats_btn.clicked.connect(self._show_label_stats)
+        layout.addWidget(self.view_stats_btn)
+
+        layout.addSpacing(4)
+
+        from .theme import ThemeManager
+        t = ThemeManager.get_theme()
+        self.mode_seg = QFrame()
+        self.mode_seg.setFixedWidth(140)
+        self.mode_seg.setFixedHeight(24)
+        self.mode_seg.setContentsMargins(0, 0, 0, 0)
+        self.mode_seg.setStyleSheet(f"""
+            QFrame {{
+                background-color: {t['accent_light']};
+                border: 1px solid {t['accent']};
+                border-radius: 5px;
+            }}
+        """)
+        mode_layout = QHBoxLayout(self.mode_seg)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        mode_layout.setSpacing(0)
+
+        self.btn_paste_mode = QPushButton(tr("贴图"))
+        self.btn_paste_mode.setCheckable(True)
+        self.btn_paste_mode.setChecked(True)
+        self.btn_paste_mode.setFixedWidth(70)
+        self.btn_paste_mode.setFixedHeight(22)
+        self.btn_paste_mode.clicked.connect(lambda: self._toggle_edit_mode())
+        mode_layout.addWidget(self.btn_paste_mode)
+
+        self.btn_annotate_mode = QPushButton(tr("标注"))
+        self.btn_annotate_mode.setCheckable(True)
+        self.btn_annotate_mode.setFixedWidth(70)
+        self.btn_annotate_mode.setFixedHeight(22)
+        self.btn_annotate_mode.clicked.connect(lambda: self._toggle_edit_mode())
+        mode_layout.addWidget(self.btn_annotate_mode)
+
+        self.mode_seg_ctrl = AnimatedSegmentedControl(self.mode_seg, self.btn_paste_mode, self.btn_annotate_mode)
+        self.mode_seg_ctrl.set_accent(t['accent'])
+        self.btn_paste_mode.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: #FFFFFF; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }}")
+        self.btn_annotate_mode.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: {t['accent']}; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }}")
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, lambda: self.mode_seg_ctrl.update_position(animated=False))
+        layout.addWidget(self.mode_seg)
 
     def _validate_size_range(self):
         """验证尺寸范围，确保最小值不大于最大值"""
@@ -343,26 +402,48 @@ class UIBuilderMixin:
 
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
-        self.file_count_label = QLabel()
-        self.file_count_label.setObjectName("fileCountLabel")
-        self.file_count_label.hide()
-        header_layout.addWidget(self.file_count_label)
+        header_layout.setSpacing(4)
 
         self.prev_img_btn = QPushButton("◀")
         self.prev_img_btn.setObjectName("navBtn")
-        self.prev_img_btn.setFixedSize(24, 20)
-        self.prev_img_btn.setToolTip(tr("上一张"))
-        self.prev_img_btn.clicked.connect(lambda: self.switch_background(-1))
+        self.prev_img_btn.setFixedWidth(36)
+        self.prev_img_btn.setFixedHeight(22)
         header_layout.addWidget(self.prev_img_btn)
 
         self.next_img_btn = QPushButton("▶")
         self.next_img_btn.setObjectName("navBtn")
-        self.next_img_btn.setFixedSize(24, 20)
-        self.next_img_btn.setToolTip(tr("下一张"))
-        self.next_img_btn.clicked.connect(lambda: self.switch_background(1))
+        self.next_img_btn.setFixedWidth(36)
+        self.next_img_btn.setFixedHeight(22)
         header_layout.addWidget(self.next_img_btn)
 
-        header_layout.addStretch()
+        header_layout.addSpacing(4)
+
+        self.step_label = QLabel(tr("步长："))
+        self.step_label.setFixedHeight(22)
+        header_layout.addWidget(self.step_label)
+
+        self.step_spin = QSpinBox()
+        self.step_spin.setRange(1, 10)
+        self.step_spin.setValue(1)
+        self.step_spin.setFixedWidth(60)
+        self.step_spin.setFixedHeight(22)
+        self.step_spin.setAlignment(Qt.AlignCenter)
+        self.step_spin.setButtonSymbols(QSpinBox.PlusMinus)
+        header_layout.addWidget(self.step_spin)
+
+        header_layout.addSpacing(4)
+
+        self.view_toggle_btn = QPushButton(tr("工作路径"))
+        self.view_toggle_btn.setObjectName("warningBtn")
+        self.view_toggle_btn.setMinimumWidth(60)
+        self.view_toggle_btn.setFixedHeight(22)
+        self.view_toggle_btn.clicked.connect(self._toggle_view_path)
+        header_layout.addWidget(self.view_toggle_btn, 1)
+
+        self.prev_img_btn.clicked.connect(lambda: self.switch_background(-1))
+        self.next_img_btn.clicked.connect(lambda: self.switch_background(1))
+        self.step_spin.valueChanged.connect(lambda v: setattr(self, '_nav_step', v))
+
         group_layout.addLayout(header_layout)
 
         self.background_list = DragOutListWidget()
@@ -436,18 +517,21 @@ class UIBuilderMixin:
 
         self.random_paste_btn = QPushButton(tr("随机贴图"))
         self.random_paste_btn.setObjectName("accentBtn")
+        self.random_paste_btn.setFixedHeight(22)
         self.random_paste_btn.clicked.connect(self.random_paste_images)
         self.random_paste_btn.setToolTip(tr("随机贴图"))
         small_list_layout.addWidget(self.random_paste_btn, 1)
 
         self.batch_paste_btn = QPushButton(tr("一键贴图"))
         self.batch_paste_btn.setObjectName("accentBtn")
+        self.batch_paste_btn.setFixedHeight(22)
         self.batch_paste_btn.clicked.connect(self.batch_paste_images)
         self.batch_paste_btn.setToolTip(tr("一键贴图"))
         small_list_layout.addWidget(self.batch_paste_btn, 1)
 
         self.toggle_view_btn = QPushButton(tr("列表视图"))
         self.toggle_view_btn.setObjectName("warningBtn")
+        self.toggle_view_btn.setFixedHeight(22)
         self.toggle_view_btn.clicked.connect(self.toggle_view_mode)
         small_list_layout.addWidget(self.toggle_view_btn, 1)
 
@@ -532,16 +616,19 @@ class UIBuilderMixin:
 
         self.clear_btn = QPushButton(tr("清空画布"))
         self.clear_btn.setObjectName("dangerBtn")
+        self.clear_btn.setFixedHeight(22)
         self.clear_btn.clicked.connect(self.clear_canvas)
         self.clear_btn.setToolTip(tr("清空画布"))
 
         self.save_btn = QPushButton(tr("保存图片"))
         self.save_btn.setObjectName("successBtn")
+        self.save_btn.setFixedHeight(22)
         self.save_btn.clicked.connect(self.save_canvas)
         self.save_btn.setToolTip(tr("保存图片"))
 
         self.save_all_btn = QPushButton(tr("全部保存"))
         self.save_all_btn.setObjectName("successBtn")
+        self.save_all_btn.setFixedHeight(22)
         self.save_all_btn.clicked.connect(self.save_all_canvas)
         self.save_all_btn.setToolTip(tr("全部保存"))
 

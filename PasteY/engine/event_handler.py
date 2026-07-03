@@ -68,6 +68,7 @@ class EventHandlerMixin:
 
     def setup_shortcuts(self):
         """用 QShortcut 注册所有快捷键（全局生效，不受焦点影响）"""
+        step = getattr(self, '_nav_step', 1)
         action_handlers = {
             'prev_image': lambda: self.switch_background(-1),
             'next_image': lambda: self.switch_background(1),
@@ -81,6 +82,8 @@ class EventHandlerMixin:
             'delete_selected': self._delete_selected_box,
             'undo': self.undo,
             'redo': self.redo,
+            'remove_image': lambda: self.canvas._remove_current_background(),
+            'restore_image': lambda: self.canvas._restore_current_background(),
             'fit_view': lambda: (self.canvas.reset_view(), self.canvas.update()),
         }
         self._shortcuts = []
@@ -172,11 +175,27 @@ class EventHandlerMixin:
 
     def switch_background(self, direction):
         """切换背景图"""
-        if not self.background_images:
-            return
-
-        new_index = self.current_background_index + direction
-        self.switch_background_to_index(new_index)
+        if self._is_delete_view:
+            if not hasattr(self, '_delete_files') or not self._delete_files:
+                return
+            step = getattr(self, '_nav_step', 1)
+            idx = self._delete_current_idx if hasattr(self, '_delete_current_idx') else 0
+            new_idx = max(0, min(idx + direction * step, len(self._delete_files) - 1))
+            if new_idx != idx:
+                self._delete_current_idx = new_idx
+                self._load_delete_image(new_idx)
+                self.background_list.setCurrentRow(new_idx)
+                if self.current_background:
+                    filename = os.path.basename(self._delete_files[new_idx])
+                    w = self.current_background.width()
+                    h = self.current_background.height()
+                    total = len(self._delete_files)
+                    self.setWindowTitle(f"PasteLabel - {filename} [{w} x {h}] [{new_idx + 1} / {total}]")
+        else:
+            if not self.background_images:
+                return
+            new_index = self.current_background_index + direction
+            self.switch_background_to_index(new_index)
 
     def switch_background_to_index(self, new_index):
         """切换到指定索引的背景图"""

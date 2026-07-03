@@ -148,7 +148,8 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
                 if stats_parts:
                     parts.append(" ".join(stats_parts))
 
-                self._editor.status_label.setText(" | ".join(parts))
+                prefix = "[移除路径] " if self._editor._is_delete_view else ""
+                self._editor.status_label.setText(prefix + " | ".join(parts))
                 return
 
         # 鼠标不在canvas上：只显示 Paste/Box + 类别
@@ -158,4 +159,5 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         if stats_parts:
             parts.append(" ".join(stats_parts))
         if parts:
-            self._editor.status_label.setText(" | ".join(parts))
+            prefix = "[移除路径] " if self._editor._is_delete_view else ""
+            self._editor.status_label.setText(prefix + " | ".join(parts))

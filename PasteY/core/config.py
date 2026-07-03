@@ -131,6 +131,8 @@ SHORTCUT_CONFIG = {
     'fit_view': 'Ctrl+F',
     'zoom_in': 'Ctrl++',
     'zoom_out': 'Ctrl+-',
+    'remove_image': 'Ctrl+Shift+D',
+    'restore_image': 'Ctrl+Shift+R',
 }
 
 # 撤销/重做配置

@@ -15,16 +15,17 @@ def _load_module(name, path):
     spec.loader.exec_module(mod)
     return mod
 
-_base = os.path.join(os.path.dirname(__file__), '..', 'core')
+_base = os.path.join(os.path.dirname(__file__), '..', 'PasteY', 'core')
 config = _load_module('config', os.path.join(_base, 'config.py'))
 config_manager = _load_module('config_manager', os.path.join(_base, 'config_manager.py'))
 
 
 class TestLoadAll:
 
-    def test_returns_dict_with_three_keys(self):
+    def test_returns_dict_with_expected_keys(self):
         result = config_manager.load_all()
-        assert set(result.keys()) == {'shortcuts', 'theme', 'language'}
+        assert {'shortcuts', 'theme', 'language', 'max_labels',
+                'grid_line_width', 'grid_alpha'}.issubset(result.keys())
 
     def test_shortcuts_has_all_keys(self):
         sc = config_manager.load_all()['shortcuts']

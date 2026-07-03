@@ -102,6 +102,7 @@ class ImageLoaderMixin:
             self.current_background_index = 0
             self.background_list.setCurrentRow(0)
             self.load_image_by_index(0)
+            self._aggregate_all_labels()
             self.update_label_list()
             self.update_file_count()
         else:
@@ -302,6 +303,20 @@ class ImageLoaderMixin:
         try:
             if item is None:
                 return
+
+            if self._is_delete_view:
+                idx = self.background_list.row(item)
+                if 0 <= idx < len(self._delete_files):
+                    self._delete_current_idx = idx
+                    self._load_delete_image(idx)
+                    filename = os.path.basename(self._delete_files[idx])
+                    total = len(self._delete_files)
+                    if self.current_background:
+                        w = self.current_background.width()
+                        h = self.current_background.height()
+                        self.setWindowTitle(f"PasteLabel - {filename} [{w} x {h}] [{idx + 1} / {total}]")
+                return
+
             index = item.data(Qt.UserRole)
             if index is None:
                 return
@@ -339,23 +354,30 @@ class ImageLoaderMixin:
             error_msg = traceback.format_exc()
             self._log_error(f"select_background 错误: {e}\n{error_msg}")
 
+    def _aggregate_all_labels(self):
+        """汇总所有背景图的JSON标签到全局标签"""
+        self.global_labels.clear()
+        for idx, file_path in enumerate(self.background_images):
+            boxes = self.load_detection_boxes(file_path)
+            self.detection_boxes_dict[idx] = boxes
+            for box in boxes:
+                if "label" in box and box["label"]:
+                    self.global_labels.add(box["label"])
+
     def update_file_count(self):
         """更新文件计数显示和标题栏"""
         import os as _os
         total = len(self.background_images)
         if total > 0 and self.current_background is not None:
             current = self.current_background_index + 1 if self.current_background_index >= 0 else 1
-            self.file_count_label.setText(f"[ {current} / {total} ]")
-            self.file_count_label.show()
             if 0 <= self.current_background_index < total:
                 filename = _os.path.basename(self.background_images[self.current_background_index])
                 w = self.current_background.width()
                 h = self.current_background.height()
                 self.setWindowTitle(f"PasteLabel - {filename} [{w} x {h}] [{current} / {total}]")
             else:
-                self.setWindowTitle(f"PasteLabel [{current} / {total}]")
+                self.setWindowTitle(f"PasteLabel")
         else:
-            self.file_count_label.hide()
             self.setWindowTitle("PasteLabel")
 
     def _log_error(self, message):

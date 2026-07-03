@@ -42,6 +42,7 @@ LIGHT_THEME = {
     "groupbox_border": "#E0E0E0",
     "tooltip_bg": "#616161",
     "tooltip_text": "#FFFFFF",
+    "surface_secondary": "#F0F0F0",
 }
 
 DARK_THEME = {
@@ -77,6 +78,7 @@ DARK_THEME = {
     "groupbox_border": "#3E3E3E",
     "tooltip_bg": "#424242",
     "tooltip_text": "#E0E0E0",
+    "surface_secondary": "#383838",
 }
 
 
@@ -529,6 +531,19 @@ class ThemeManager:
                 color: {t['widget_bg']};
             }}
             QPushButton#warningBtn:pressed {{
+                background-color: {t['warning']};
+                color: {t['widget_bg']};
+            }}
+            QPushButton#viewToggleBtn {{
+                background-color: {t['warning_light']};
+                border: 1px solid {t['warning']};
+                border-radius: 10px;
+                padding: 3px 8px;
+                font-size: 12px;
+                font-weight: bold;
+                color: {t['warning']};
+            }}
+            QPushButton#viewToggleBtn:hover {{
                 background-color: {t['warning']};
                 color: {t['widget_bg']};
             }}

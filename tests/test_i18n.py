@@ -11,7 +11,7 @@ def _load_module(name, path):
     spec.loader.exec_module(mod)
     return mod
 
-_ui = os.path.join(os.path.dirname(__file__), '..', 'ui')
+_ui = os.path.join(os.path.dirname(__file__), '..', 'PasteY', 'ui')
 i18n = _load_module('i18n', os.path.join(_ui, 'i18n.py'))
 
 

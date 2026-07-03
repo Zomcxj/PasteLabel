@@ -56,22 +56,37 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             return
 
         self._drag_out_pending = (
-            not self.is_drawing_box and
-            not self.is_dragging_background and
-            not self.is_dragging_box and
-            not self.is_dragging_item
+            not self.is_drawing_box
+            and not self.is_dragging_background
+            and not self.is_dragging_box
+            and not self.is_dragging_item
+            and not self.is_manual_scale
+            and self.background_scale <= 1.0
+            and self.find_item_at_position(mouse_pos) is None
         )
         self._handle_left_click(mouse_pos)
+        if self.is_dragging_box or self.is_resizing_box:
+            self._drag_out_pending = False
 
     def _handle_left_click(self, mouse_pos):
-        item_at_pos = self.find_item_at_position(mouse_pos)
-        if item_at_pos is not None:
-            self._handle_item_click(item_at_pos, mouse_pos)
-            return
+        is_annotate = getattr(self._editor, 'edit_mode', 'paste') == 'annotate'
 
-        if self._editor.show_labels_checkbox.isChecked() and self._editor.current_background:
-            if self._handle_detection_box_click(mouse_pos):
+        if is_annotate:
+            if self._editor.show_labels_checkbox.isChecked() and self._editor.current_background:
+                if self._handle_detection_box_click(mouse_pos):
+                    return
+            item_at_pos = self.find_item_at_position(mouse_pos)
+            if item_at_pos is not None:
+                self._handle_item_click(item_at_pos, mouse_pos)
                 return
+        else:
+            item_at_pos = self.find_item_at_position(mouse_pos)
+            if item_at_pos is not None:
+                self._handle_item_click(item_at_pos, mouse_pos)
+                return
+            if self._editor.show_labels_checkbox.isChecked() and self._editor.current_background:
+                if self._handle_detection_box_click(mouse_pos):
+                    return
 
         if self._editor.current_background:
             if self._handle_background_click(mouse_pos):
@@ -256,26 +271,47 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.update()
 
     def _check_hover(self):
-        """检查鼠标悬停在贴图上时自动选中"""
+        """根据模式悬停自动选中：贴图模式→贴图项，标注模式→检测框"""
         if self._editor.current_background is None or self._editor.current_background_index < 0:
             return
 
+        is_annotate = getattr(self._editor, 'edit_mode', 'paste') == 'annotate'
         bg_rect = self.get_background_rect()
         if bg_rect is None:
             return
 
-        for i, (pixmap, rect, label) in enumerate(self._editor.canvas_items):
-            ix = (rect.x() * self.background_scale) + bg_rect.left()
-            iy = (rect.y() * self.background_scale) + bg_rect.top()
-            iw = rect.width() * self.background_scale
-            ih = rect.height() * self.background_scale
-            item_rect = QRectF(ix, iy, iw, ih)
+        if is_annotate:
+            # 标注模式：悬停自动选中检测框
+            if self._editor.show_labels_checkbox.isChecked():
+                for i, box in enumerate(self._editor.detection_boxes):
+                    bx = box["x"] * self.background_scale + bg_rect.left()
+                    by = box["y"] * self.background_scale + bg_rect.top()
+                    bw = box["width"] * self.background_scale
+                    bh = box["height"] * self.background_scale
+                    box_rect = QRectF(bx, by, bw, bh)
+                    if box_rect.contains(self.mouse_pos):
+                        if self.selected_box != i:
+                            self.selected_box = i
+                            self.update()
+                        return
+                # 鼠标不在任何检测框上时取消选中
+                if self.selected_box is not None:
+                    self.selected_box = None
+                    self.update()
+        else:
+            # 贴图模式：悬停自动选中贴图项
+            for i, (pixmap, rect, label) in enumerate(self._editor.canvas_items):
+                ix = (rect.x() * self.background_scale) + bg_rect.left()
+                iy = (rect.y() * self.background_scale) + bg_rect.top()
+                iw = rect.width() * self.background_scale
+                ih = rect.height() * self.background_scale
+                item_rect = QRectF(ix, iy, iw, ih)
 
-            if item_rect.contains(self.mouse_pos):
-                if self._editor.selected_item != i:
-                    self._editor.selected_item = i
-                    self.selected_item_size = (rect.width(), rect.height())
-                return
+                if item_rect.contains(self.mouse_pos):
+                    if self._editor.selected_item != i:
+                        self._editor.selected_item = i
+                        self.selected_item_size = (rect.width(), rect.height())
+                    return
 
     def _drag_item(self):
         bg_rect = self.get_background_rect()

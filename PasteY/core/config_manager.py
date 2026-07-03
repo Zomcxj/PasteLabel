@@ -77,8 +77,10 @@ def save_language(language):
 def load_all():
     """加载所有配置"""
     config = load_config()
+    saved_sc = config.get('shortcuts', {})
+    merged_sc = {**SHORTCUT_CONFIG, **saved_sc}
     return {
-        'shortcuts': config.get('shortcuts', SHORTCUT_CONFIG),
+        'shortcuts': merged_sc,
         'theme': config.get('theme', 'light'),
         'language': config.get('language', 'zh'),
         'max_labels': config.get('max_labels', STATUSBAR_CONFIG['max_labels']),

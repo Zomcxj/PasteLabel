@@ -240,6 +240,15 @@ class LabelManager(QObject):
             if label_to_delete in self.editor.global_labels:
                 self.editor.global_labels.remove(label_to_delete)
             
+            # 保存到所有JSON文件
+            import os
+            for index in self.editor.detection_boxes_dict:
+                if index < len(self.editor.background_images):
+                    file_path = self.editor.background_images[index]
+                    boxes = self.editor.detection_boxes_dict.get(index, [])
+                    background_name = os.path.basename(file_path)
+                    self.editor.save_json(file_path, background_name, "", canvas_items=boxes)
+
             self.label_list_changed.emit()
             self.data_changed.emit()
     
@@ -278,8 +287,9 @@ class LabelManager(QObject):
                 label = box["label"]
                 label_counts[label] = label_counts.get(label, 0) + 1
         
+        all_labels = set(self.editor.global_labels) | set(label_counts.keys())
         label_count_list = []
-        for label in self.editor.global_labels:
+        for label in all_labels:
             count = label_counts.get(label, 0)
             label_count_list.append((label, count))
         

@@ -34,6 +34,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
         self._load_settings()
         self._init_data()
+        self._is_delete_view = False
+        self._nav_step = 1
+        self.edit_mode = 'paste'
         self.init_ui()
         self._apply_theme()
         self._refresh_ui_texts()
@@ -110,6 +113,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.label_manager.label_list_changed.connect(self.update_label_list)
         self.save_manager.save_completed.connect(self._on_save_completed)
         self.save_manager.label_list_changed.connect(self.update_label_list)
+        self._is_delete_view = False
 
     # ===== 委托方法 - 保持对外接口不变 =====
 
@@ -157,6 +161,313 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._update_status_info()
         self.canvas.update()
 
+    def _update_mode_seg_style(self):
+        """刷新模式分段按钮的选中样式（照搬MemoPaws）"""
+        if not hasattr(self, 'btn_paste_mode'):
+            return
+        from .theme import ThemeManager, ThemeMode, DARK_THEME, LIGHT_THEME
+        is_dark = ThemeManager.get_mode() == ThemeMode.DARK
+        t = DARK_THEME if is_dark else LIGHT_THEME
+        is_paste = self.edit_mode == 'paste'
+        self.btn_paste_mode.blockSignals(True)
+        self.btn_annotate_mode.blockSignals(True)
+        self.btn_paste_mode.setChecked(is_paste)
+        self.btn_annotate_mode.setChecked(not is_paste)
+        self.btn_paste_mode.blockSignals(False)
+        self.btn_annotate_mode.blockSignals(False)
+        btn_ss = f"QPushButton {{ background: transparent; color: {t['accent']}; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }}"
+        active_text_ss = f"QPushButton {{ background: transparent; color: #FFFFFF; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }}"
+        self.btn_paste_mode.setStyleSheet(active_text_ss if is_paste else btn_ss)
+        self.btn_annotate_mode.setStyleSheet(active_text_ss if not is_paste else btn_ss)
+        if hasattr(self, 'mode_seg_ctrl'):
+            self.mode_seg_ctrl.set_accent(t['accent'])
+            self.mode_seg_ctrl.update_position(animated=False)
+        if hasattr(self, 'mode_seg'):
+            self.mode_seg.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {t['accent_light']};
+                    border: 1px solid {t['accent']};
+                    border-radius: 6px;
+                }}
+            """)
+
+    def _toggle_edit_mode(self):
+        """切换标注/贴图模式"""
+        sender = self.sender()
+        if sender == self.btn_paste_mode:
+            self.edit_mode = 'paste'
+        else:
+            self.edit_mode = 'annotate'
+        self._update_mode_seg_style()
+        from PyQt5.QtCore import QTimer
+        mode_text = "Annotate" if self.edit_mode == 'annotate' else "Paste"
+        self.status_label.setText(f"Mode: {mode_text}")
+        QTimer.singleShot(2000, lambda: self.status_label.setText(""))
+
+    def _toggle_view_path(self):
+        """切换工作路径/移除路径视图"""
+        from . import i18n
+        _tr = i18n.t
+        self._is_delete_view = not self._is_delete_view
+        if self._is_delete_view:
+            self.view_toggle_btn.setText(_tr("移除路径"))
+            self._saved_work_index = self.current_background_index
+            self._show_delete_view()
+            saved_del = getattr(self, '_saved_delete_idx', 0)
+            if self._delete_files and saved_del < len(self._delete_files):
+                self._delete_current_idx = saved_del
+                self._load_delete_image(saved_del)
+                self.background_list.setCurrentRow(saved_del)
+            for sc in getattr(self, '_shortcuts', []):
+                key = sc.key().toString()
+                if key in ('W', 'Q', 'Delete'):
+                    sc.setEnabled(False)
+            if hasattr(self, 'draw_box_btn'):
+                self.draw_box_btn.setEnabled(False)
+        else:
+            self.view_toggle_btn.setText(_tr("工作路径"))
+            self._saved_delete_idx = getattr(self, '_delete_current_idx', 0)
+            saved = getattr(self, '_saved_work_index', 0)
+            self._show_work_view()
+            if self.background_images and saved < len(self.background_images):
+                self.current_background_index = saved
+                from PyQt5.QtGui import QPixmap
+                pixmap = QPixmap(self.background_images[saved])
+                if not pixmap.isNull():
+                    self.current_background = pixmap
+                    self.detection_boxes = self.detection_boxes_dict.get(saved, []).copy()
+                    self.canvas_items = self.canvas_items_dict.get(saved, [])
+                    self.canvas.reset_view()
+                    self.canvas.repaint()
+                    self.update_label_list()
+                self.update_file_count()
+                if saved < self.background_list.count():
+                    self.background_list.setCurrentRow(saved)
+            for sc in getattr(self, '_shortcuts', []):
+                sc.setEnabled(True)
+            if hasattr(self, 'draw_box_btn'):
+                self.draw_box_btn.setEnabled(True)
+        from PyQt5.QtCore import QTimer
+        mode_text = "Removed" if self._is_delete_view else "Work"
+        self.status_label.setText(f"Path: {mode_text}")
+        QTimer.singleShot(2000, lambda: self.status_label.setText(""))
+
+    def _show_work_view(self):
+        """显示工作路径列表"""
+        self.background_list.clear()
+        from ..core.utils import PathUtils
+        from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
+        for i, path in enumerate(self.background_images):
+            ext = os.path.splitext(path)[1].lower()
+            if ext in SUPPORTED_IMAGE_EXTENSIONS:
+                from PyQt5.QtWidgets import QListWidgetItem
+                item = QListWidgetItem(PathUtils.to_display_path(path))
+                item.setData(Qt.UserRole, i)
+                self.background_list.addItem(item)
+        if 0 <= self.current_background_index < self.background_list.count():
+            self.background_list.setCurrentRow(self.current_background_index)
+            self.update_file_count()
+        elif self.background_images:
+            self.current_background_index = 0
+            self.background_list.setCurrentRow(0)
+            from PyQt5.QtGui import QPixmap
+            pixmap = QPixmap(self.background_images[0])
+            if not pixmap.isNull():
+                self.current_background = pixmap
+                self.detection_boxes = self.detection_boxes_dict.get(0, []).copy()
+                self.canvas_items = self.canvas_items_dict.get(0, [])
+                self.canvas.reset_view()
+                self.canvas.repaint()
+                self.update_label_list()
+            self.update_file_count()
+
+    def _show_delete_view(self):
+        """显示移除路径列表"""
+        self.background_list.clear()
+        from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
+        self._delete_files = []
+        if self.background_images:
+            delete_dir = os.path.join(
+                os.path.dirname(self.background_images[0]), '_delete_')
+            if os.path.isdir(delete_dir):
+                from ..core.utils import PathUtils
+                for f in sorted(os.listdir(delete_dir)):
+                    fp = os.path.join(delete_dir, f)
+                    ext = os.path.splitext(f)[1].lower()
+                    if os.path.isfile(fp) and ext in SUPPORTED_IMAGE_EXTENSIONS:
+                        self._delete_files.append(fp)
+                        self.background_list.addItem(PathUtils.to_display_path(fp))
+        if self._delete_files:
+            target = getattr(self, '_saved_delete_idx', 0)
+            target = min(target, len(self._delete_files) - 1)
+            self._delete_current_idx = target
+            self._load_delete_image(target)
+            self.background_list.blockSignals(True)
+            self.background_list.setCurrentRow(target)
+            self.background_list.blockSignals(False)
+            filename = os.path.basename(self._delete_files[target])
+            total = len(self._delete_files)
+            if self.current_background:
+                w = self.current_background.width()
+                h = self.current_background.height()
+                self.setWindowTitle(f"PasteLabel - {filename} [{w} x {h}] [{target + 1} / {total}]")
+            else:
+                self.setWindowTitle(f"PasteLabel - {filename} [{target + 1} / {total}]")
+        else:
+            self.setWindowTitle("PasteLabel")
+        self.update_label_list()
+
+    def _load_delete_image(self, idx):
+        """加载移除路径图片到画布"""
+        from PyQt5.QtGui import QPixmap
+        if 0 <= idx < len(self._delete_files):
+            pixmap = QPixmap(self._delete_files[idx])
+            if not pixmap.isNull():
+                self.current_background = pixmap
+                self.canvas.background_scale = 1.0
+                self.canvas.is_manual_scale = False
+                self.canvas.reset_view()
+                self.canvas.selected_box = None
+                self.selected_item = None
+                self.canvas_items = []
+                self.detection_boxes = self.load_detection_boxes(self._delete_files[idx])
+                self.update_label_list()
+                self.canvas.repaint()
+
+    def _remove_to_delete(self, idx):
+        """移除文件到 _delete_ 文件夹"""
+        import shutil
+        if idx < 0 or idx >= len(self.background_images):
+            return
+        file_path = self.background_images[idx]
+
+        delete_dir = os.path.join(os.path.dirname(file_path), '_delete_')
+        os.makedirs(delete_dir, exist_ok=True)
+
+        shutil.move(file_path, os.path.join(delete_dir, os.path.basename(file_path)))
+        json_path = os.path.splitext(file_path)[0] + '.json'
+        if os.path.isfile(json_path):
+            shutil.move(json_path, os.path.join(delete_dir, os.path.basename(json_path)))
+
+        self.background_images.pop(idx)
+        if idx in self.canvas_items_dict:
+            del self.canvas_items_dict[idx]
+        if idx in self.detection_boxes_dict:
+            del self.detection_boxes_dict[idx]
+
+        new_idx = min(idx, len(self.background_images) - 1)
+        if self.background_images:
+            self.current_background_index = new_idx
+            from PyQt5.QtGui import QPixmap
+            pixmap = QPixmap(self.background_images[new_idx])
+            if not pixmap.isNull():
+                self.current_background = pixmap
+                self.canvas.reset_view()
+                self.canvas.update()
+        else:
+            self.current_background = None
+            self.current_background_index = -1
+
+        self._show_delete_view()
+        self.update_file_count()
+
+    def _restore_from_delete(self, idx):
+        """从 _delete_ 恢复文件"""
+        import shutil
+        if idx < 0 or idx >= self.background_list.count():
+            return
+        item = self.background_list.item(idx)
+        text = item.text()
+        delete_dir = os.path.join(
+            os.path.dirname(self.background_images[0]) if self.background_images else '', '_delete_')
+
+        for f in os.listdir(delete_dir):
+            if f in text or text.endswith(f):
+                src = os.path.join(delete_dir, f)
+                dst = os.path.join(os.path.dirname(delete_dir), f)
+                shutil.move(src, dst)
+                self.background_images.append(dst)
+                self.canvas_items_dict[len(self.background_images) - 1] = []
+                self.detection_boxes_dict[len(self.background_images) - 1] = []
+                break
+
+        self.current_background_index = len(self.background_images) - 1
+        self._show_delete_view()
+        self.update_file_count()
+
+    def _show_label_stats(self):
+        """显示标签统计弹窗"""
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView
+        from .theme import ThemeManager
+
+        t = ThemeManager.get_theme()
+        dialog = QDialog(self)
+        dialog.setWindowTitle("标签统计")
+        dialog.setMinimumSize(400, 300)
+        from PyQt5.QtCore import QTimer
+        def _sync():
+            hwnd = int(dialog.winId())
+            from .dwm import set_titlebar_dark
+            set_titlebar_dark(hwnd, is_dark)
+        is_dark = ThemeManager.get_mode().value == "dark"
+        QTimer.singleShot(30, _sync)
+        dialog.setStyleSheet(f"""
+            QDialog {{ background-color: {t['widget_bg']}; color: {t['text_primary']}; }}
+            QTableWidget {{ background-color: {t['widget_bg']}; color: {t['text_primary']};
+                border: 1px solid {t['border_color']}; gridline-color: {t['border_color']}; }}
+            QTableWidget::item {{ padding: 4px; }}
+            QTableWidget::item:selected {{ background-color: {t['accent_light']}; color: {t['accent']}; }}
+            QHeaderView::section {{ background-color: {t['panel_bg']}; color: {t['text_primary']};
+                border: 1px solid {t['border_color']}; padding: 4px; font-weight: bold; }}
+            QTableWidget QTableCornerButton::section {{ background-color: {t['panel_bg']};
+                border: 1px solid {t['border_color']}; }}
+        """)
+
+        layout = QVBoxLayout(dialog)
+
+        bg_label = QLabel("背景图标签")
+        bg_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        layout.addWidget(bg_label)
+
+        bg_stats = {}
+        for idx, file_path in enumerate(self.background_images):
+            boxes = self.detection_boxes_dict.get(idx, [])
+            for box in boxes:
+                lbl = box.get("label", "")
+                if lbl:
+                    bg_stats[lbl] = bg_stats.get(lbl, 0) + 1
+
+        bg_table = QTableWidget(len(bg_stats), 2)
+        bg_table.setHorizontalHeaderLabels(["类别", "数量"])
+        bg_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        for row, (label, count) in enumerate(sorted(bg_stats.items(), key=lambda x: -x[1])):
+            bg_table.setItem(row, 0, QTableWidgetItem(label))
+            bg_table.setItem(row, 1, QTableWidgetItem(str(count)))
+        layout.addWidget(bg_table)
+
+        paste_label = QLabel("贴图标签")
+        paste_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        layout.addWidget(paste_label)
+
+        paste_stats = {}
+        for _, _, lbl in self.canvas_items:
+            if lbl:
+                paste_stats[lbl] = paste_stats.get(lbl, 0) + 1
+
+        paste_table = QTableWidget(len(paste_stats), 2)
+        paste_table.setHorizontalHeaderLabels(["类别", "数量"])
+        paste_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        for row, (label, count) in enumerate(sorted(paste_stats.items(), key=lambda x: -x[1])):
+            paste_table.setItem(row, 0, QTableWidgetItem(label))
+            paste_table.setItem(row, 1, QTableWidgetItem(str(count)))
+        layout.addWidget(paste_table)
+
+        total = QLabel(f"总计: 背景图标签 {sum(bg_stats.values())} 个 | 贴图标签 {sum(paste_stats.values())} 个")
+        total.setStyleSheet("font-size: 12px; margin-top: 8px;")
+        layout.addWidget(total)
+
+        dialog.exec_()
+
     def showEvent(self, event):
         """窗口显示后设置标题栏颜色（winId 必须在 show 之后获取）"""
         super().showEvent(event)
@@ -199,6 +510,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         from ..core import config_manager
         ThemeManager.toggle()
         self._apply_theme()
+        self._update_mode_seg_style()
         is_dark = ThemeManager.get_mode().value == "dark"
         self._set_titlebar_dark(is_dark)
         config_manager.save_theme('dark' if is_dark else 'light')
@@ -240,6 +552,26 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.clear_btn.setText(tr("清空画布"))
         self.save_btn.setText(tr("保存图片"))
         self.save_all_btn.setText(tr("全部保存"))
+        if hasattr(self, 'view_stats_btn'):
+            self.view_stats_btn.setText(tr("查看"))
+            self.view_stats_btn.setToolTip(tr("标签统计"))
+        if hasattr(self, 'view_toggle_btn'):
+            if self._is_delete_view:
+                self.view_toggle_btn.setText(tr("移除路径"))
+            else:
+                self.view_toggle_btn.setText(tr("工作路径"))
+        if hasattr(self, 'btn_paste_mode'):
+            from . import i18n
+            is_en = i18n.get_lang() == "en"
+            if is_en:
+                self.btn_paste_mode.setText("Paste")
+                self.btn_annotate_mode.setText("Annotate")
+            else:
+                self.btn_paste_mode.setText(tr("贴图"))
+                self.btn_annotate_mode.setText(tr("标注"))
+            self._update_mode_seg_style()
+        if hasattr(self, 'step_label'):
+            self.step_label.setText(tr("步长："))
         self.lang_btn.setToolTip(tr("切换中英文"))
         self.theme_btn.setToolTip(tr("切换深色/浅色主题"))
         if hasattr(self, 'bg_list_group'):

@@ -95,6 +95,8 @@ class SettingsDialog(QDialog):
             'fit_view': tr("适应视图"),
             'zoom_in': tr("放大"),
             'zoom_out': tr("缩小"),
+            'remove_image': tr("移除图片"),
+            'restore_image': tr("恢复到工作路径"),
         }
 
         for key, name in shortcut_names.items():

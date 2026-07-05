@@ -243,6 +243,17 @@ class UIBuilderMixin:
         """创建选项下拉菜单按钮"""
         from PyQt5.QtWidgets import QMenu, QAction
 
+        self.handy_btn = QPushButton(tr("巧手"))
+        self.handy_btn.setObjectName("optionsBtn")
+        self.handy_btn.setMinimumWidth(60)
+        self.handy_btn.setFixedHeight(24)
+        self.handy_btn.setFixedWidth(70)
+        self.handy_btn.setToolTip(tr("巧手记录"))
+        self.handy_btn.clicked.connect(self._show_handy_records)
+        layout.addWidget(self.handy_btn)
+
+        layout.addSpacing(4)
+
         self.options_btn = QPushButton(tr("选项"))
         self.options_btn.setObjectName("optionsBtn")
         self.options_btn.setMinimumWidth(60)
@@ -337,6 +348,11 @@ class UIBuilderMixin:
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(0, lambda: self.mode_seg_ctrl.update_position(animated=False))
         layout.addWidget(self.mode_seg)
+
+    def _show_handy_records(self):
+        """显示巧手记录弹窗"""
+        from .handy_dialog import HandyRecordsDialog
+        HandyRecordsDialog(self).exec_()
 
     def _validate_size_range(self):
         """验证尺寸范围，确保最小值不大于最大值"""

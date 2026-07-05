@@ -35,6 +35,12 @@ class TestTranslation:
         assert i18n.t('确定') == 'OK'
         assert i18n.t('取消') == 'Cancel'
 
+    def test_handy_records_translations(self):
+        i18n.set_lang('en')
+        assert i18n.t('巧手') == 'Handy'
+        assert i18n.t('巧手记录') == 'Handy Records'
+        assert i18n.t('修改备注') == 'Edit Note'
+
     def test_fallback_to_key(self):
         i18n.set_lang('zh')
         assert i18n.t('nonexistent_key') == 'nonexistent_key'

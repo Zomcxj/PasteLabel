@@ -3,6 +3,7 @@
 """
 import os
 import sys
+from datetime import datetime
 from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtCore import QPoint, Qt, QUrl
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDrag
@@ -15,6 +16,7 @@ from .ui_builder import UIBuilderMixin
 from ..engine.image_loader import ImageLoaderMixin
 from ..engine.paste_engine import PasteEngineMixin
 from ..engine.event_handler import EventHandlerMixin
+from .i18n import t as tr
 from .theme import ThemeManager, ThemeMode
 from .dwm import set_titlebar_dark
 from .settings_dialog import SettingsDialog
@@ -78,6 +80,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.current_background = None
         self.current_background_index = -1
         self.small_images = []
+        self._handy_background_path = ""
+        self._handy_paste_path = ""
+        self._handy_label_path = ""
         self.canvas_items_dict = {}
         self.canvas_items = []
         self.selected_item = None
@@ -114,6 +119,80 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.save_manager.save_completed.connect(self._on_save_completed)
         self.save_manager.label_list_changed.connect(self.update_label_list)
         self._is_delete_view = False
+
+    def _save_handy_record_on_close(self):
+        """关闭时保存当前素材来源路径组合。"""
+        from ..core import config_manager
+
+        record = {
+            'note': '',
+            'background_path': self._handy_background_path,
+            'paste_path': self._handy_paste_path,
+            'label_path': self._handy_label_path,
+            'background_index': self.current_background_index if self.current_background_index >= 0 else 0,
+            'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        }
+        for existing in config_manager.load_handy_records():
+            if all(existing.get(k) == record[k] for k in ('background_path', 'paste_path', 'label_path')):
+                record['note'] = existing.get('note', '')
+                break
+        config_manager.upsert_handy_record(record)
+
+    def load_handy_record(self, record):
+        """用巧手记录替换当前打开的背景图、贴图和标签来源。"""
+        self._clear_handy_content()
+        missing = []
+
+        bg_path = record.get('background_path') or ''
+        paste_path = record.get('paste_path') or ''
+        label_path = record.get('label_path') or ''
+        saved_index = int(record.get('background_index', 0) or 0)
+
+        if bg_path:
+            if os.path.isdir(bg_path):
+                self.load_background_folder(bg_path)
+                if self.background_images:
+                    self.switch_background_to_index(saved_index)
+            else:
+                missing.append(bg_path)
+        if paste_path:
+            if os.path.isdir(paste_path):
+                self.load_paste_folder(paste_path)
+            else:
+                missing.append(paste_path)
+        if label_path:
+            if os.path.isfile(label_path):
+                self.load_paste_label_file(label_path)
+            else:
+                missing.append(label_path)
+
+        self.update_file_count()
+        if missing and hasattr(self, 'status_label'):
+            self.status_label.setText(f"{tr('路径不存在')}: {missing[0]}")
+
+    def _clear_handy_content(self):
+        """加载记录前清空当前素材，避免新旧内容混在一起。"""
+        self.background_images.clear()
+        self.small_images.clear()
+        self.canvas_items_dict.clear()
+        self.detection_boxes_dict.clear()
+        self.canvas_items.clear()
+        self.detection_boxes.clear()
+        self.global_labels.clear()
+        self.current_background = None
+        self.current_background_index = -1
+        self.selected_item = None
+        self._handy_background_path = ""
+        self._handy_paste_path = ""
+        self._handy_label_path = ""
+        for widget_name in ('background_list', 'small_list', 'label_list'):
+            if hasattr(self, widget_name):
+                getattr(self, widget_name).clear()
+        if hasattr(self, 'paste_label_list'):
+            self.paste_label_list.clear()
+            self.paste_label_list.addItem('paste')
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
 
     # ===== 委托方法 - 保持对外接口不变 =====
 
@@ -607,6 +686,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.size_lbl.setText(tr("短边尺寸:"))
         if hasattr(self, 'options_btn'):
             self.options_btn.setText(tr("选项"))
+        if hasattr(self, 'handy_btn'):
+            self.handy_btn.setText(tr("巧手"))
+            self.handy_btn.setToolTip(tr("巧手记录"))
         if hasattr(self, '_draw_box_action'):
             sc = self._get_shortcut('draw_box')
             self._draw_box_action.setText(f"  {tr('绘制BOX')}\t{sc}")

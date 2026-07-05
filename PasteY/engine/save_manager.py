@@ -57,6 +57,8 @@ class _SyncTitleBarDialog(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
+        from ..ui.dialog_helpers import center_on_parent
+        center_on_parent(self)
         QTimer.singleShot(30, self._sync)
 
     def _sync(self):

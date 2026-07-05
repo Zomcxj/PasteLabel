@@ -13,6 +13,7 @@ from PyQt5.QtCore import Qt, QTimer, QEvent
 from ..core.config import SHORTCUT_CONFIG
 from .theme import ThemeManager, ThemeMode
 from .dwm import set_titlebar_dark
+from .dialog_helpers import center_on_parent
 from ..core import config_manager
 from . import i18n
 
@@ -42,6 +43,7 @@ class SettingsDialog(QDialog):
     def showEvent(self, event):
         """窗口显示后设置标题栏颜色"""
         super().showEvent(event)
+        center_on_parent(self)
         QTimer.singleShot(30, self._sync_titlebar)
 
     def closeEvent(self, event):

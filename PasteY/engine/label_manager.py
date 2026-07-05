@@ -4,9 +4,10 @@
 
 from typing import TYPE_CHECKING
 from PyQt5.QtCore import pyqtSignal, QObject
-from PyQt5.QtWidgets import QMenu, QAction, QInputDialog, QMessageBox, QListWidgetItem
+from PyQt5.QtWidgets import QMenu, QAction, QListWidgetItem
 
 from ..core.utils import extract_label_name
+from ..ui import dialog_helpers
 from ..ui.i18n import t as tr
 
 if TYPE_CHECKING:
@@ -50,8 +51,8 @@ class LabelManager(QObject):
     
     def add_paste_label(self):
         """增加贴图标签"""
-        label_name, ok = QInputDialog.getText(
-            self.editor, tr("增加贴图标签"), tr("请输入新的贴图标签名称:")
+        label_name, ok = dialog_helpers.get_text(
+            self.editor, "增加贴图标签", "请输入新的贴图标签名称:"
         )
         
         if ok and label_name.strip():
@@ -62,7 +63,7 @@ class LabelManager(QObject):
                 existing_labels.add(self.editor.paste_label_list.item(i).text())
             
             if label_name in existing_labels:
-                QMessageBox.warning(self.editor, tr("警告"), tr("标签名称已存在，请输入不同的名称"))
+                dialog_helpers.warning(self.editor, "警告", tr("标签名称已存在，请输入不同的名称"))
                 return
             
             self.editor.paste_label_list.addItem(label_name)
@@ -74,8 +75,8 @@ class LabelManager(QObject):
             return
         
         old_label = selected_items[0].text()
-        new_label, ok = QInputDialog.getText(
-            self.editor, tr("修改贴图标签"), tr("请输入新的贴图标签名称:"), text=old_label
+        new_label, ok = dialog_helpers.get_text(
+            self.editor, "修改贴图标签", "请输入新的贴图标签名称:", text=old_label
         )
         
         if ok and new_label.strip():
@@ -86,7 +87,7 @@ class LabelManager(QObject):
                 existing_labels.add(self.editor.paste_label_list.item(i).text())
             
             if new_label in existing_labels and new_label != old_label:
-                QMessageBox.warning(self.editor, tr("警告"), tr("标签名称已存在，请输入不同的名称"))
+                dialog_helpers.warning(self.editor, "警告", tr("标签名称已存在，请输入不同的名称"))
                 return
             
             selected_items[0].setText(new_label)
@@ -117,13 +118,14 @@ class LabelManager(QObject):
         
         label_to_delete = selected_items[0].text()
         
-        reply = QMessageBox.question(
+        reply = dialog_helpers.question(
             self.editor, tr("确认删除"), 
             f"{tr('确定要删除贴图标签')} '{label_to_delete}' {tr('吗？删除后，所有使用该标签的贴图也会被删除。')}",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            dialog_helpers.QMessageBox.Yes | dialog_helpers.QMessageBox.No,
+            dialog_helpers.QMessageBox.No
         )
         
-        if reply == QMessageBox.Yes:
+        if reply == dialog_helpers.QMessageBox.Yes:
             for item in selected_items:
                 self.editor.paste_label_list.takeItem(
                     self.editor.paste_label_list.row(item)
@@ -179,8 +181,8 @@ class LabelManager(QObject):
         old_label = extract_label_name(old_label_text)
         
         # 输入新标签名称
-        new_label, ok = QInputDialog.getText(
-            self.editor, tr("修改标签"), tr("请输入新的标签名称:"), text=old_label
+        new_label, ok = dialog_helpers.get_text(
+            self.editor, "修改标签", "请输入新的标签名称:", text=old_label
         )
         
         if ok and new_label.strip():
@@ -214,14 +216,15 @@ class LabelManager(QObject):
         label_text = selected_items[0].text()
         label_to_delete = extract_label_name(label_text)
         
-        delete_msg = tr('吗？\\n将从所有背景中删除该标签的检测框。')
-        reply = QMessageBox.question(
+        delete_msg = f"{tr('吗？')}\n{tr('将从所有背景中删除该标签的检测框。')}"
+        reply = dialog_helpers.question(
             self.editor, tr("确认删除"),
             f"{tr('确定要删除标签')} '{label_to_delete}' {delete_msg}",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            dialog_helpers.QMessageBox.Yes | dialog_helpers.QMessageBox.No,
+            dialog_helpers.QMessageBox.No
         )
         
-        if reply == QMessageBox.Yes:
+        if reply == dialog_helpers.QMessageBox.Yes:
             # 从当前检测框中删除
             self.editor.detection_boxes = [
                 box for box in self.editor.detection_boxes
@@ -245,22 +248,24 @@ class LabelManager(QObject):
             for index in self.editor.detection_boxes_dict:
                 if index < len(self.editor.background_images):
                     file_path = self.editor.background_images[index]
-                    boxes = self.editor.detection_boxes_dict.get(index, [])
                     background_name = os.path.basename(file_path)
-                    self.editor.save_json(file_path, background_name, "", canvas_items=boxes)
+                    self.editor.save_json(file_path, background_name, "", canvas_items=[])
 
             self.label_list_changed.emit()
             self.data_changed.emit()
     
     def add_label(self, label_name=None):
         """添加标签"""
-        if label_name is None:
-            label_name, ok = QInputDialog.getText(
-                self.editor, tr("增加标签"), tr("请输入新的标签名称:")
+        if label_name is None or isinstance(label_name, bool):
+            label_name, ok = dialog_helpers.get_text(
+                self.editor, "增加标签", "请输入新的标签名称:"
             )
             if not (ok and label_name.strip()):
                 return
             label_name = label_name.strip()
+        if not isinstance(label_name, str) or not label_name.strip():
+            return
+        label_name = label_name.strip()
         
         if label_name not in self.editor.global_labels:
             self.editor.global_labels.add(label_name)
@@ -270,7 +275,7 @@ class LabelManager(QObject):
         """更新全局标签集合"""
         for index in self.editor.detection_boxes_dict:
             for box in self.editor.detection_boxes_dict[index]:
-                if "label" in box:
+                if isinstance(box.get("label"), str) and box.get("label").strip():
                     self.editor.global_labels.add(box["label"])
     
     def update_label_list(self):
@@ -283,10 +288,14 @@ class LabelManager(QObject):
         
         label_counts = {}
         for box in self.editor.detection_boxes:
-            if "label" in box:
+            if isinstance(box.get("label"), str) and box.get("label").strip():
                 label = box["label"]
                 label_counts[label] = label_counts.get(label, 0) + 1
         
+        self.editor.global_labels = {
+            label for label in self.editor.global_labels
+            if isinstance(label, str) and label.strip()
+        }
         all_labels = set(self.editor.global_labels) | set(label_counts.keys())
         label_count_list = []
         for label in all_labels:

@@ -2,10 +2,12 @@
 Canvas 右键菜单 - 贴图标签管理
 """
 import os
-from PyQt5.QtWidgets import QMenu, QAction, QInputDialog
+from PyQt5.QtWidgets import QMenu, QAction
 from PyQt5.QtCore import QPoint
 
 from ..core.utils import extract_label_name
+from ..ui import dialog_helpers
+from ..ui.i18n import t as tr
 
 
 class CanvasMenuMixin:
@@ -16,7 +18,8 @@ class CanvasMenuMixin:
         if item_index is not None:
             self._show_paste_context_menu(item_index, mouse_pos)
             return True
-        box_index = self._find_detection_box_at(mouse_pos)
+        labels_visible = self._editor.show_labels_checkbox.isChecked()
+        box_index = self._find_detection_box_at(mouse_pos) if labels_visible else None
         if box_index is not None and not self._editor._is_delete_view:
             self._show_box_label_menu(box_index, mouse_pos)
             return True
@@ -50,7 +53,7 @@ class CanvasMenuMixin:
 
         current_label = self._editor.detection_boxes[box_index].get("label", "")
 
-        modify_action = QAction("修改标签", self)
+        modify_action = QAction(tr("修改标签"), self)
         modify_action.triggered.connect(
             lambda checked, idx=box_index: self._modify_box_label(idx)
         )
@@ -77,10 +80,9 @@ class CanvasMenuMixin:
 
     def _modify_box_label(self, box_index):
         """修改检测框标签"""
-        from PyQt5.QtWidgets import QInputDialog
         current_label = self._editor.detection_boxes[box_index].get("label", "")
-        new_label, ok = QInputDialog.getText(
-            self, "修改标签", "请输入新标签名称：", text=current_label
+        new_label, ok = dialog_helpers.get_text(
+            self, "修改标签", "请输入新的标签名称:", text=current_label
         )
         if ok and new_label.strip():
             new_label = new_label.strip()
@@ -104,7 +106,7 @@ class CanvasMenuMixin:
     def _show_restore_context_menu(self, mouse_pos):
         menu = QMenu(self)
 
-        restore_action = QAction("恢复到工作路径", self)
+        restore_action = QAction(tr("恢复到工作路径"), self)
         restore_action.triggered.connect(self._restore_current_background)
         menu.addAction(restore_action)
 
@@ -140,7 +142,7 @@ class CanvasMenuMixin:
     def _show_background_context_menu(self, mouse_pos):
         menu = QMenu(self)
 
-        remove_action = QAction("移除图片", self)
+        remove_action = QAction(tr("移除图片"), self)
         remove_action.triggered.connect(self._remove_current_background)
         menu.addAction(remove_action)
 
@@ -192,7 +194,7 @@ class CanvasMenuMixin:
     def _show_paste_context_menu(self, item_index, mouse_pos):
         menu = QMenu(self)
 
-        remove_action = QAction("移除", self)
+        remove_action = QAction(tr("移除"), self)
         remove_action.triggered.connect(
             lambda checked, idx=item_index: self._remove_paste_item(idx)
         )
@@ -215,7 +217,7 @@ class CanvasMenuMixin:
 
         menu.addSeparator()
 
-        new_label_action = QAction("添加新标签", self)
+        new_label_action = QAction(tr("增加标签"), self)
         new_label_action.triggered.connect(
             lambda checked, idx=item_index: self.add_new_label(idx)
         )
@@ -230,8 +232,8 @@ class CanvasMenuMixin:
             self.update()
 
     def add_new_label(self, item_index):
-        new_label, ok = QInputDialog.getText(
-            self, "添加新标签", "请输入新标签名称："
+        new_label, ok = dialog_helpers.get_text(
+            self, "增加标签", "请输入新的标签名称:"
         )
         if ok and new_label.strip():
             new_label = new_label.strip()

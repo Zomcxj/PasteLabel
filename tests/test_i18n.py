@@ -27,6 +27,14 @@ class TestTranslation:
         assert i18n.t('显示BOX') == 'Show Detection Box'
         assert i18n.t('保存') == 'Save'
 
+    def test_label_selection_dialog_translations(self):
+        i18n.set_lang('en')
+        assert i18n.t('选择标签') == 'Select Label'
+        assert i18n.t('现有标签：') == 'Existing labels:'
+        assert i18n.t('或输入新标签：') == 'Or enter new label:'
+        assert i18n.t('确定') == 'OK'
+        assert i18n.t('取消') == 'Cancel'
+
     def test_fallback_to_key(self):
         i18n.set_lang('zh')
         assert i18n.t('nonexistent_key') == 'nonexistent_key'

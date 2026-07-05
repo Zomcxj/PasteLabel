@@ -9,6 +9,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer
 
 from ..core.utils import extract_label_name
+from . import i18n
+from .dialog_helpers import center_on_parent
 from .theme import ThemeManager
 from .dwm import set_titlebar_dark
 
@@ -18,7 +20,8 @@ class LabelSelectionDialog(QDialog):
 
     def __init__(self, parent=None, labels=None):
         super().__init__(parent)
-        self.setWindowTitle("选择标签")
+        tr = i18n.t
+        self.setWindowTitle(tr("选择标签"))
         self.setMinimumWidth(400)
 
         if labels is None:
@@ -26,7 +29,7 @@ class LabelSelectionDialog(QDialog):
 
         layout = QVBoxLayout()
 
-        layout.addWidget(QLabel("现有标签："))
+        layout.addWidget(QLabel(tr("现有标签：")))
         self.label_list = QListWidget()
         for label in labels:
             pure_label = self._extract_pure_label(label)
@@ -34,15 +37,15 @@ class LabelSelectionDialog(QDialog):
         self.label_list.setStyleSheet(ThemeManager.get_list_style())
         layout.addWidget(self.label_list)
 
-        layout.addWidget(QLabel("或输入新标签："))
+        layout.addWidget(QLabel(tr("或输入新标签：")))
         self.new_label_input = QLineEdit()
         self.new_label_input.setStyleSheet(ThemeManager.get_input_style())
         layout.addWidget(self.new_label_input)
 
         button_layout = QHBoxLayout()
-        self.ok_btn = QPushButton("确定")
+        self.ok_btn = QPushButton(tr("确定"))
         self.ok_btn.setObjectName("successBtn")
-        self.cancel_btn = QPushButton("取消")
+        self.cancel_btn = QPushButton(tr("取消"))
         self.cancel_btn.setStyleSheet(ThemeManager.get_button_style())
 
         button_layout.addStretch()
@@ -63,6 +66,7 @@ class LabelSelectionDialog(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
+        center_on_parent(self)
         QTimer.singleShot(30, self._sync_titlebar)
 
     def _sync_titlebar(self):
@@ -99,9 +103,10 @@ class ProgressDialogFactory:
     @staticmethod
     def create_progress_dialog(parent, title, label_text, maximum):
         from PyQt5.QtWidgets import QProgressDialog
+        from . import i18n
         t = ThemeManager.get_theme()
 
-        progress_dialog = QProgressDialog(label_text, "取消", 0, maximum, parent)
+        progress_dialog = QProgressDialog(label_text, i18n.t("取消"), 0, maximum, parent)
         progress_dialog.setWindowTitle(title)
         progress_dialog.setMinimumWidth(400)
         progress_dialog.setModal(True)
@@ -142,16 +147,7 @@ class ProgressDialogFactory:
     
     @staticmethod
     def _center_dialog(dialog):
-        from PyQt5.QtWidgets import QApplication
-        screen = QApplication.primaryScreen()
-        if screen:
-            screen_geometry = screen.availableGeometry()
-        else:
-            screen_geometry = QApplication.desktop().screenGeometry()
-        dialog_geometry = dialog.geometry()
-        x = (screen_geometry.width() - dialog_geometry.width()) // 2
-        y = (screen_geometry.height() - dialog_geometry.height()) // 2
-        dialog.move(x, y)
+        center_on_parent(dialog)
 
     @staticmethod
     def _sync_titlebar(dialog):

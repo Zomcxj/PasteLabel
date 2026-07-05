@@ -194,7 +194,8 @@ class EventHandlerMixin:
         else:
             if not self.background_images:
                 return
-            new_index = self.current_background_index + direction
+            step = getattr(self, '_nav_step', 1)
+            new_index = self.current_background_index + direction * step
             self.switch_background_to_index(new_index)
 
     def switch_background_to_index(self, new_index):

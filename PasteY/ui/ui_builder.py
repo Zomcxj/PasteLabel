@@ -299,7 +299,7 @@ class UIBuilderMixin:
         from .theme import ThemeManager
         t = ThemeManager.get_theme()
         self.mode_seg = QFrame()
-        self.mode_seg.setFixedWidth(140)
+        self.mode_seg.setFixedWidth(150)
         self.mode_seg.setFixedHeight(24)
         self.mode_seg.setContentsMargins(0, 0, 0, 0)
         self.mode_seg.setStyleSheet(f"""
@@ -316,14 +316,14 @@ class UIBuilderMixin:
         self.btn_paste_mode = QPushButton(tr("贴图"))
         self.btn_paste_mode.setCheckable(True)
         self.btn_paste_mode.setChecked(True)
-        self.btn_paste_mode.setFixedWidth(70)
+        self.btn_paste_mode.setFixedWidth(74)
         self.btn_paste_mode.setFixedHeight(22)
         self.btn_paste_mode.clicked.connect(lambda: self._toggle_edit_mode())
         mode_layout.addWidget(self.btn_paste_mode)
 
         self.btn_annotate_mode = QPushButton(tr("标注"))
         self.btn_annotate_mode.setCheckable(True)
-        self.btn_annotate_mode.setFixedWidth(70)
+        self.btn_annotate_mode.setFixedWidth(74)
         self.btn_annotate_mode.setFixedHeight(22)
         self.btn_annotate_mode.clicked.connect(lambda: self._toggle_edit_mode())
         mode_layout.addWidget(self.btn_annotate_mode)

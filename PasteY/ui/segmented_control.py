@@ -16,7 +16,7 @@ class AnimatedSegmentedControl(QFrame):
         self._indicator = QWidget(container)
         self._indicator.lower()
         self._indicator.setStyleSheet(
-            f"background: {self._accent}; border-radius: 5px;")
+            f"background: {self._accent}; border-radius: 4px;")
 
         self._anim = QPropertyAnimation(self._indicator, b"geometry")
         self._anim.setDuration(180)
@@ -28,7 +28,7 @@ class AnimatedSegmentedControl(QFrame):
     def set_accent(self, color):
         self._accent = color
         self._indicator.setStyleSheet(
-            f"background: {color}; border-radius: 5px;")
+            f"background: {color}; border-radius: 4px;")
 
     def update_position(self, animated=True):
         checked = None
@@ -41,24 +41,17 @@ class AnimatedSegmentedControl(QFrame):
                 return
             checked = self._buttons[0]
 
-        h = checked.height() or self._container.height() or 24
-        w = checked.width() or 80
-
-        # 按钮在容器contentsRect内定位，指示器作为子控件用widget坐标
-        # 需要加上contentsRect的偏移（border造成）
         cr = self._container.contentsRect()
-        x_offset = cr.x()
         y_offset = cr.y()
+        content_w = cr.width() or sum(btn.width() for btn in self._buttons)
+        w = content_w // len(self._buttons)
+        h = cr.height() or checked.height() or self._container.height() or 24
 
-        x = x_offset
-        for btn in self._buttons:
-            if btn is checked:
-                break
-            x += btn.width()
-
-        container_h = self._container.height()
-        content_h = container_h - y_offset * 2
-        y = y_offset + max(0, (content_h - h) // 2)
+        index = self._buttons.index(checked)
+        x = cr.x() + index * w
+        if index == len(self._buttons) - 1:
+            w = cr.right() - x + 1
+        y = y_offset
         target = QRect(x, y, w, h)
         cur = self._indicator.geometry()
 

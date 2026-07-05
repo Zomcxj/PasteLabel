@@ -76,21 +76,32 @@ log_ok "当前平台: $PLATFORM (uname: $OS)"
 
 # ==================== 平台相关配置 ====================
 if [ "$PLATFORM" = "windows" ]; then
-    PYINSTALLER_CMD="python -m PyInstaller"
-    PYTHON_OPTIMIZE=2
+    PYINSTALLER_CMD="D:/JetBrains/Anaconda3/envs/LLM/python.exe -m PyInstaller"
     SEP="\\\\"
     # Git Bash/MSYS2 下需将 Unix 路径转为 Windows 路径（否则 Python 不认识）
     PROJECT_ROOT="$(cygpath -w "$PROJECT_ROOT" 2>/dev/null || echo "$PROJECT_ROOT")"
     OUTPUT_FILE="${PROJECT_ROOT}\\dist\\PasteLabel.exe"
 else
     PYINSTALLER_CMD="pyinstaller"
-    PYTHON_OPTIMIZE=0
     SEP="/"
     OUTPUT_FILE="${PROJECT_ROOT}/dist/PasteLabel"
 fi
 
 log_info "PyInstaller 命令: $PYINSTALLER_CMD"
-log_info "Python optimize:  $PYTHON_OPTIMIZE"
+
+# ==================== 查找 ffidll 用于 ctypes 支持 ====================
+FFI_DLL=""
+if [ "$PLATFORM" = "windows" ]; then
+    # 从 Python 可执行文件所在目录推导 ffi.dll 路径
+    PYTHON_DIR="$(dirname "$PYINSTALLER_CMD")"
+    FFI_PATH="${PYTHON_DIR}/Library/bin/ffi.dll"
+    if [ -f "$FFI_PATH" ]; then
+        FFI_DLL="$FFI_PATH"
+        log_ok "ffi.dll 已找到: $FFI_DLL"
+    else
+        log_warn "未找到 ffi.dll，标题栏深色模式可能不可用"
+    fi
+fi
 
 # ==================== 前置检查 ====================
 log_info "执行前置检查..."
@@ -157,12 +168,12 @@ cat >> "$SPEC_FILE" << SPECEOF
 a = Analysis(
     ['${MAIN_SCRIPT_PATH}'],
     pathex=['${PROJECT_ROOT}'],
-    binaries=[],
+    binaries=$([ -n "$FFI_DLL" ] && echo "[('${FFI_DLL}', '.')]" || echo "[]"),
     datas=[('${RESOURCE_DIR}', 'ico_image')],
     hiddenimports=[
         'PasteY', 'PasteY.ui', 'PasteY.ui.main_window', 'PasteY.ui.ui_builder',
         'PasteY.ui.settings_dialog', 'PasteY.ui.theme', 'PasteY.ui.dwm',
-        'PasteY.ui.dialogs', 'PasteY.ui.widgets', 'PasteY.ui.i18n', 'PasteY.ui.styles',
+        'PasteY.ui.dialogs', 'PasteY.ui.i18n',
         'PasteY.engine', 'PasteY.engine.save_manager',
         'PasteY.engine.undo_manager', 'PasteY.engine.label_manager',
         'PasteY.engine.image_loader', 'PasteY.engine.paste_engine',
@@ -171,7 +182,7 @@ a = Analysis(
         'PasteY.canvas.canvas_interaction', 'PasteY.canvas.canvas_drawing',
         'PasteY.canvas.canvas_menu',
         'PasteY.core', 'PasteY.core.config', 'PasteY.core.config_manager',
-        'PasteY.core.utils', 'PasteY.core.models', 'PasteY.core.editor_protocol',
+        'PasteY.core.utils', 'PasteY.core.editor_protocol',
         'PasteY.core.exception_hook',
     ],
     hookspath=[],
@@ -179,7 +190,7 @@ a = Analysis(
     runtime_hooks=[],
     excludes=['tkinter', 'matplotlib', 'pandas', 'numpy', 'pytest'],
     noarchive=False,
-    optimize=${PYTHON_OPTIMIZE},
+    optimize=2,
 )
 pyz = PYZ(a.pure)
 

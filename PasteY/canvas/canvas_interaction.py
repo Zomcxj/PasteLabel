@@ -290,6 +290,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                     bh = box["height"] * self.background_scale
                     box_rect = QRectF(bx, by, bw, bh)
                     if box_rect.contains(self.mouse_pos):
+                        self._editor.selected_item = None
+                        self.selected_item_size = None
                         if self.selected_box != i:
                             self.selected_box = i
                             self.update()
@@ -308,6 +310,9 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 item_rect = QRectF(ix, iy, iw, ih)
 
                 if item_rect.contains(self.mouse_pos):
+                    self.selected_box = None
+                    if hasattr(self._editor, 'pressed_label'):
+                        self._editor.pressed_label = None
                     if self._editor.selected_item != i:
                         self._editor.selected_item = i
                         self.selected_item_size = (rect.width(), rect.height())

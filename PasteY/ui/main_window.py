@@ -161,7 +161,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._update_status_info()
         self.canvas.update()
 
-    def _update_mode_seg_style(self):
+    def _update_mode_seg_style(self, animated=False):
         """刷新模式分段按钮的选中样式（照搬MemoPaws）"""
         if not hasattr(self, 'btn_paste_mode'):
             return
@@ -181,13 +181,13 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.btn_annotate_mode.setStyleSheet(active_text_ss if not is_paste else btn_ss)
         if hasattr(self, 'mode_seg_ctrl'):
             self.mode_seg_ctrl.set_accent(t['accent'])
-            self.mode_seg_ctrl.update_position(animated=False)
+            self.mode_seg_ctrl.update_position(animated=animated)
         if hasattr(self, 'mode_seg'):
             self.mode_seg.setStyleSheet(f"""
                 QFrame {{
                     background-color: {t['accent_light']};
                     border: 1px solid {t['accent']};
-                    border-radius: 6px;
+                    border-radius: 5px;
                 }}
             """)
 
@@ -198,7 +198,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.edit_mode = 'paste'
         else:
             self.edit_mode = 'annotate'
-        self._update_mode_seg_style()
+        self._update_mode_seg_style(animated=True)
         from PyQt5.QtCore import QTimer
         mode_text = "Annotate" if self.edit_mode == 'annotate' else "Paste"
         self.status_label.setText(f"Mode: {mode_text}")
@@ -315,6 +315,10 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 self.setWindowTitle(f"PasteLabel - {filename} [{target + 1} / {total}]")
         else:
             self.setWindowTitle("PasteLabel")
+            self.current_background = None
+            self.detection_boxes = []
+            self.canvas_items = []
+            self.canvas.repaint()
         self.update_label_list()
 
     def _load_delete_image(self, idx):
@@ -399,10 +403,12 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         """显示标签统计弹窗"""
         from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView
         from .theme import ThemeManager
+        from . import i18n
+        tr = i18n.t
 
         t = ThemeManager.get_theme()
         dialog = QDialog(self)
-        dialog.setWindowTitle("标签统计")
+        dialog.setWindowTitle(tr("标签统计"))
         dialog.setMinimumSize(400, 300)
         from PyQt5.QtCore import QTimer
         def _sync():
@@ -425,7 +431,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
         layout = QVBoxLayout(dialog)
 
-        bg_label = QLabel("背景图标签")
+        bg_label = QLabel(tr("背景图标签"))
         bg_label.setStyleSheet("font-weight: bold; font-size: 13px;")
         layout.addWidget(bg_label)
 
@@ -438,14 +444,14 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                     bg_stats[lbl] = bg_stats.get(lbl, 0) + 1
 
         bg_table = QTableWidget(len(bg_stats), 2)
-        bg_table.setHorizontalHeaderLabels(["类别", "数量"])
+        bg_table.setHorizontalHeaderLabels([tr("类别"), tr("数量")])
         bg_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         for row, (label, count) in enumerate(sorted(bg_stats.items(), key=lambda x: -x[1])):
             bg_table.setItem(row, 0, QTableWidgetItem(label))
             bg_table.setItem(row, 1, QTableWidgetItem(str(count)))
         layout.addWidget(bg_table)
 
-        paste_label = QLabel("贴图标签")
+        paste_label = QLabel(tr("贴图标签_list"))
         paste_label.setStyleSheet("font-weight: bold; font-size: 13px;")
         layout.addWidget(paste_label)
 
@@ -455,17 +461,22 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 paste_stats[lbl] = paste_stats.get(lbl, 0) + 1
 
         paste_table = QTableWidget(len(paste_stats), 2)
-        paste_table.setHorizontalHeaderLabels(["类别", "数量"])
+        paste_table.setHorizontalHeaderLabels([tr("类别"), tr("数量")])
         paste_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         for row, (label, count) in enumerate(sorted(paste_stats.items(), key=lambda x: -x[1])):
             paste_table.setItem(row, 0, QTableWidgetItem(label))
             paste_table.setItem(row, 1, QTableWidgetItem(str(count)))
         layout.addWidget(paste_table)
 
-        total = QLabel(f"总计: 背景图标签 {sum(bg_stats.values())} 个 | 贴图标签 {sum(paste_stats.values())} 个")
+        total = QLabel(
+            f"{tr('总计')}: {tr('背景图标签')} {sum(bg_stats.values())} {tr('个')} | "
+            f"{tr('贴图标签_list')} {sum(paste_stats.values())} {tr('个')}"
+        )
         total.setStyleSheet("font-size: 12px; margin-top: 8px;")
         layout.addWidget(total)
 
+        from .dialog_helpers import center_on_parent
+        center_on_parent(dialog, self)
         dialog.exec_()
 
     def showEvent(self, event):

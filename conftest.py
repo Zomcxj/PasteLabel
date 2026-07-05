@@ -14,6 +14,7 @@ def _make_mock_module(name):
     # 预注册常用 Qt 名称，确保 from X import Y 可用
     for attr in [
         'QPoint', 'Qt', 'QUrl', 'QSize', 'QTimer', 'QRectF', 'QRect',
+        'QPropertyAnimation', 'QEasingCurve',
         'pyqtSignal', 'QObject', 'QPixmap', 'QPainter', 'QColor', 'QIcon',
         'QFont', 'QFontDatabase', 'QEvent', 'QKeySequence', 'QImage',
         'QStandardItem', 'QStandardItemModel', 'QSortFilterProxyModel',
@@ -51,6 +52,7 @@ class _MockQWidget:
     def mapToGlobal(self, p): return p
     def installEventFilter(self, *a): pass
     def children(self): return []
+    def parent(self): return None
     def repaint(self): pass
     def updateGeometry(self): pass
     def show(self): pass
@@ -73,6 +75,8 @@ class _MockQMainWindow(_MockQWidget):
 
 
 class _MockQDialog(_MockQWidget):
+    Accepted = 1
+    Rejected = 0
     def setWindowTitle(self, *a): pass
     def setMinimumWidth(self, *a): pass
     def setLayout(self, *a): pass
@@ -203,8 +207,11 @@ class _MockQListWidgetItem:
 
 
 class _MockQProgressDialog(_MockQWidget):
+    last_args = None
     def __init__(self, *a, **kw):
         super().__init__()
+        self.args = a
+        _MockQProgressDialog.last_args = a
     def setWindowTitle(self, *a): pass
     def setMinimumWidth(self, *a): pass
     def setModal(self, *a): pass
@@ -215,10 +222,19 @@ class _MockQProgressDialog(_MockQWidget):
     def wasCanceled(self): return False
     def close(self): pass
     def geometry(self):
-        return type('G', (), {'width': lambda: 400, 'height': lambda: 200})()
+        return type('G', (), {'width': lambda self: 400, 'height': lambda self: 200})()
 
 
 class _MockQInputDialog:
+    def __init__(self, *a, **kw): pass
+    def setWindowTitle(self, *a): pass
+    def setLabelText(self, *a): pass
+    def setTextValue(self, *a): pass
+    def setOkButtonText(self, *a): pass
+    def setCancelButtonText(self, *a): pass
+    def textValue(self): return ''
+    def exec_(self): return _MockQDialog.Rejected
+    def showEvent(self, *a): pass
     @staticmethod
     def getText(*a, **kw): return ('', False)
 
@@ -226,8 +242,20 @@ class _MockQInputDialog:
 class _MockQMessageBox:
     Critical = 2
     Warning = 2
+    Question = 4
+    Ok = 0x00000400
     Yes = 0x00000400
     No = 0x00000200
+    Cancel = 0x00400000
+    def __init__(self, *a, **kw): pass
+    def setIcon(self, *a): pass
+    def setWindowTitle(self, *a): pass
+    def setText(self, *a): pass
+    def setStandardButtons(self, *a): pass
+    def setDefaultButton(self, *a): pass
+    def button(self, *a): return type('Button', (), {'setText': lambda self, text: None})()
+    def exec_(self): return _MockQMessageBox.No
+    def showEvent(self, *a): pass
     @staticmethod
     def warning(*a, **kw): pass
     @staticmethod
@@ -248,6 +276,10 @@ class _MockQFileDialog:
 
 
 class _MockQApplication:
+    @staticmethod
+    def primaryScreen():
+        return type('S', (), {'availableGeometry': lambda self: type('R', (), {
+            'width': lambda self: 1920, 'height': lambda self: 1080})()})()
     @staticmethod
     def desktop():
         return type('D', (), {'screenGeometry': lambda: type('R', (), {
@@ -275,9 +307,12 @@ qtcore.Qt = type('Qt', (), {
 qtcore.QPoint = type('QPoint', (), {'__init__': lambda self, x=0, y=0: None})
 qtcore.QPointF = type('QPointF', (), {'__init__': lambda self, x=0, y=0: None})
 qtcore.QRectF = type('QRectF', (), {'__init__': lambda self, *a: None})
+qtcore.QRect = type('QRect', (), {'__init__': lambda self, *a: None})
 qtcore.QSize = type('QSize', (), {'__init__': lambda self, w=0, h=0: None})
 qtcore.QSizeF = type('QSizeF', (), {'__init__': lambda self, w=0, h=0: None})
 qtcore.QTimer = type('QTimer', (), {'singleShot': staticmethod(lambda *a: None)})
+qtcore.QPropertyAnimation = type('QPropertyAnimation', (), {'__init__': lambda self, *a: None})
+qtcore.QEasingCurve = type('QEasingCurve', (), {'OutCubic': 0})
 qtcore.QEvent = type('QEvent', (), {'KeyPress': 6})
 qtcore.QUrl = type('QUrl', (), {'fromLocalFile': staticmethod(lambda f: f)})
 qtcore.QMimeData = type('QMimeData', (), {

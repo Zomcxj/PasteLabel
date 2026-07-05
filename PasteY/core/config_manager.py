@@ -7,6 +7,7 @@ from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG
 
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), '.pastelabel.json')
+HANDY_LIMIT = 10
 
 
 def get_config_path():
@@ -74,6 +75,78 @@ def save_language(language):
     return save_config(config)
 
 
+def _normalize_handy_path(value):
+    value = str(value or '').strip()
+    return os.path.normpath(value) if value else ''
+
+
+def _normalize_handy_record(record):
+    try:
+        background_index = max(0, int(record.get('background_index', 0) or 0))
+    except (TypeError, ValueError):
+        background_index = 0
+    return {
+        'note': str(record.get('note', '') or ''),
+        'background_path': _normalize_handy_path(record.get('background_path', '')),
+        'paste_path': _normalize_handy_path(record.get('paste_path', '')),
+        'label_path': _normalize_handy_path(record.get('label_path', '')),
+        'background_index': background_index,
+        'updated_at': str(record.get('updated_at', '') or ''),
+    }
+
+
+def _handy_key(record):
+    return (record['background_path'], record['paste_path'], record['label_path'])
+
+
+def load_handy_records():
+    """加载巧手记录，最多返回 10 条。"""
+    records = load_config().get('handy_records', [])
+    if not isinstance(records, list):
+        return []
+    return [_normalize_handy_record(r) for r in records if isinstance(r, dict)][:HANDY_LIMIT]
+
+
+def save_handy_records(records):
+    """保存巧手记录，按路径组合去重并限制 10 条。"""
+    seen = set()
+    normalized = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        item = _normalize_handy_record(record)
+        if not any([item['background_path'], item['paste_path'], item['label_path']]):
+            continue
+        key = _handy_key(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(item)
+        if len(normalized) >= HANDY_LIMIT:
+            break
+    config = load_config()
+    config['handy_records'] = normalized
+    return save_config(config)
+
+
+def upsert_handy_record(record):
+    """新增或更新巧手记录，最新记录排在最前。"""
+    item = _normalize_handy_record(record)
+    if not any([item['background_path'], item['paste_path'], item['label_path']]):
+        return False
+    key = _handy_key(item)
+    remaining = [r for r in load_handy_records() if _handy_key(r) != key]
+    return save_handy_records([item] + remaining)
+
+
+def delete_handy_record(index):
+    records = load_handy_records()
+    if index < 0 or index >= len(records):
+        return False
+    records.pop(index)
+    return save_handy_records(records)
+
+
 def load_all():
     """加载所有配置"""
     config = load_config()
@@ -86,6 +159,7 @@ def load_all():
         'max_labels': config.get('max_labels', STATUSBAR_CONFIG['max_labels']),
         'grid_line_width': config.get('grid_line_width', None),
         'grid_alpha': config.get('grid_alpha', None),
+        'handy_records': load_handy_records(),
     }
 
 

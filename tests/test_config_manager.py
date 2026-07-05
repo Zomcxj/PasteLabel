@@ -75,6 +75,34 @@ class TestSaveLoadRoundtrip:
             language=original['language'],
         )
 
+    def test_handy_records_dedupe_and_limit(self):
+        original = config_manager.load_handy_records()
+        try:
+            records = [
+                {'note': f'n{i}', 'background_path': f'b{i}', 'paste_path': '', 'label_path': ''}
+                for i in range(11)
+            ]
+            config_manager.save_handy_records(records)
+            assert len(config_manager.load_handy_records()) == 10
+
+            config_manager.upsert_handy_record({
+                'note': 'updated', 'background_path': 'b10', 'paste_path': '', 'label_path': '',
+                'background_index': 3,
+            })
+            loaded = config_manager.load_handy_records()
+            assert loaded[0]['note'] == 'updated'
+            assert loaded[0]['background_index'] == 3
+            assert sum(1 for r in loaded if r['background_path'] == 'b10') == 1
+            assert loaded[0]['paste_path'] == ''
+            assert loaded[0]['label_path'] == ''
+
+            config_manager.upsert_handy_record({
+                'note': '', 'background_path': 'b10', 'paste_path': '', 'label_path': ''
+            })
+            assert config_manager.load_handy_records()[0]['note'] == ''
+        finally:
+            config_manager.save_handy_records(original)
+
 
 class TestDefaults:
 

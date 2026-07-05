@@ -40,6 +40,7 @@ class ImageLoaderMixin:
             self, tr("选择背景图片"), "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)"
         )
         if files:
+            self._handy_background_path = os.path.dirname(files[0])
             self.background_images.clear()
             self.background_list.clear()
             self.current_background = None
@@ -77,11 +78,18 @@ class ImageLoaderMixin:
         folder_path = QFileDialog.getExistingDirectory(self, tr("选择图片文件夹"), "")
         if not folder_path:
             return
+        self.load_background_folder(folder_path)
+
+    def load_background_folder(self, folder_path):
+        """从指定文件夹加载背景图，供文件夹按钮和巧手记录复用。"""
+        self._handy_background_path = folder_path
 
         self.background_images.clear()
         self.background_list.clear()
         self.current_background = None
         self.detection_boxes_dict.clear()
+        self.canvas_items_dict.clear()
+        self.canvas_items.clear()
 
         for file_name in sorted(os.listdir(folder_path), key=natural_sort_key):
             ext = os.path.splitext(file_name)[1].lower()
@@ -115,6 +123,7 @@ class ImageLoaderMixin:
             self, tr("选择贴图片"), "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)"
         )
         if files:
+            self._handy_paste_path = os.path.dirname(files[0])
             self.small_images.clear()
             self.small_list.clear()
 
@@ -133,6 +142,11 @@ class ImageLoaderMixin:
         folder_path = QFileDialog.getExistingDirectory(self, tr("选择贴图文件夹"), "")
         if not folder_path:
             return
+        self.load_paste_folder(folder_path)
+
+    def load_paste_folder(self, folder_path):
+        """从指定文件夹加载贴图，供文件夹按钮和巧手记录复用。"""
+        self._handy_paste_path = folder_path
 
         self.small_images.clear()
         self.small_list.clear()
@@ -215,24 +229,29 @@ class ImageLoaderMixin:
             self, tr("选择贴图标签文件"), "", "Text Files (*.txt)"
         )
         if file_path:
-            try:
-                labels = []
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line:
-                            parts = line.split()
-                            if parts:
-                                labels.append(parts[0])
+            self.load_paste_label_file(file_path)
 
-                if labels:
-                    self.paste_label_list.clear()
-                    for label in labels:
-                        self.paste_label_list.addItem(label)
-                else:
-                    QMessageBox.warning(self, tr("警告"), tr("未找到有效的标签"))
-            except Exception as e:
-                QMessageBox.critical(self, tr("错误"), f"{tr('读取标签文件失败：')}{e}")
+    def load_paste_label_file(self, file_path):
+        """从指定标签文件加载贴图标签，供文件按钮和巧手记录复用。"""
+        self._handy_label_path = file_path
+        try:
+            labels = []
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        parts = line.split()
+                        if parts:
+                            labels.append(parts[0])
+
+            if labels:
+                self.paste_label_list.clear()
+                for label in labels:
+                    self.paste_label_list.addItem(label)
+            else:
+                QMessageBox.warning(self, tr("警告"), tr("未找到有效的标签"))
+        except Exception as e:
+            QMessageBox.critical(self, tr("错误"), f"{tr('读取标签文件失败：')}{e}")
 
     def _load_detection_boxes_for_index(self, index, file_path):
         """加载指定索引的检测框（优先从缓存，否则从文件）"""

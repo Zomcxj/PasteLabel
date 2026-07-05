@@ -44,7 +44,8 @@ def get_text(parent, title, label, text=""):
     dialog.setTextValue(text)
     dialog.setOkButtonText(i18n.t("确定"))
     dialog.setCancelButtonText(i18n.t("取消"))
-    return dialog.textValue(), dialog.exec_() == QDialog.Accepted
+    accepted = dialog.exec_() == QDialog.Accepted
+    return dialog.textValue(), accepted
 
 
 def question(parent, title, text, buttons=QMessageBox.Yes | QMessageBox.No,

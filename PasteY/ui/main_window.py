@@ -130,6 +130,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             'paste_path': self._handy_paste_path,
             'label_path': self._handy_label_path,
             'background_index': self.current_background_index if self.current_background_index >= 0 else 0,
+            'edit_mode': getattr(self, 'edit_mode', 'paste'),
             'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         }
         for existing in config_manager.load_handy_records():

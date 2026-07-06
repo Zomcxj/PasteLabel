@@ -1,4 +1,4 @@
-"""巧手记录弹窗。"""
+"""记忆记录弹窗。"""
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QPushButton, QLabel
 from PyQt5.QtCore import QTimer
 
@@ -58,8 +58,14 @@ class HandyRecordsDialog(QDialog):
             paste = record.get('paste_path') or i18n.t("空")
             label = record.get('label_path') or i18n.t("空")
             image_index = int(record.get('background_index', 0) or 0) + 1
+            edit_mode = record.get('edit_mode', 'paste')
+            mode_text = i18n.t("贴图模式") if edit_mode == 'paste' else i18n.t("标注模式")
             self.record_list.addItem(
-                f"{note}\n{i18n.t('当前图片')}: {image_index}\n{i18n.t('背景图')}: {bg}\n{i18n.t('贴图')}: {paste}\n{i18n.t('标签文件')}: {label}"
+                f"{note}  [{mode_text}]\n"
+                f"{i18n.t('当前图片')}: {image_index}\n"
+                f"{i18n.t('背景图')}: {bg}\n"
+                f"{i18n.t('贴图')}: {paste}\n"
+                f"{i18n.t('标签文件')}: {label}"
             )
 
     def _selected_index(self):

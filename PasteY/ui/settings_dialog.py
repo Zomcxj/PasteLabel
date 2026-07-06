@@ -118,6 +118,7 @@ class SettingsDialog(QDialog):
             reset_btn = QPushButton(tr("重置"))
             reset_btn.setObjectName("resetBtn")
             reset_btn.setFixedWidth(70)
+            reset_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
             reset_btn.clicked.connect(lambda _, k=key, f=input_field: self._reset_shortcut(k, f))
             row.addWidget(reset_btn)
 
@@ -186,10 +187,12 @@ class SettingsDialog(QDialog):
 
         save_btn = QPushButton(tr("保存"))
         save_btn.setObjectName("successBtn")
+        save_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
         save_btn.clicked.connect(self._save_shortcuts)
         btn_layout.addWidget(save_btn)
 
         cancel_btn = QPushButton(tr("取消"))
+        cancel_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 

@@ -51,6 +51,8 @@ class _SyncTitleBarDialog(QDialog):
         ok_btn = QPushButton(tr("确定"))
         ok_btn.setObjectName("successBtn")
         ok_btn.setFixedWidth(80)
+        from ..ui.theme import ThemeManager
+        ok_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
         ok_btn.clicked.connect(self.accept)
         btn_layout.addWidget(ok_btn)
         layout.addLayout(btn_layout)

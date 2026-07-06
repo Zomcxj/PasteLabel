@@ -662,6 +662,11 @@ class ThemeManager:
         """
 
     @classmethod
+    def get_dialog_button_style(cls):
+        """小窗按钮复用设置弹窗的普通按钮圆角。"""
+        return cls.get_button_style()
+
+    @classmethod
     def get_action_button_style(cls, bg_color, text_color):
         t = cls._current_theme
         return f"""

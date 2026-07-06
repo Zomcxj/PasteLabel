@@ -34,6 +34,7 @@ class MemoryRecordsDialog(QDialog):
         self.close_btn = QPushButton(i18n.t("关闭"))
         for btn in (self.load_btn, self.note_btn, self.delete_btn, self.close_btn):
             btn.setFixedHeight(24)
+            btn.setStyleSheet(ThemeManager.get_dialog_button_style())
             buttons.addWidget(btn)
         layout.addLayout(buttons)
 

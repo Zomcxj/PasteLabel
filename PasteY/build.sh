@@ -55,10 +55,10 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'  # No Color
 
-log_info()  { echo -e "${BLUE}[INFO]${NC}  $(date '+%H:%M:%S') $*"; }
-log_ok()    { echo -e "${GREEN}[OK]${NC}    $(date '+%H:%M:%S') $*"; }
-log_warn()  { echo -e "${YELLOW}[WARN]${NC}  $(date '+%H:%M:%S') $*"; }
-log_error() { echo -e "${RED}[ERROR]${NC} $(date '+%H:%M:%S') $*"; }
+log_info()  { printf "%b[INFO]%b  %s %s\n" "$BLUE" "$NC" "$(date '+%H:%M:%S')" "$*"; }
+log_ok()    { printf "%b[OK]%b    %s %s\n" "$GREEN" "$NC" "$(date '+%H:%M:%S')" "$*"; }
+log_warn()  { printf "%b[WARN]%b  %s %s\n" "$YELLOW" "$NC" "$(date '+%H:%M:%S')" "$*"; }
+log_error() { printf "%b[ERROR]%b %s %s\n" "$RED" "$NC" "$(date '+%H:%M:%S')" "$*"; }
 
 # ==================== 检测操作系统 ====================
 log_info "检测操作系统..."
@@ -75,54 +75,61 @@ esac
 log_ok "当前平台: $PLATFORM (uname: $OS)"
 
 # ==================== 平台相关配置 ====================
+if [ -n "${PYTHON:-}" ]; then
+    PYTHON_CMD="$PYTHON"
+elif command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+else
+    log_error "未找到 Python，请安装 Python 并确保 python/python3 在 PATH 中"
+    exit 1
+fi
+
+PYINSTALLER_CMD="$PYTHON_CMD -m PyInstaller"
+
 if [ "$PLATFORM" = "windows" ]; then
-    PYINSTALLER_CMD="D:/JetBrains/Anaconda3/envs/LLM/python.exe -m PyInstaller"
+    PYTHON_OPTIMIZE=2
     SEP="\\\\"
     # Git Bash/MSYS2 下需将 Unix 路径转为 Windows 路径（否则 Python 不认识）
     PROJECT_ROOT="$(cygpath -w "$PROJECT_ROOT" 2>/dev/null || echo "$PROJECT_ROOT")"
     OUTPUT_FILE="${PROJECT_ROOT}\\dist\\PasteLabel.exe"
 else
-    PYINSTALLER_CMD="pyinstaller"
+    PYTHON_OPTIMIZE=0
     SEP="/"
     OUTPUT_FILE="${PROJECT_ROOT}/dist/PasteLabel"
 fi
 
 log_info "PyInstaller 命令: $PYINSTALLER_CMD"
-
-# ==================== 查找 ffidll 用于 ctypes 支持 ====================
-FFI_DLL=""
-if [ "$PLATFORM" = "windows" ]; then
-    # 从 Python 可执行文件所在目录推导 ffi.dll 路径
-    PYTHON_DIR="$(dirname "$PYINSTALLER_CMD")"
-    FFI_PATH="${PYTHON_DIR}/Library/bin/ffi.dll"
-    if [ -f "$FFI_PATH" ]; then
-        FFI_DLL="$FFI_PATH"
-        log_ok "ffi.dll 已找到: $FFI_DLL"
-    else
-        log_warn "未找到 ffi.dll，标题栏深色模式可能不可用"
-    fi
-fi
+log_info "Python optimize:  $PYTHON_OPTIMIZE"
 
 # ==================== 前置检查 ====================
 log_info "执行前置检查..."
 
-# 检查 PyInstaller 是否可用
-if ! command -v $PYINSTALLER_CMD &> /dev/null; then
-    if [ "$PLATFORM" = "windows" ]; then
-        if ! command -v python &> /dev/null; then
-            log_error "未找到 python，请确保 Python 已安装并加入 PATH"
-            exit 1
-        fi
-        if ! python -m PyInstaller --version &> /dev/null; then
-            log_error "未找到 PyInstaller，请执行: pip install pyinstaller"
-            exit 1
-        fi
-    else
-        log_error "未找到 pyinstaller，请执行: pip install pyinstaller"
-        exit 1
-    fi
+# 检查 Python、pip、PyInstaller、PyQt5 是否来自同一个环境
+if ! PYTHON_PATH="$($PYTHON_CMD -c 'import sys; print(sys.executable)' 2>/dev/null)"; then
+    log_error "当前 Python 不可用: $PYTHON_CMD"
+    exit 1
+fi
+log_info "Python: $PYTHON_PATH"
+log_info "Python version: $($PYTHON_CMD --version)"
+
+if ! "$PYTHON_CMD" -m pip --version &> /dev/null; then
+    log_error "当前 Python 不可用 pip，请先安装 pip: $PYTHON_CMD"
+    exit 1
+fi
+
+if ! "$PYTHON_CMD" -m PyInstaller --version &> /dev/null; then
+    log_error "未找到 PyInstaller，请执行: $PYTHON_CMD -m pip install -r requirements.txt"
+    exit 1
+fi
+
+if ! "$PYTHON_CMD" -c "import PyQt5" &> /dev/null; then
+    log_error "未找到 PyQt5，请执行: $PYTHON_CMD -m pip install -r requirements.txt"
+    exit 1
 fi
 log_ok "PyInstaller 可用"
+log_ok "PyQt5 可用"
 
 # 检查主脚本是否存在
 MAIN_SCRIPT_PATH="${PROJECT_ROOT}${SEP}PasteY${SEP}main.py"
@@ -153,6 +160,10 @@ fi
 # 确保 pathex 指向项目根目录，让 PyInstaller 能正确发现 PasteY 包结构
 
 SPEC_FILE="${PROJECT_ROOT}${SEP}PasteY${SEP}PasteLabel_build.spec"
+MAIN_SCRIPT_SPEC="$($PYTHON_CMD -c 'import sys; print(repr(sys.argv[1]))' "$MAIN_SCRIPT_PATH")"
+PROJECT_ROOT_SPEC="$($PYTHON_CMD -c 'import sys; print(repr(sys.argv[1]))' "$PROJECT_ROOT")"
+RESOURCE_DIR_SPEC="$($PYTHON_CMD -c 'import sys; print(repr(sys.argv[1]))' "$RESOURCE_DIR")"
+ICON_FILE_SPEC="$($PYTHON_CMD -c 'import sys; print(repr(sys.argv[1]))' "$ICON_FILE")"
 
 log_info "生成 spec 文件..."
 
@@ -166,14 +177,14 @@ SPECEOF
 cat >> "$SPEC_FILE" << SPECEOF
 
 a = Analysis(
-    ['${MAIN_SCRIPT_PATH}'],
-    pathex=['${PROJECT_ROOT}'],
-    binaries=$([ -n "$FFI_DLL" ] && echo "[('${FFI_DLL}', '.')]" || echo "[]"),
-    datas=[('${RESOURCE_DIR}', 'ico_image')],
+    [${MAIN_SCRIPT_SPEC}],
+    pathex=[${PROJECT_ROOT_SPEC}],
+    binaries=[],
+    datas=[(${RESOURCE_DIR_SPEC}, 'ico_image')],
     hiddenimports=[
         'PasteY', 'PasteY.ui', 'PasteY.ui.main_window', 'PasteY.ui.ui_builder',
         'PasteY.ui.settings_dialog', 'PasteY.ui.theme', 'PasteY.ui.dwm',
-        'PasteY.ui.dialogs', 'PasteY.ui.i18n',
+        'PasteY.ui.dialogs', 'PasteY.ui.widgets', 'PasteY.ui.i18n', 'PasteY.ui.styles',
         'PasteY.engine', 'PasteY.engine.save_manager',
         'PasteY.engine.undo_manager', 'PasteY.engine.label_manager',
         'PasteY.engine.image_loader', 'PasteY.engine.paste_engine',
@@ -182,7 +193,7 @@ a = Analysis(
         'PasteY.canvas.canvas_interaction', 'PasteY.canvas.canvas_drawing',
         'PasteY.canvas.canvas_menu',
         'PasteY.core', 'PasteY.core.config', 'PasteY.core.config_manager',
-        'PasteY.core.utils', 'PasteY.core.editor_protocol',
+        'PasteY.core.utils', 'PasteY.core.models', 'PasteY.core.editor_protocol',
         'PasteY.core.exception_hook',
     ],
     hookspath=[],
@@ -190,7 +201,7 @@ a = Analysis(
     runtime_hooks=[],
     excludes=['tkinter', 'matplotlib', 'pandas', 'numpy', 'pytest'],
     noarchive=False,
-    optimize=2,
+    optimize=${PYTHON_OPTIMIZE},
 )
 pyz = PYZ(a.pure)
 
@@ -213,7 +224,7 @@ $(if [ "$PLATFORM" = "windows" ]; then echo "    [('-O2', None, 'OPTION')],"; el
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['${ICON_FILE}'],
+    icon=[${ICON_FILE_SPEC}],
 )
 SPECEOF
 
@@ -232,18 +243,21 @@ echo "    --workpath \"${PROJECT_ROOT}/build\" \\"
 echo "    --noconfirm"
 echo "─────────────────────────────────────────"
 
-PYINSTALLER_SPEC_CMD="$PYINSTALLER_CMD \
-    \"$SPEC_FILE\" \
-    --distpath \"${PROJECT_ROOT}/dist\" \
-    --workpath \"${PROJECT_ROOT}/build\" \
-    --noconfirm"
-
 if [ "$CLEAN_BUILD" = true ]; then
     log_info "清理模式：重新分析所有依赖（适合发布版本）"
-    eval "$PYINSTALLER_SPEC_CMD --clean"
+    "$PYTHON_CMD" -m PyInstaller \
+        "$SPEC_FILE" \
+        --distpath "${PROJECT_ROOT}/dist" \
+        --workpath "${PROJECT_ROOT}/build" \
+        --clean \
+        --noconfirm
 else
     log_info "快速模式：使用缓存构建（适合日常开发）"
-    eval "$PYINSTALLER_SPEC_CMD"
+    "$PYTHON_CMD" -m PyInstaller \
+        "$SPEC_FILE" \
+        --distpath "${PROJECT_ROOT}/dist" \
+        --workpath "${PROJECT_ROOT}/build" \
+        --noconfirm
 fi
 
 BUILD_EXIT_CODE=$?

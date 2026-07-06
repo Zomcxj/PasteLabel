@@ -952,6 +952,9 @@ def main():
 
     warnings.simplefilter("ignore", DeprecationWarning)
 
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
     app = QApplication(sys.argv)
 
     from PyQt5.QtGui import QFontDatabase

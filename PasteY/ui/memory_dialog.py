@@ -9,13 +9,13 @@ from .dwm import set_titlebar_dark
 from .theme import ThemeManager
 
 
-class HandyRecordsDialog(QDialog):
+class MemoryRecordsDialog(QDialog):
     """管理并加载最近的素材路径组合。"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._editor = parent
-        self.setWindowTitle(i18n.t("巧手记录"))
+        self.setWindowTitle(i18n.t("记忆记录"))
         self.setMinimumWidth(560)
         self.setMinimumHeight(360)
         self._records = []
@@ -50,7 +50,7 @@ class HandyRecordsDialog(QDialog):
         QTimer.singleShot(30, lambda: set_titlebar_dark(int(self.winId()), is_dark))
 
     def _refresh(self):
-        self._records = config_manager.load_handy_records()
+        self._records = config_manager.load_memory_records()
         self.record_list.clear()
         for record in self._records:
             note = record.get('note') or i18n.t("未备注")
@@ -75,7 +75,7 @@ class HandyRecordsDialog(QDialog):
     def _load_selected(self):
         idx = self._selected_index()
         if idx >= 0 and self._editor:
-            self._editor.load_handy_record(self._records[idx])
+            self._editor.load_memory_record(self._records[idx])
             self.accept()
 
     def _edit_note(self):
@@ -86,12 +86,12 @@ class HandyRecordsDialog(QDialog):
         note, ok = get_text(self, "修改备注", "请输入备注:", text=record.get('note', ''))
         if ok:
             record['note'] = note.strip()
-            config_manager.upsert_handy_record(record)
+            config_manager.upsert_memory_record(record)
             self._refresh()
             self.record_list.setCurrentRow(0)
 
     def _delete_selected(self):
         idx = self._selected_index()
         if idx >= 0:
-            config_manager.delete_handy_record(idx)
+            config_manager.delete_memory_record(idx)
             self._refresh()

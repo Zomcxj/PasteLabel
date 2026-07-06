@@ -75,7 +75,7 @@ PasteLabel/
 │   │   ├── main_window.py     # 主窗口（状态管理/主题/快捷键/视图切换）
 │   │   ├── ui_builder.py      # UI 构建（工具栏/面板/列表）
 │   │   ├── dialogs.py         # 标签选择对话框
-│   │   ├── handy_dialog.py    # 记忆记录弹窗
+│   │   ├── memory_dialog.py   # 记忆记录弹窗
 │   │   ├── settings_dialog.py # 设置对话框（快捷键/前缀/网格）
 │   │   ├── segmented_control.py # 分段按钮（贴图/标注模式滑动切换）
 │   │   ├── theme.py           # 深色/浅色主题（40+ 色值/完整 QSS）

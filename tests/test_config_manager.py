@@ -25,7 +25,7 @@ class TestLoadAll:
     def test_returns_dict_with_expected_keys(self):
         result = config_manager.load_all()
         assert {'shortcuts', 'theme', 'language', 'max_labels',
-                'grid_line_width', 'grid_alpha'}.issubset(result.keys())
+                'grid_line_width', 'grid_alpha', 'memory'}.issubset(result.keys())
 
     def test_shortcuts_has_all_keys(self):
         sc = config_manager.load_all()['shortcuts']
@@ -75,33 +75,62 @@ class TestSaveLoadRoundtrip:
             language=original['language'],
         )
 
-    def test_handy_records_dedupe_and_limit(self):
-        original = config_manager.load_handy_records()
+    def test_memory_records_dedupe_limit_and_edit_mode(self):
+        original = config_manager.load_memory_records()
         try:
             records = [
                 {'note': f'n{i}', 'background_path': f'b{i}', 'paste_path': '', 'label_path': ''}
                 for i in range(11)
             ]
-            config_manager.save_handy_records(records)
-            assert len(config_manager.load_handy_records()) == 10
+            config_manager.save_memory_records(records)
+            assert len(config_manager.load_memory_records()) == 10
 
-            config_manager.upsert_handy_record({
+            config_manager.upsert_memory_record({
                 'note': 'updated', 'background_path': 'b10', 'paste_path': '', 'label_path': '',
-                'background_index': 3,
+                'background_index': 3, 'edit_mode': 'annotate',
             })
-            loaded = config_manager.load_handy_records()
+            loaded = config_manager.load_memory_records()
             assert loaded[0]['note'] == 'updated'
             assert loaded[0]['background_index'] == 3
+            assert loaded[0]['edit_mode'] == 'annotate'
             assert sum(1 for r in loaded if r['background_path'] == 'b10') == 1
             assert loaded[0]['paste_path'] == ''
             assert loaded[0]['label_path'] == ''
 
-            config_manager.upsert_handy_record({
+            config_manager.upsert_memory_record({
                 'note': '', 'background_path': 'b10', 'paste_path': '', 'label_path': ''
             })
-            assert config_manager.load_handy_records()[0]['note'] == ''
+            assert config_manager.load_memory_records()[0]['note'] == ''
         finally:
-            config_manager.save_handy_records(original)
+            config_manager.save_memory_records(original)
+
+    def test_load_memory_records_ignores_legacy_config_key(self):
+        original = config_manager.load_config()
+        try:
+            config_manager.save_config({
+                'handy_records': [{
+                    'note': 'legacy', 'background_path': 'legacy_bg',
+                    'paste_path': '', 'label_path': '', 'edit_mode': 'annotate',
+                }]
+            })
+            loaded = config_manager.load_memory_records()
+            assert loaded == []
+        finally:
+            config_manager.save_config(original)
+
+    def test_save_memory_records_writes_memory_and_removes_legacy_key(self):
+        original = config_manager.load_config()
+        try:
+            config_manager.save_config({'handy_records': [{'background_path': 'old'}]})
+            config_manager.save_memory_records([
+                {'note': 'new', 'background_path': 'new_bg', 'paste_path': '', 'label_path': ''}
+            ])
+            saved = config_manager.load_config()
+            assert 'memory' in saved
+            assert 'handy_records' not in saved
+            assert saved['memory'][0]['background_path'].endswith('new_bg')
+        finally:
+            config_manager.save_config(original)
 
 
 class TestDefaults:

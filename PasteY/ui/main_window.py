@@ -80,9 +80,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.current_background = None
         self.current_background_index = -1
         self.small_images = []
-        self._handy_background_path = ""
-        self._handy_paste_path = ""
-        self._handy_label_path = ""
+        self._memory_background_path = ""
+        self._memory_paste_path = ""
+        self._memory_label_path = ""
         self.canvas_items_dict = {}
         self.canvas_items = []
         self.selected_item = None
@@ -120,28 +120,28 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.save_manager.label_list_changed.connect(self.update_label_list)
         self._is_delete_view = False
 
-    def _save_handy_record_on_close(self):
+    def _save_memory_record_on_close(self):
         """关闭时保存当前素材来源路径组合。"""
         from ..core import config_manager
 
         record = {
             'note': '',
-            'background_path': self._handy_background_path,
-            'paste_path': self._handy_paste_path,
-            'label_path': self._handy_label_path,
+            'background_path': self._memory_background_path,
+            'paste_path': self._memory_paste_path,
+            'label_path': self._memory_label_path,
             'background_index': self.current_background_index if self.current_background_index >= 0 else 0,
             'edit_mode': getattr(self, 'edit_mode', 'paste'),
             'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         }
-        for existing in config_manager.load_handy_records():
+        for existing in config_manager.load_memory_records():
             if all(existing.get(k) == record[k] for k in ('background_path', 'paste_path', 'label_path')):
                 record['note'] = existing.get('note', '')
                 break
-        config_manager.upsert_handy_record(record)
+        config_manager.upsert_memory_record(record)
 
-    def load_handy_record(self, record):
-        """用巧手记录替换当前打开的背景图、贴图和标签来源。"""
-        self._clear_handy_content()
+    def load_memory_record(self, record):
+        """用记忆记录替换当前打开的背景图、贴图和标签来源。"""
+        self._clear_memory_content()
         missing = []
 
         bg_path = record.get('background_path') or ''
@@ -167,11 +167,16 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             else:
                 missing.append(label_path)
 
+        edit_mode = record.get('edit_mode')
+        if edit_mode not in ('paste', 'annotate'):
+            edit_mode = 'annotate' if label_path and not paste_path else 'paste'
+        self._set_edit_mode(edit_mode, animated=False)
+
         self.update_file_count()
         if missing and hasattr(self, 'status_label'):
             self.status_label.setText(f"{tr('路径不存在')}: {missing[0]}")
 
-    def _clear_handy_content(self):
+    def _clear_memory_content(self):
         """加载记录前清空当前素材，避免新旧内容混在一起。"""
         self.background_images.clear()
         self.small_images.clear()
@@ -183,9 +188,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.current_background = None
         self.current_background_index = -1
         self.selected_item = None
-        self._handy_background_path = ""
-        self._handy_paste_path = ""
-        self._handy_label_path = ""
+        self._memory_background_path = ""
+        self._memory_paste_path = ""
+        self._memory_label_path = ""
         for widget_name in ('background_list', 'small_list', 'label_list'):
             if hasattr(self, widget_name):
                 getattr(self, widget_name).clear()
@@ -271,14 +276,29 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 }}
             """)
 
+    def _apply_mode_visibility_defaults(self):
+        """模式切换时重置显示项，避免上个模式的显示状态串到当前模式。"""
+        if not hasattr(self, 'show_label_names_checkbox'):
+            return
+        is_annotate = self.edit_mode == 'annotate'
+        if hasattr(self, 'show_labels_checkbox'):
+            self.show_labels_checkbox.setChecked(is_annotate)
+        self.show_label_names_checkbox.setChecked(is_annotate)
+        if hasattr(self, 'show_paste_names_checkbox'):
+            self.show_paste_names_checkbox.setChecked(not is_annotate)
+
     def _toggle_edit_mode(self):
         """切换标注/贴图模式"""
         sender = self.sender()
         if sender == self.btn_paste_mode:
-            self.edit_mode = 'paste'
+            self._set_edit_mode('paste', animated=True)
         else:
-            self.edit_mode = 'annotate'
-        self._update_mode_seg_style(animated=True)
+            self._set_edit_mode('annotate', animated=True)
+
+    def _set_edit_mode(self, mode, animated=False):
+        self.edit_mode = 'annotate' if mode == 'annotate' else 'paste'
+        self._apply_mode_visibility_defaults()
+        self._update_mode_seg_style(animated=animated)
         from PyQt5.QtCore import QTimer
         mode_text = "Annotate" if self.edit_mode == 'annotate' else "Paste"
         self.status_label.setText(f"Mode: {mode_text}")
@@ -687,9 +707,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.size_lbl.setText(tr("短边尺寸:"))
         if hasattr(self, 'options_btn'):
             self.options_btn.setText(tr("选项"))
-        if hasattr(self, 'handy_btn'):
-            self.handy_btn.setText(tr("巧手"))
-            self.handy_btn.setToolTip(tr("巧手记录"))
+        if hasattr(self, 'memory_btn'):
+            self.memory_btn.setText(tr("记忆"))
+            self.memory_btn.setToolTip(tr("记忆记录"))
         if hasattr(self, '_draw_box_action'):
             sc = self._get_shortcut('draw_box')
             self._draw_box_action.setText(f"  {tr('绘制BOX')}\t{sc}")

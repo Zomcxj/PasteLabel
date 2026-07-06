@@ -586,15 +586,62 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         is_dark = ThemeManager.get_mode().value == "dark"
         QTimer.singleShot(30, lambda: self._set_titlebar_dark(is_dark))
 
-    def _set_titlebar_dark(self, dark):
+    def _set_titlebar_dark(self, dark, force_refresh=False):
         """设置系统标题栏颜色"""
         hwnd = int(self.winId())
-        set_titlebar_dark(hwnd, dark)
+        set_titlebar_dark(hwnd, dark, force_refresh=force_refresh)
+
+    def _sync_all_titlebars(self, dark, force_refresh=False):
+        """同步所有已创建顶层窗口的系统标题栏颜色。"""
+        app = QApplication.instance()
+        if app is None:
+            return
+        for widget in app.topLevelWidgets():
+            if not widget.isWindow():
+                continue
+            try:
+                set_titlebar_dark(int(widget.winId()), dark, force_refresh=force_refresh)
+            except Exception:
+                pass
+
+    def _apply_app_palette(self):
+        """同步 Qt 调色板，补足 Win10 原生控件/窗口背景刷新。"""
+        app = QApplication.instance()
+        if app is None:
+            return
+        try:
+            from PyQt5.QtGui import QPalette, QColor
+        except ImportError:
+            return
+        t = ThemeManager.get_theme()
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(t['window_bg']))
+        palette.setColor(QPalette.WindowText, QColor(t['text_primary']))
+        palette.setColor(QPalette.Base, QColor(t['widget_bg']))
+        palette.setColor(QPalette.AlternateBase, QColor(t['panel_bg']))
+        palette.setColor(QPalette.Text, QColor(t['text_primary']))
+        palette.setColor(QPalette.Button, QColor(t['widget_bg']))
+        palette.setColor(QPalette.ButtonText, QColor(t['text_primary']))
+        palette.setColor(QPalette.Highlight, QColor(t['accent']))
+        palette.setColor(QPalette.HighlightedText, QColor(t['widget_bg']))
+        palette.setColor(QPalette.ToolTipBase, QColor(t['tooltip_bg']))
+        palette.setColor(QPalette.ToolTipText, QColor(t['tooltip_text']))
+        palette.setColor(QPalette.Disabled, QPalette.Text, QColor(t['text_disabled']))
+        palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(t['text_disabled']))
+        app.setPalette(palette)
 
     def _apply_theme(self):
         """应用当前主题样式"""
         app = QApplication.instance()
+        self._apply_app_palette()
         app.setStyleSheet(ThemeManager.get_stylesheet())
+        for widget in app.topLevelWidgets():
+            try:
+                widget.style().unpolish(widget)
+                widget.style().polish(widget)
+                widget.update()
+            except Exception:
+                pass
         if hasattr(self, 'theme_btn'):
             is_dark = ThemeManager.get_mode().value == "dark"
             self.theme_btn.setText("🌙" if is_dark else "☀")
@@ -603,7 +650,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.prefix_input.setProperty("placeholder", not has_text)
             self.prefix_input.style().unpolish(self.prefix_input)
             self.prefix_input.style().polish(self.prefix_input)
-        self.canvas.update()
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
+        app.processEvents()
 
     def _update_status_info(self):
         """更新状态栏信息"""
@@ -623,10 +672,11 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._apply_theme()
         self._update_mode_seg_style()
         is_dark = ThemeManager.get_mode().value == "dark"
-        self._set_titlebar_dark(is_dark)
+        self._sync_all_titlebars(is_dark, force_refresh=True)
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(80, lambda: self._sync_all_titlebars(is_dark, force_refresh=True))
         config_manager.save_theme('dark' if is_dark else 'light')
         self.status_label.setText(f"Theme: {'Dark' if is_dark else 'Light'}")
-        from PyQt5.QtCore import QTimer
         QTimer.singleShot(2000, lambda: self.status_label.setText(""))
 
     def toggle_language(self):

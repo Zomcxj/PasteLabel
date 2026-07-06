@@ -61,7 +61,9 @@ class CanvasDrawingMixin:
         for i in range(self._editor.label_list.count()):
             label_items.append(self._editor.label_list.item(i).text())
 
-        selected_label = LabelSelectionDialog.select_label(self, label_items)
+        selected_label = LabelSelectionDialog.select_label(
+            self, label_items, anchor_rect=self.temp_draw_box
+        )
 
         if selected_label:
             self._create_detection_box(x, y, width, height, selected_label)

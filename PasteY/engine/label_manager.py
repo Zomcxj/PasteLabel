@@ -225,34 +225,64 @@ class LabelManager(QObject):
         )
         
         if reply == dialog_helpers.QMessageBox.Yes:
-            # 从当前检测框中删除
-            self.editor.detection_boxes = [
-                box for box in self.editor.detection_boxes
-                if box.get("label") != label_to_delete
-            ]
-            self.editor.canvas.selected_box = None
-            
-            # 从所有背景的检测框中删除
-            for index in self.editor.detection_boxes_dict:
+            current_index = self.editor.current_background_index
+            if current_index >= 0:
+                self.editor.detection_boxes_dict[current_index] = \
+                    self.editor.detection_boxes.copy()
+
+            # 从所有背景的检测框中删除，并以当前背景索引重新同步当前列表
+            for index, boxes in list(self.editor.detection_boxes_dict.items()):
                 self.editor.detection_boxes_dict[index] = [
-                    box for box in self.editor.detection_boxes_dict[index]
+                    box for box in boxes
                     if box.get("label") != label_to_delete
                 ]
+
+            if current_index >= 0:
+                self.editor.detection_boxes = \
+                    self.editor.detection_boxes_dict.get(current_index, []).copy()
+            else:
+                self.editor.detection_boxes = []
+            self.editor.canvas.selected_box = None
             
             # 更新全局标签
             if label_to_delete in self.editor.global_labels:
                 self.editor.global_labels.remove(label_to_delete)
             
-            # 保存到所有JSON文件
-            import os
+            # 保存到所有 JSON 文件：必须传 current_index，否则会把当前图片的标签写到其它图片
             for index in self.editor.detection_boxes_dict:
-                if index < len(self.editor.background_images):
-                    file_path = self.editor.background_images[index]
-                    background_name = os.path.basename(file_path)
-                    self.editor.save_json(file_path, background_name, "", canvas_items=[])
+                self._save_detection_json_for_index(index)
 
             self.label_list_changed.emit()
             self.data_changed.emit()
+
+    def _save_detection_json_for_index(self, index):
+        """按背景索引保存检测框，避免当前图片与其它图片标签串写。"""
+        if index < 0 or index >= len(self.editor.background_images):
+            return
+
+        import os
+        file_path = self.editor.background_images[index]
+        background_name = os.path.basename(file_path)
+        image_width = None
+        image_height = None
+        try:
+            from PyQt5.QtGui import QImageReader
+            image_size = QImageReader(file_path).size()
+            if image_size.isValid():
+                image_width = image_size.width()
+                image_height = image_size.height()
+        except (ImportError, AttributeError):
+            pass
+
+        self.editor.save_json(
+            file_path,
+            background_name,
+            "",
+            canvas_items=[],
+            image_width=image_width,
+            image_height=image_height,
+            current_index=index,
+        )
     
     def add_label(self, label_name=None):
         """添加标签"""

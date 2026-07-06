@@ -212,7 +212,7 @@ class UIBuilderMixin:
 
         self.show_label_names_checkbox = QCheckBox(tr("显示Label"))
         self.show_label_names_checkbox.setObjectName("showLabelCb")
-        self.show_label_names_checkbox.setChecked(True)
+        self.show_label_names_checkbox.setChecked(False)
         self.show_label_names_checkbox.stateChanged.connect(self.on_labels_checkbox_changed)
 
         self.auto_label_checkbox = QCheckBox(tr("贴图标签"))
@@ -243,13 +243,13 @@ class UIBuilderMixin:
         """创建选项下拉菜单按钮"""
         from PyQt5.QtWidgets import QMenu, QAction
 
-        self.handy_btn = QPushButton(tr("记忆"))
-        self.handy_btn.setObjectName("optionsBtn")
-        self.handy_btn.setFixedWidth(70)
-        self.handy_btn.setFixedHeight(24)
-        self.handy_btn.setToolTip(tr("记忆"))
-        self.handy_btn.clicked.connect(self._show_handy_records)
-        layout.addWidget(self.handy_btn)
+        self.memory_btn = QPushButton(tr("记忆"))
+        self.memory_btn.setObjectName("optionsBtn")
+        self.memory_btn.setFixedWidth(70)
+        self.memory_btn.setFixedHeight(24)
+        self.memory_btn.setToolTip(tr("记忆记录"))
+        self.memory_btn.clicked.connect(self._show_memory_records)
+        layout.addWidget(self.memory_btn)
 
         layout.addSpacing(4)
 
@@ -346,10 +346,10 @@ class UIBuilderMixin:
         QTimer.singleShot(0, lambda: self.mode_seg_ctrl.update_position(animated=False))
         layout.addWidget(self.mode_seg)
 
-    def _show_handy_records(self):
-        """显示巧手记录弹窗"""
-        from .handy_dialog import HandyRecordsDialog
-        HandyRecordsDialog(self).exec_()
+    def _show_memory_records(self):
+        """显示记忆记录弹窗"""
+        from .memory_dialog import MemoryRecordsDialog
+        MemoryRecordsDialog(self).exec_()
 
     def _validate_size_range(self):
         """验证尺寸范围，确保最小值不大于最大值"""

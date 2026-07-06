@@ -40,7 +40,7 @@ class ImageLoaderMixin:
             self, tr("选择背景图片"), "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)"
         )
         if files:
-            self._handy_background_path = os.path.dirname(files[0])
+            self._memory_background_path = os.path.dirname(files[0])
             self.background_images.clear()
             self.background_list.clear()
             self.current_background = None
@@ -81,8 +81,8 @@ class ImageLoaderMixin:
         self.load_background_folder(folder_path)
 
     def load_background_folder(self, folder_path):
-        """从指定文件夹加载背景图，供文件夹按钮和巧手记录复用。"""
-        self._handy_background_path = folder_path
+        """从指定文件夹加载背景图，供文件夹按钮和记忆记录复用。"""
+        self._memory_background_path = folder_path
 
         self.background_images.clear()
         self.background_list.clear()
@@ -123,7 +123,7 @@ class ImageLoaderMixin:
             self, tr("选择贴图片"), "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)"
         )
         if files:
-            self._handy_paste_path = os.path.dirname(files[0])
+            self._memory_paste_path = os.path.dirname(files[0])
             self.small_images.clear()
             self.small_list.clear()
 
@@ -145,8 +145,8 @@ class ImageLoaderMixin:
         self.load_paste_folder(folder_path)
 
     def load_paste_folder(self, folder_path):
-        """从指定文件夹加载贴图，供文件夹按钮和巧手记录复用。"""
-        self._handy_paste_path = folder_path
+        """从指定文件夹加载贴图，供文件夹按钮和记忆记录复用。"""
+        self._memory_paste_path = folder_path
 
         self.small_images.clear()
         self.small_list.clear()
@@ -232,8 +232,8 @@ class ImageLoaderMixin:
             self.load_paste_label_file(file_path)
 
     def load_paste_label_file(self, file_path):
-        """从指定标签文件加载贴图标签，供文件按钮和巧手记录复用。"""
-        self._handy_label_path = file_path
+        """从指定标签文件加载贴图标签，供文件按钮和记忆记录复用。"""
+        self._memory_label_path = file_path
         try:
             labels = []
             with open(file_path, 'r', encoding='utf-8') as f:

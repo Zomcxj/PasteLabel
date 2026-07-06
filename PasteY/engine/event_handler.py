@@ -271,6 +271,6 @@ class EventHandlerMixin:
 
     def closeEvent(self, event):
         """关闭窗口事件 - 直接关闭，不弹确认框"""
-        if hasattr(self, '_save_handy_record_on_close'):
-            self._save_handy_record_on_close()
+        if hasattr(self, '_save_memory_record_on_close'):
+            self._save_memory_record_on_close()
         event.accept()

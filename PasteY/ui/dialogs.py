@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
     QLineEdit, QPushButton, QApplication
 )
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt
 
 from ..core.utils import extract_label_name
 from . import i18n
@@ -63,7 +63,7 @@ class LabelSelectionDialog(QDialog):
     def showEvent(self, event):
         super().showEvent(event)
         self._position_dialog()
-        QTimer.singleShot(30, self._sync_titlebar)
+        self._sync_titlebar()
 
     def _position_dialog(self):
         """优先把标签选择框显示在新标注框的右下角。"""
@@ -166,14 +166,13 @@ class ProgressDialogFactory:
 
     @staticmethod
     def _sync_titlebar(dialog):
-        from PyQt5.QtCore import QTimer
         from .dwm import set_titlebar_dark, is_available
         if not is_available():
             return
+        if not hasattr(dialog, 'winId'):
+            return
         is_dark = ThemeManager.get_mode().value == 'dark'
-        def _apply():
-            set_titlebar_dark(int(dialog.winId()), is_dark)
-        QTimer.singleShot(30, _apply)
+        set_titlebar_dark(int(dialog.winId()), is_dark)
 
 
 class SaveTipDialog:

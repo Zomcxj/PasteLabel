@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QGroupBox, QScrollArea, QWidget, QCheckBox,
     QSpinBox
 )
-from PyQt5.QtCore import Qt, QTimer, QEvent
+from PyQt5.QtCore import Qt, QEvent
 
 from ..core.config import SHORTCUT_CONFIG
 from .theme import ThemeManager, ThemeMode
@@ -44,7 +44,7 @@ class SettingsDialog(QDialog):
         """窗口显示后设置标题栏颜色"""
         super().showEvent(event)
         center_on_parent(self)
-        QTimer.singleShot(30, self._sync_titlebar)
+        self._sync_titlebar()
 
     def closeEvent(self, event):
         """关闭时恢复主窗口快捷键"""

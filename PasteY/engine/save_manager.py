@@ -5,7 +5,7 @@
 import os
 import json
 from typing import TYPE_CHECKING
-from PyQt5.QtCore import pyqtSignal, QObject, QTimer, Qt
+from PyQt5.QtCore import pyqtSignal, QObject, Qt
 from PyQt5.QtGui import QPixmap, QPainter, QColor
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QApplication
 from ..core.config import LABELME_VERSION, DEFAULT_PREFIX
@@ -61,7 +61,7 @@ class _SyncTitleBarDialog(QDialog):
         super().showEvent(event)
         from ..ui.dialog_helpers import center_on_parent
         center_on_parent(self)
-        QTimer.singleShot(30, self._sync)
+        self._sync()
 
     def _sync(self):
         from ..ui.dwm import set_titlebar_dark

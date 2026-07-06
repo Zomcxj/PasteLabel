@@ -1,5 +1,4 @@
 """对话框辅助函数：统一标题栏主题和按钮文字。"""
-from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QDialog, QInputDialog, QMessageBox
 
 from . import i18n
@@ -9,7 +8,7 @@ from .theme import ThemeManager
 
 def sync_titlebar(widget):
     is_dark = ThemeManager.get_mode().value == "dark"
-    QTimer.singleShot(30, lambda: set_titlebar_dark(int(widget.winId()), is_dark))
+    set_titlebar_dark(int(widget.winId()), is_dark)
 
 
 def center_on_parent(dialog, parent=None):

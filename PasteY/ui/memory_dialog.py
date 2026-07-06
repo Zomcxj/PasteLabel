@@ -1,6 +1,5 @@
 """记忆记录弹窗。"""
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QPushButton, QLabel
-from PyQt5.QtCore import QTimer
 
 from ..core import config_manager
 from . import i18n
@@ -48,7 +47,7 @@ class MemoryRecordsDialog(QDialog):
         super().showEvent(event)
         center_on_parent(self)
         is_dark = ThemeManager.get_mode().value == "dark"
-        QTimer.singleShot(30, lambda: set_titlebar_dark(int(self.winId()), is_dark))
+        set_titlebar_dark(int(self.winId()), is_dark)
 
     def _refresh(self):
         self._records = config_manager.load_memory_records()

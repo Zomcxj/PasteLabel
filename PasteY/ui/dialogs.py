@@ -46,7 +46,8 @@ class LabelSelectionDialog(QDialog):
         self.ok_btn = QPushButton(tr("确定"))
         self.ok_btn.setObjectName("successBtn")
         self.cancel_btn = QPushButton(tr("取消"))
-        self.cancel_btn.setStyleSheet(ThemeManager.get_button_style())
+        for btn in (self.ok_btn, self.cancel_btn):
+            btn.setStyleSheet(ThemeManager.get_dialog_button_style())
 
         button_layout.addStretch()
         button_layout.addWidget(self.ok_btn)
@@ -130,7 +131,7 @@ class ProgressDialogFactory:
             QPushButton {{
                 background-color: {t['accent_light']};
                 border: 1px solid {t['accent']};
-                border-radius: 8px;
+                border-radius: 10px;
                 padding: 4px 12px;
                 font-size: 12px;
                 color: {t['accent']};

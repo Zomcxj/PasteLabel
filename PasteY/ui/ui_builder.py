@@ -243,12 +243,11 @@ class UIBuilderMixin:
         """创建选项下拉菜单按钮"""
         from PyQt5.QtWidgets import QMenu, QAction
 
-        self.handy_btn = QPushButton(tr("巧手"))
+        self.handy_btn = QPushButton(tr("记忆"))
         self.handy_btn.setObjectName("optionsBtn")
-        self.handy_btn.setMinimumWidth(60)
-        self.handy_btn.setFixedHeight(24)
         self.handy_btn.setFixedWidth(70)
-        self.handy_btn.setToolTip(tr("巧手记录"))
+        self.handy_btn.setFixedHeight(24)
+        self.handy_btn.setToolTip(tr("记忆"))
         self.handy_btn.clicked.connect(self._show_handy_records)
         layout.addWidget(self.handy_btn)
 
@@ -256,7 +255,6 @@ class UIBuilderMixin:
 
         self.options_btn = QPushButton(tr("选项"))
         self.options_btn.setObjectName("optionsBtn")
-        self.options_btn.setMinimumWidth(60)
         self.options_btn.setFixedHeight(24)
         self.options_btn.setFixedWidth(70)
         self.options_btn.setToolTip(tr("选项设置"))
@@ -298,7 +296,6 @@ class UIBuilderMixin:
 
         self.view_stats_btn = QPushButton(tr("查看"))
         self.view_stats_btn.setObjectName("optionsBtn")
-        self.view_stats_btn.setMinimumWidth(60)
         self.view_stats_btn.setFixedHeight(24)
         self.view_stats_btn.setFixedWidth(70)
         self.view_stats_btn.setToolTip(tr("标签统计"))
@@ -397,7 +394,6 @@ class UIBuilderMixin:
     def _create_control_panel(self):
         """创建控制面板"""
         control_widget = QWidget()
-        control_widget.setMinimumWidth(350)
         control_layout = QVBoxLayout(control_widget)
         control_layout.setSpacing(6)
         control_layout.setContentsMargins(6, 6, 6, 6)

@@ -36,6 +36,7 @@ class FakeEditor:
         self.detection_boxes = []
         self.detection_boxes_dict = {}
         self.current_background = object()
+        self.current_background_index = 0
         self.label_list = FakeList()
         self.background_images = []
         self.canvas = type("Canvas", (), {"selected_box": None})()
@@ -91,3 +92,38 @@ def test_delete_label_does_not_pass_detection_boxes_as_canvas_items(monkeypatch)
     manager.delete_label()
 
     assert editor.saved[0][1]["canvas_items"] == []
+
+
+def test_delete_label_saves_each_background_with_its_own_index(monkeypatch):
+    editor = FakeEditor()
+    editor.label_list = FakeList([FakeItem("cat (1)")])
+    editor.global_labels = {"cat", "dog"}
+    editor.background_images = ["img0.png", "img1.png"]
+    editor.current_background_index = 1
+    editor.detection_boxes = [
+        {"label": "cat", "x": 1, "y": 1, "width": 2, "height": 2},
+        {"label": "dog", "x": 2, "y": 2, "width": 3, "height": 3},
+    ]
+    editor.detection_boxes_dict = {
+        0: [{"label": "cat", "x": 0, "y": 0, "width": 1, "height": 1}],
+        1: list(editor.detection_boxes),
+    }
+
+    from PasteY.engine import label_manager
+    monkeypatch.setattr(
+        label_manager.dialog_helpers,
+        "question",
+        lambda *a, **kw: label_manager.dialog_helpers.QMessageBox.Yes,
+    )
+    manager = LabelManager(editor)
+    manager.label_list_changed = FakeSignal()
+    manager.data_changed = FakeSignal()
+
+    manager.delete_label()
+
+    assert editor.detection_boxes == [
+        {"label": "dog", "x": 2, "y": 2, "width": 3, "height": 3}
+    ]
+    assert editor.detection_boxes_dict == {0: [], 1: editor.detection_boxes}
+    assert [call[1]["current_index"] for call in editor.saved] == [0, 1]
+    assert [call[1]["canvas_items"] for call in editor.saved] == [[], []]

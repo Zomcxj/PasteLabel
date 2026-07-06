@@ -13,6 +13,15 @@ from ..ui.i18n import t as tr
 class CanvasMenuMixin:
     """右键菜单逻辑"""
 
+    @staticmethod
+    def _remove_index_from_mapping(mapping, removed_index):
+        """删除背景图后同步重排按图片索引保存的数据。"""
+        return {
+            (index - 1 if index > removed_index else index): value
+            for index, value in mapping.items()
+            if index != removed_index
+        }
+
     def _handle_right_click(self, mouse_pos):
         item_index = self.find_item_at_position(mouse_pos)
         if item_index is not None:
@@ -94,6 +103,9 @@ class CanvasMenuMixin:
                 for box in self._editor.detection_boxes_dict[idx]:
                     if box.get("label") == old_label:
                         box["label"] = new_label
+            if self._editor.current_background_index >= 0:
+                self._editor.detection_boxes_dict[self._editor.current_background_index] = \
+                    self._editor.detection_boxes.copy()
             self._editor.update_label_list()
             self.update()
 
@@ -101,6 +113,10 @@ class CanvasMenuMixin:
         """切换检测框标签"""
         if 0 <= box_index < len(self._editor.detection_boxes):
             self._editor.detection_boxes[box_index]["label"] = new_label
+            if self._editor.current_background_index >= 0:
+                self._editor.detection_boxes_dict[self._editor.current_background_index] = \
+                    self._editor.detection_boxes.copy()
+            self._editor.update_label_list()
             self.update()
 
     def _show_restore_context_menu(self, mouse_pos):
@@ -166,10 +182,12 @@ class CanvasMenuMixin:
             shutil.move(json_path, os.path.join(delete_dir, os.path.basename(json_path)))
 
         self._editor.background_images.pop(idx)
-        if idx in self._editor.canvas_items_dict:
-            del self._editor.canvas_items_dict[idx]
-        if idx in self._editor.detection_boxes_dict:
-            del self._editor.detection_boxes_dict[idx]
+        self._editor.canvas_items_dict = self._remove_index_from_mapping(
+            self._editor.canvas_items_dict, idx
+        )
+        self._editor.detection_boxes_dict = self._remove_index_from_mapping(
+            self._editor.detection_boxes_dict, idx
+        )
 
         new_idx = min(idx, len(self._editor.background_images) - 1)
         if self._editor.background_images:

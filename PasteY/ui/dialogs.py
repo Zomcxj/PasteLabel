@@ -4,7 +4,7 @@
 import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
-    QLineEdit, QPushButton
+    QLineEdit, QPushButton, QApplication
 )
 from PyQt5.QtCore import Qt, QTimer
 
@@ -18,16 +18,29 @@ from .dwm import set_titlebar_dark
 class LabelSelectionDialog(QDialog):
     """标签选择对话框"""
 
-    def __init__(self, parent=None, labels=None):
+    def __init__(self, parent=None, labels=None, anchor_rect=None):
         super().__init__(parent)
         tr = i18n.t
         self.setWindowTitle(tr("选择标签"))
-        self.setMinimumWidth(400)
+        self.anchor_rect = anchor_rect
+        self.setMinimumWidth(267)
 
         if labels is None:
             labels = []
 
         layout = QVBoxLayout()
+
+        top_layout = QHBoxLayout()
+        self.ok_btn = QPushButton(tr("确定"))
+        self.ok_btn.setObjectName("successBtn")
+        self.ok_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
+        top_layout.addWidget(self.ok_btn)
+
+        self.new_label_input = QLineEdit()
+        self.new_label_input.setPlaceholderText(tr("或输入新标签："))
+        self.new_label_input.setStyleSheet(ThemeManager.get_input_style())
+        top_layout.addWidget(self.new_label_input, 1)
+        layout.addLayout(top_layout)
 
         layout.addWidget(QLabel(tr("现有标签：")))
         self.label_list = QListWidget()
@@ -37,27 +50,9 @@ class LabelSelectionDialog(QDialog):
         self.label_list.setStyleSheet(ThemeManager.get_list_style())
         layout.addWidget(self.label_list)
 
-        layout.addWidget(QLabel(tr("或输入新标签：")))
-        self.new_label_input = QLineEdit()
-        self.new_label_input.setStyleSheet(ThemeManager.get_input_style())
-        layout.addWidget(self.new_label_input)
-
-        button_layout = QHBoxLayout()
-        self.ok_btn = QPushButton(tr("确定"))
-        self.ok_btn.setObjectName("successBtn")
-        self.cancel_btn = QPushButton(tr("取消"))
-        for btn in (self.ok_btn, self.cancel_btn):
-            btn.setStyleSheet(ThemeManager.get_dialog_button_style())
-
-        button_layout.addStretch()
-        button_layout.addWidget(self.ok_btn)
-        button_layout.addWidget(self.cancel_btn)
-        layout.addLayout(button_layout)
-
         self.setLayout(layout)
 
         self.ok_btn.clicked.connect(self.accept)
-        self.cancel_btn.clicked.connect(self.reject)
 
         self.new_label_input.returnPressed.connect(self.accept)
         self.label_list.itemDoubleClicked.connect(self.accept)
@@ -67,8 +62,27 @@ class LabelSelectionDialog(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
-        center_on_parent(self)
+        self._position_dialog()
         QTimer.singleShot(30, self._sync_titlebar)
+
+    def _position_dialog(self):
+        """优先把标签选择框显示在新标注框的右下角。"""
+        if self.anchor_rect is None or self.parent() is None:
+            center_on_parent(self)
+            return
+
+        anchor_pos = self.anchor_rect.bottomRight().toPoint()
+        pos = self.parent().mapToGlobal(anchor_pos)
+
+        screen = QApplication.screenAt(pos)
+        if screen is None:
+            screen = QApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            pos.setX(max(available.left(), min(pos.x(), available.right() - self.width())))
+            pos.setY(max(available.top(), min(pos.y(), available.bottom() - self.height())))
+
+        self.move(pos)
 
     def _sync_titlebar(self):
         is_dark = ThemeManager.get_mode().value == "dark"
@@ -90,9 +104,9 @@ class LabelSelectionDialog(QDialog):
         return ""
     
     @staticmethod
-    def select_label(parent, labels):
+    def select_label(parent, labels, anchor_rect=None):
         """静态方法：显示标签选择对话框并返回选中的标签"""
-        dialog = LabelSelectionDialog(parent, labels)
+        dialog = LabelSelectionDialog(parent, labels, anchor_rect=anchor_rect)
         if dialog.exec_():
             return dialog.get_selected_label()
         return None

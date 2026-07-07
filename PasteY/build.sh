@@ -74,6 +74,8 @@ case "$OS" in
 esac
 log_ok "当前平台: $PLATFORM (uname: $OS)"
 
+
+
 # ==================== 平台相关配置 ====================
 if [ -n "${PYTHON:-}" ]; then
     PYTHON_CMD="$PYTHON"
@@ -87,6 +89,17 @@ else
 fi
 
 PYINSTALLER_CMD="$PYTHON_CMD -m PyInstaller"
+
+# ponytail: conda 的 _ctypes.pyd 依赖 ffi.dll（在 Library/bin），
+# 不加到 PATH 的话 PyInstaller 二进制分析器找不到它
+if [ "$PLATFORM" = "windows" ]; then
+    PYTHON_DIR="$(dirname "$PYTHON_CMD")"
+    CONDA_LIB_BIN="$(cygpath -u "$PYTHON_DIR/Library/bin" 2>/dev/null || echo "$PYTHON_DIR/Library/bin")"
+    if [ -d "$CONDA_LIB_BIN" ]; then
+        PATH="$CONDA_LIB_BIN:$PATH"
+        log_info "已添加 conda Library/bin 到 PATH: $CONDA_LIB_BIN"
+    fi
+fi
 
 if [ "$PLATFORM" = "windows" ]; then
     PYTHON_OPTIMIZE=2

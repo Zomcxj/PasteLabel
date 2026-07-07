@@ -103,6 +103,46 @@ fi
 log_info "PyInstaller 命令: $PYINSTALLER_CMD"
 log_info "Python optimize:  $PYTHON_OPTIMIZE"
 
+# ==================== 构建辅助函数 ====================
+ensure_output_not_locked() {
+    # Windows 下如果 dist/PasteLabel.exe 正在运行，PyInstaller 在覆盖输出文件时会报：
+    # PermissionError: [WinError 5] Access is denied: '...\\dist\\PasteLabel.exe'
+    # 因此在打包前先主动删除旧产物；删除失败时尝试结束同名进程，并给出明确提示。
+    if [ "$PLATFORM" != "windows" ]; then
+        return 0
+    fi
+
+    log_info "检查输出文件是否可覆盖: $OUTPUT_FILE"
+
+    if ! "$PYTHON_CMD" -c "import os, sys; raise SystemExit(0 if os.path.exists(sys.argv[1]) else 1)" "$OUTPUT_FILE" 2>/dev/null; then
+        log_ok "未发现旧输出文件"
+        return 0
+    fi
+
+    if "$PYTHON_CMD" -c "import os, sys; p=sys.argv[1]; os.path.exists(p) and os.remove(p)" "$OUTPUT_FILE" 2>/dev/null; then
+        log_ok "已删除旧输出文件"
+        return 0
+    fi
+
+    log_warn "无法删除旧输出文件，可能 PasteLabel.exe 正在运行或被安全软件占用"
+
+    if command -v taskkill.exe &> /dev/null; then
+        log_info "尝试结束正在运行的 PasteLabel.exe ..."
+        taskkill.exe //F //IM PasteLabel.exe &> /dev/null || true
+        sleep 1
+
+        if "$PYTHON_CMD" -c "import os, sys; p=sys.argv[1]; os.path.exists(p) and os.remove(p)" "$OUTPUT_FILE" 2>/dev/null; then
+            log_ok "已结束旧进程并删除旧输出文件"
+            return 0
+        fi
+    fi
+
+    log_error "无法覆盖输出文件: $OUTPUT_FILE"
+    log_error "请关闭 PasteLabel.exe（或在任务管理器中结束 PasteLabel.exe），然后重新运行构建脚本。"
+    log_error "如果仍失败，请检查杀毒/安全软件是否正在扫描或锁定该文件。"
+    exit 1
+}
+
 # ==================== 前置检查 ====================
 log_info "执行前置检查..."
 
@@ -243,24 +283,30 @@ echo "    --workpath \"${PROJECT_ROOT}/build\" \\"
 echo "    --noconfirm"
 echo "─────────────────────────────────────────"
 
+ensure_output_not_locked
+
 if [ "$CLEAN_BUILD" = true ]; then
     log_info "清理模式：重新分析所有依赖（适合发布版本）"
+    set +e
     "$PYTHON_CMD" -m PyInstaller \
         "$SPEC_FILE" \
         --distpath "${PROJECT_ROOT}/dist" \
         --workpath "${PROJECT_ROOT}/build" \
         --clean \
         --noconfirm
+    BUILD_EXIT_CODE=$?
+    set -e
 else
     log_info "快速模式：使用缓存构建（适合日常开发）"
+    set +e
     "$PYTHON_CMD" -m PyInstaller \
         "$SPEC_FILE" \
         --distpath "${PROJECT_ROOT}/dist" \
         --workpath "${PROJECT_ROOT}/build" \
         --noconfirm
+    BUILD_EXIT_CODE=$?
+    set -e
 fi
-
-BUILD_EXIT_CODE=$?
 
 # 清理临时 spec 文件
 rm -f "$SPEC_FILE"

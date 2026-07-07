@@ -24,6 +24,8 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         self.drag_start = QPoint()
         self.resize_handle = None
         self.resize_start = QPoint()
+        self.hover_resize_target = None
+        self.hover_resize_handle = None
 
         # 背景图缩放和偏移
         self.background_scale = BACKGROUND_SCALE_CONFIG['default_scale']

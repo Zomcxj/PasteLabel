@@ -1,5 +1,8 @@
 """记忆记录弹窗。"""
+import os
+
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QPushButton, QLabel
+from PyQt5.QtCore import QTimer
 
 from ..core import config_manager
 from . import i18n
@@ -54,9 +57,9 @@ class MemoryRecordsDialog(QDialog):
         self.record_list.clear()
         for record in self._records:
             note = record.get('note') or i18n.t("未备注")
-            bg = record.get('background_path') or i18n.t("空")
-            paste = record.get('paste_path') or i18n.t("空")
-            label = record.get('label_path') or i18n.t("空")
+            bg = self._format_memory_path(record.get('background_path'), os.path.isdir)
+            paste = self._format_memory_path(record.get('paste_path'), os.path.isdir)
+            label = self._format_memory_path(record.get('label_path'), os.path.isfile)
             image_index = int(record.get('background_index', 0) or 0) + 1
             edit_mode = record.get('edit_mode', 'paste')
             mode_text = i18n.t("贴图模式") if edit_mode == 'paste' else i18n.t("标注模式")
@@ -68,6 +71,13 @@ class MemoryRecordsDialog(QDialog):
                 f"{i18n.t('标签文件')}: {label}"
             )
 
+    def _format_memory_path(self, path, validator):
+        """格式化记忆路径，并在无效路径右侧标记状态。"""
+        path = path or ''
+        if not path:
+            return i18n.t("空")
+        return path if validator(path) else f"{path}  <{i18n.t('路径不存在')}>"
+
     def _selected_index(self):
         row = self.record_list.currentRow()
         return row if 0 <= row < len(self._records) else -1
@@ -75,8 +85,9 @@ class MemoryRecordsDialog(QDialog):
     def _load_selected(self):
         idx = self._selected_index()
         if idx >= 0 and self._editor:
-            self._editor.load_memory_record(self._records[idx])
+            record = self._records[idx]
             self.accept()
+            QTimer.singleShot(0, lambda: self._editor.load_memory_record(record))
 
     def _edit_note(self):
         idx = self._selected_index()

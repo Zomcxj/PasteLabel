@@ -84,17 +84,25 @@ class UIBuilderMixin:
 
         self._create_toolbar(main_layout)
 
+        self.shortcut_status_label = QLabel("")
+        self.shortcut_status_label.setObjectName("shortcutStatusLabel")
+        self.shortcut_status_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.shortcut_status_label.setMinimumHeight(24)
+        main_layout.addWidget(self.shortcut_status_label)
+
         splitter = self._create_splitter()
         main_layout.addWidget(splitter)
 
         main_layout.setStretch(0, 0)
-        main_layout.setStretch(1, 1)
+        main_layout.setStretch(1, 0)
+        main_layout.setStretch(2, 1)
 
         self.setCentralWidget(central_widget)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusLabel")
-        self.statusBar().addWidget(self.status_label)
+        self.status_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.statusBar().addWidget(self.status_label, 1)
         self.statusBar().show()
 
     def _create_toolbar(self, layout):
@@ -289,6 +297,13 @@ class UIBuilderMixin:
             self.options_menu.addAction(action)
             self._menu_actions.append((action, checkbox, shortcut_action))
 
+        self.canvas_copy_action = QAction(tr("画布图片复制"), self)
+        self.canvas_copy_action.setCheckable(True)
+        self.canvas_copy_action.setChecked(getattr(self, '_canvas_image_copy_enabled', False))
+        self.canvas_copy_action.triggered.connect(self._on_canvas_copy_menu_changed)
+        self.options_menu.addAction(self.canvas_copy_action)
+        self._menu_actions.append((self.canvas_copy_action, None, None))
+
         self.options_btn.setMenu(self.options_menu)
         layout.addWidget(self.options_btn)
 
@@ -345,6 +360,12 @@ class UIBuilderMixin:
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(0, lambda: self.mode_seg_ctrl.update_position(animated=False))
         layout.addWidget(self.mode_seg)
+
+    def _on_canvas_copy_menu_changed(self, checked):
+        """切换画布图片复制功能（仅保留在顶部选项菜单中）。"""
+        self._canvas_image_copy_enabled = bool(checked)
+        from ..core import config_manager
+        config_manager.save_all(canvas_image_copy_enabled=self._canvas_image_copy_enabled)
 
     def _show_memory_records(self):
         """显示记忆记录弹窗"""

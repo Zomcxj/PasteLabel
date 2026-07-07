@@ -4,6 +4,8 @@ Canvas 绘制逻辑 - 检测框的创建、拖动、缩放
 from PyQt5.QtWidgets import QInputDialog
 from PyQt5.QtCore import Qt, QRectF, QSizeF
 
+from ..core.config import DETECTION_BOX_CONFIG
+
 
 class CanvasDrawingMixin:
     """检测框绘制、拖动、缩放"""
@@ -184,7 +186,38 @@ class CanvasDrawingMixin:
             self.update()
 
     def _check_box_handle(self, mouse_pos, x, y, width, height, box_index):
-        handle_size = 8
+        handle_name = self._box_handle_at_pos(mouse_pos, box_index, x, y, width, height)
+        if handle_name:
+            self.selected_box = box_index
+            self.box_resize_start = mouse_pos
+            self.is_resizing_box = True
+            self.resize_handle = handle_name
+            self.hover_resize_target = 'box'
+            self.hover_resize_handle = handle_name
+            self._editor.selected_item = None
+            self.selected_item_size = None
+            self.update_status_label()
+            self.update()
+            return True
+
+        return False
+
+    def _box_handle_at_pos(self, mouse_pos, box_index, x=None, y=None, width=None, height=None):
+        """返回鼠标所在的检测框圆形缩放手柄名称，不修改编辑状态。"""
+        if box_index is None or not (0 <= box_index < len(self._editor.detection_boxes)):
+            return None
+
+        if x is None or y is None or width is None or height is None:
+            background_rect = self.get_background_rect()
+            if background_rect is None:
+                return None
+            box = self._editor.detection_boxes[box_index]
+            x = box["x"] * self.background_scale + background_rect.left()
+            y = box["y"] * self.background_scale + background_rect.top()
+            width = box["width"] * self.background_scale
+            height = box["height"] * self.background_scale
+
+        handle_size = DETECTION_BOX_CONFIG['resize_handle_size']
 
         handles = {
             "br": (x + width, y + height),
@@ -195,20 +228,12 @@ class CanvasDrawingMixin:
 
         for handle_name, (hx, hy) in handles.items():
             handle_rect = QRectF(
-                hx - handle_size if 'r' in handle_name else hx,
-                hy - handle_size if 'b' in handle_name else hy,
-                handle_size, handle_size
+                hx - handle_size / 2,
+                hy - handle_size / 2,
+                handle_size,
+                handle_size,
             )
-
             if handle_rect.contains(mouse_pos):
-                self.selected_box = box_index
-                self.box_resize_start = mouse_pos
-                self.is_resizing_box = True
-                self.resize_handle = handle_name
-                self._editor.selected_item = None
-                self.selected_item_size = None
-                self.update_status_label()
-                self.update()
-                return True
+                return handle_name
 
-        return False
+        return None

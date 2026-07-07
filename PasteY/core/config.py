@@ -36,6 +36,8 @@ DETECTION_BOX_CONFIG = {
     'min_width': 3,  # 最小宽度
     'min_height': 3,  # 最小高度
     'resize_handle_size': 8,  # 调整手柄大小
+    'label_font_size': 9,  # 类别名字号
+    'label_position': 'outside',  # 类别名位置：outside=框外侧，inside=框内侧
     'border_color_selected': (0, 255, 128),  # 选中边框颜色 (RGB)
     'border_color_normal': (0, 255, 128),  # 普通边框颜色 (RGB)
     'fill_color_selected': (0, 255, 128, 50),  # 选中填充颜色 (RGBA)
@@ -116,8 +118,6 @@ LABEL_COLORS = [
 SHORTCUT_CONFIG = {
     'undo': 'Ctrl+Z',
     'redo': 'Ctrl+Y',
-    'save': 'Ctrl+S',
-    'save_all': 'Ctrl+Shift+S',
     'toggle_grid': 'Ctrl+G',
     'toggle_labels': 'R',
     'toggle_label_names': 'T',

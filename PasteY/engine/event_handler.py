@@ -94,6 +94,27 @@ class EventHandlerMixin:
                 shortcut = QShortcut(seq, self)
                 shortcut.activated.connect(handler)
                 self._shortcuts.append(shortcut)
+        self._update_shortcut_status_label()
+
+    def _update_shortcut_status_label(self):
+        """刷新顶部快捷键提示条"""
+        label = getattr(self, 'shortcut_status_label', None)
+        if label is None:
+            return
+
+        items = [
+            (tr("上一张"), 'prev_image'),
+            (tr("下一张"), 'next_image'),
+            (tr("绘制BOX"), 'draw_box'),
+            (tr("退出绘制"), 'quit_draw'),
+            (tr("删除选中"), 'delete_selected'),
+        ]
+        parts = []
+        for name, action in items:
+            shortcut = self._get_shortcut(action)
+            if shortcut:
+                parts.append(f"{name}:{shortcut}")
+        label.setText("  |  ".join(parts))
 
     def update_shortcuts(self):
         """快捷键配置变更后重新注册"""
@@ -102,6 +123,7 @@ class EventHandlerMixin:
             sc.deleteLater()
         self._shortcuts = []
         self.setup_shortcuts()
+        self._update_shortcut_status_label()
 
     def _toggle_labels(self):
         self.show_labels_checkbox.setChecked(not self.show_labels_checkbox.isChecked())

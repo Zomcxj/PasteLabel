@@ -3,11 +3,19 @@
 """
 import os
 import json
-from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG
+from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG
 
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), '.pastelabel.json')
 MEMORY_LIMIT = 10
+DISABLED_SHORTCUT_ACTIONS = {'save', 'save_all'}
+
+
+def _filter_shortcuts(shortcuts):
+    """过滤已禁用的快捷键动作，避免旧配置继续生效。"""
+    if not isinstance(shortcuts, dict):
+        return {}
+    return {k: v for k, v in shortcuts.items() if k not in DISABLED_SHORTCUT_ACTIONS}
 
 
 def get_config_path():
@@ -39,13 +47,13 @@ def save_config(config):
 def load_shortcuts():
     """加载快捷键配置"""
     config = load_config()
-    return config.get('shortcuts', SHORTCUT_CONFIG)
+    return _filter_shortcuts(config.get('shortcuts', SHORTCUT_CONFIG))
 
 
 def save_shortcuts(shortcuts):
     """保存快捷键配置"""
     config = load_config()
-    config['shortcuts'] = shortcuts
+    config['shortcuts'] = _filter_shortcuts(shortcuts)
     return save_config(config)
 
 
@@ -156,7 +164,7 @@ def delete_memory_record(index):
 def load_all():
     """加载所有配置"""
     config = load_config()
-    saved_sc = config.get('shortcuts', {})
+    saved_sc = _filter_shortcuts(config.get('shortcuts', {}))
     merged_sc = {**SHORTCUT_CONFIG, **saved_sc}
     return {
         'shortcuts': merged_sc,
@@ -165,16 +173,22 @@ def load_all():
         'max_labels': config.get('max_labels', STATUSBAR_CONFIG['max_labels']),
         'grid_line_width': config.get('grid_line_width', None),
         'grid_alpha': config.get('grid_alpha', None),
+        'resize_handle_size': config.get('resize_handle_size', DETECTION_BOX_CONFIG['resize_handle_size']),
+        'label_font_size': config.get('label_font_size', DETECTION_BOX_CONFIG['label_font_size']),
+        'label_position': config.get('label_position', DETECTION_BOX_CONFIG['label_position']),
+        'canvas_image_copy_enabled': bool(config.get('canvas_image_copy_enabled', False)),
         'memory': load_memory_records(),
     }
 
 
 def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
-             grid_line_width=None, grid_alpha=None):
+             grid_line_width=None, grid_alpha=None, resize_handle_size=None,
+             label_font_size=None, label_position=None,
+             canvas_image_copy_enabled=None):
     """保存所有配置"""
     config = load_config()
     if shortcuts is not None:
-        config['shortcuts'] = shortcuts
+        config['shortcuts'] = _filter_shortcuts(shortcuts)
     if theme is not None:
         config['theme'] = theme
     if language is not None:
@@ -185,4 +199,12 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['grid_line_width'] = grid_line_width
     if grid_alpha is not None:
         config['grid_alpha'] = grid_alpha
+    if resize_handle_size is not None:
+        config['resize_handle_size'] = resize_handle_size
+    if label_font_size is not None:
+        config['label_font_size'] = label_font_size
+    if label_position is not None:
+        config['label_position'] = label_position
+    if canvas_image_copy_enabled is not None:
+        config['canvas_image_copy_enabled'] = bool(canvas_image_copy_enabled)
     return save_config(config)

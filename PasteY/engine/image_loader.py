@@ -4,7 +4,7 @@
 import os
 import json
 from PyQt5.QtWidgets import (
-    QFileDialog, QListWidgetItem, QMessageBox
+    QApplication, QFileDialog, QListWidgetItem, QMessageBox
 )
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import Qt, QSize
@@ -80,7 +80,7 @@ class ImageLoaderMixin:
             return
         self.load_background_folder(folder_path)
 
-    def load_background_folder(self, folder_path):
+    def load_background_folder(self, folder_path, load_first=True):
         """从指定文件夹加载背景图，供文件夹按钮和记忆记录复用。"""
         self._memory_background_path = folder_path
 
@@ -105,14 +105,22 @@ class ImageLoaderMixin:
 
                 self.canvas_items_dict[new_index] = []
                 self.detection_boxes_dict[new_index] = []
+                if not load_first and new_index % 20 == 0:
+                    QApplication.processEvents()
 
         if self.background_images:
-            self.current_background_index = 0
-            self.background_list.setCurrentRow(0)
-            self.load_image_by_index(0)
-            self._aggregate_all_labels()
-            self.update_label_list()
-            self.update_file_count()
+            if load_first:
+                self.current_background_index = 0
+                self.background_list.setCurrentRow(0)
+                self.load_image_by_index(0)
+                self._aggregate_all_labels()
+                self.update_label_list()
+                self.update_file_count()
+            else:
+                self.current_background_index = -1
+                self._aggregate_all_labels()
+                self.update_label_list()
+                self.update_file_count()
         else:
             QMessageBox.warning(self, tr("警告"), tr("该文件夹中没有找到支持的图片文件"))
             self.update_file_count()
@@ -382,6 +390,8 @@ class ImageLoaderMixin:
             for box in boxes:
                 if "label" in box and box["label"]:
                     self.global_labels.add(box["label"])
+            if idx % 20 == 0:
+                QApplication.processEvents()
 
     def update_file_count(self):
         """更新文件计数显示和标题栏"""

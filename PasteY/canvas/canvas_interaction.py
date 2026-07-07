@@ -5,7 +5,7 @@ import os
 from PyQt5.QtCore import Qt, QRectF, QUrl, QMimeData
 from PyQt5.QtGui import QDrag
 
-from ..core.config import BACKGROUND_SCALE_CONFIG
+from ..core.config import BACKGROUND_SCALE_CONFIG, PASTE_ITEM_CONFIG
 from .canvas_drawing import CanvasDrawingMixin
 from .canvas_menu import CanvasMenuMixin
 
@@ -26,6 +26,9 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
     def _do_canvas_drag_out(self):
         """延迟执行 Canvas 拖出复制"""
+        if not getattr(self._editor, '_canvas_image_copy_enabled', False):
+            self._drag_out_pending = False
+            return
         from PyQt5.QtGui import QCursor
         global_pos = QCursor.pos()
         main_win = self._editor
@@ -56,7 +59,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             return
 
         self._drag_out_pending = (
-            not self.is_drawing_box
+            getattr(self._editor, '_canvas_image_copy_enabled', False)
+            and not self.is_drawing_box
             and not self.is_dragging_background
             and not self.is_dragging_box
             and not self.is_dragging_item
@@ -95,6 +99,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self._clear_selection()
 
     def _handle_item_click(self, item_index, mouse_pos):
+        self.hover_resize_target = None
+        self.hover_resize_handle = None
         self.selected_box = None
         _, rect, _ = self._editor.canvas_items[item_index]
 
@@ -104,6 +110,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self.update()
 
         if self._check_resize_handle(mouse_pos, rect):
+            self.setCursor(Qt.ClosedHandCursor)
             return
 
         background_rect = self.get_background_rect()
@@ -115,30 +122,46 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self._editor.save_undo_state()
             self.drag_start = mouse_pos - item_rect.topLeft()
             self.is_dragging_item = True
+            self.setCursor(Qt.ClosedHandCursor)
 
     def _check_resize_handle(self, mouse_pos, rect):
+        handle_name = self._item_handle_at_pos(mouse_pos, rect)
+        if handle_name:
+            self.resize_handle = handle_name
+            self.resize_start = mouse_pos
+            self.hover_resize_target = 'item'
+            self.hover_resize_handle = handle_name
+            return True
+
+        return False
+
+    def _item_handle_at_pos(self, mouse_pos, rect):
+        """返回鼠标所在的贴图圆形缩放手柄名称，不修改编辑状态。"""
         if not self._editor.current_background:
-            return False
+            return None
 
         background_rect = self.get_background_rect()
         if background_rect is None:
-            return False
+            return None
         item_x = (rect.x() * self.background_scale) + background_rect.left()
         item_y = (rect.y() * self.background_scale) + background_rect.top()
         item_width = rect.width() * self.background_scale
         item_height = rect.height() * self.background_scale
         item_rect = QRectF(item_x, item_y, item_width, item_height)
 
-        handle_size = 8
+        handle_size = PASTE_ITEM_CONFIG['handle_size']
         br_handle = item_rect.bottomRight()
 
-        if (abs(mouse_pos.x() - br_handle.x()) <= handle_size and
-            abs(mouse_pos.y() - br_handle.y()) <= handle_size):
-            self.resize_handle = 'br'
-            self.resize_start = mouse_pos
-            return True
+        handle_rect = QRectF(
+            br_handle.x() - handle_size / 2,
+            br_handle.y() - handle_size / 2,
+            handle_size,
+            handle_size,
+        )
+        if handle_rect.contains(mouse_pos):
+            return 'br'
 
-        return False
+        return None
 
     def _handle_detection_box_click(self, mouse_pos):
         background_rect = self.get_background_rect()
@@ -156,10 +179,13 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
             box_rect = QRectF(box_x, box_y, box_width, box_height)
             if box_rect.contains(mouse_pos):
+                self.hover_resize_target = None
+                self.hover_resize_handle = None
                 self._editor.save_undo_state()
                 self.selected_box = i
                 self.box_drag_start = mouse_pos
                 self.is_dragging_box = True
+                self.setCursor(Qt.ClosedHandCursor)
                 self._editor.selected_item = None
                 self.selected_item_size = None
                 self.update_status_label()
@@ -191,11 +217,17 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self._editor.selected_item = None
         self.selected_item_size = None
         self.selected_box = None
+        self.hover_resize_target = None
+        self.hover_resize_handle = None
+        self.setCursor(Qt.ArrowCursor)
         self.update_status_label()
         self.update()
 
     def _do_canvas_drag_out(self):
         """检测鼠标是否离开窗口，触发拖出复制"""
+        if not getattr(self._editor, '_canvas_image_copy_enabled', False):
+            self._drag_out_pending = False
+            return
         from PyQt5.QtGui import QCursor
         global_pos = QCursor.pos()
         main_win = self._editor
@@ -245,6 +277,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             return
 
         if self.is_dragging_background:
+            self.setCursor(Qt.ClosedHandCursor)
             delta = self.mouse_pos - self.drag_start
             self.background_offset += delta
             self.drag_start = self.mouse_pos
@@ -252,18 +285,22 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             return
 
         if self.is_dragging_box and self.selected_box is not None:
+            self.setCursor(Qt.ClosedHandCursor)
             self._drag_box()
             return
 
         if self.is_resizing_box and self.selected_box is not None:
+            self.setCursor(Qt.ClosedHandCursor)
             self._resize_box()
             return
 
         if self.is_dragging_item and self._editor.selected_item is not None:
+            self.setCursor(Qt.ClosedHandCursor)
             self._drag_item()
             return
 
         if self.resize_handle and self._editor.selected_item is not None:
+            self.setCursor(Qt.ClosedHandCursor)
             self._scale_item()
             return
 
@@ -271,52 +308,120 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.update()
 
     def _check_hover(self):
-        """根据模式悬停自动选中：贴图模式→贴图项，标注模式→检测框"""
+        """更新悬停状态。
+
+        保持原有进入编辑状态方式：贴图点击进入；标注框鼠标移上去进入。
+        同时只在当前编辑对象的缩放手柄上显示高亮提示。
+        """
+        old_target = self.hover_resize_target
+        old_handle = self.hover_resize_handle
+        self.hover_resize_target = None
+        self.hover_resize_handle = None
+
         if self._editor.current_background is None or self._editor.current_background_index < 0:
+            if (old_target, old_handle) != (self.hover_resize_target, self.hover_resize_handle):
+                self.update()
+            return
+
+        bg_rect = self.get_background_rect()
+        if bg_rect is None:
+            if (old_target, old_handle) != (self.hover_resize_target, self.hover_resize_handle):
+                self.update()
             return
 
         is_annotate = getattr(self._editor, 'edit_mode', 'paste') == 'annotate'
-        bg_rect = self.get_background_rect()
-        if bg_rect is None:
-            return
-
-        if is_annotate:
-            # 标注模式：悬停自动选中检测框
-            if self._editor.show_labels_checkbox.isChecked():
-                for i, box in enumerate(self._editor.detection_boxes):
-                    bx = box["x"] * self.background_scale + bg_rect.left()
-                    by = box["y"] * self.background_scale + bg_rect.top()
-                    bw = box["width"] * self.background_scale
-                    bh = box["height"] * self.background_scale
-                    box_rect = QRectF(bx, by, bw, bh)
-                    if box_rect.contains(self.mouse_pos):
-                        self._editor.selected_item = None
-                        self.selected_item_size = None
-                        if self.selected_box != i:
-                            self.selected_box = i
-                            self.update()
-                        return
-                # 鼠标不在任何检测框上时取消选中
-                if self.selected_box is not None:
-                    self.selected_box = None
-                    self.update()
+        if (is_annotate and self._editor.show_labels_checkbox.isChecked() and
+                self._select_hovered_detection_box(bg_rect)):
+            pass
+        elif (self._editor.selected_item is not None and
+            0 <= self._editor.selected_item < len(self._editor.canvas_items)):
+            _, rect, _ = self._editor.canvas_items[self._editor.selected_item]
+            handle = self._item_handle_at_pos(self.mouse_pos, rect)
+            if handle:
+                self.hover_resize_target = 'item'
+                self.hover_resize_handle = handle
+                self.setCursor(Qt.PointingHandCursor)
+            elif self._item_rect_contains(rect, self.mouse_pos):
+                self.setCursor(Qt.OpenHandCursor)
+            else:
+                self.setCursor(Qt.ArrowCursor)
+        elif (self.selected_box is not None and
+              0 <= self.selected_box < len(self._editor.detection_boxes)):
+            handle = self._box_handle_at_pos(self.mouse_pos, self.selected_box)
+            if handle:
+                self.hover_resize_target = 'box'
+                self.hover_resize_handle = handle
+                self.setCursor(Qt.PointingHandCursor)
+            elif self._box_rect_contains(self.selected_box, self.mouse_pos):
+                self.setCursor(Qt.OpenHandCursor)
+            else:
+                self.setCursor(Qt.ArrowCursor)
         else:
-            # 贴图模式：悬停自动选中贴图项
-            for i, (pixmap, rect, label) in enumerate(self._editor.canvas_items):
-                ix = (rect.x() * self.background_scale) + bg_rect.left()
-                iy = (rect.y() * self.background_scale) + bg_rect.top()
-                iw = rect.width() * self.background_scale
-                ih = rect.height() * self.background_scale
-                item_rect = QRectF(ix, iy, iw, ih)
+            self.setCursor(Qt.ArrowCursor)
 
-                if item_rect.contains(self.mouse_pos):
-                    self.selected_box = None
-                    if hasattr(self._editor, 'pressed_label'):
-                        self._editor.pressed_label = None
-                    if self._editor.selected_item != i:
-                        self._editor.selected_item = i
-                        self.selected_item_size = (rect.width(), rect.height())
-                    return
+        if (old_target, old_handle) != (self.hover_resize_target, self.hover_resize_handle):
+            self.update()
+
+    def _select_hovered_detection_box(self, background_rect):
+        """标注模式下，鼠标移入检测框即进入该框编辑状态。"""
+        for i, box in enumerate(self._editor.detection_boxes):
+            box_rect = QRectF(
+                box["x"] * self.background_scale + background_rect.left(),
+                box["y"] * self.background_scale + background_rect.top(),
+                box["width"] * self.background_scale,
+                box["height"] * self.background_scale,
+            )
+
+            handle = self._box_handle_at_pos(
+                self.mouse_pos, i,
+                box_rect.x(), box_rect.y(), box_rect.width(), box_rect.height()
+            )
+            if handle or box_rect.contains(self.mouse_pos):
+                if self.selected_box != i:
+                    self.selected_box = i
+                    self._editor.selected_item = None
+                    self.selected_item_size = None
+                    self.update_status_label()
+
+                if handle:
+                    self.hover_resize_target = 'box'
+                    self.hover_resize_handle = handle
+                    self.setCursor(Qt.PointingHandCursor)
+                else:
+                    self.setCursor(Qt.OpenHandCursor)
+                return True
+
+        return False
+
+    def _item_rect_contains(self, rect, mouse_pos):
+        background_rect = self.get_background_rect()
+        if background_rect is None:
+            return False
+
+        item_rect = QRectF(
+            rect.x() * self.background_scale + background_rect.left(),
+            rect.y() * self.background_scale + background_rect.top(),
+            rect.width() * self.background_scale,
+            rect.height() * self.background_scale,
+        )
+        return item_rect.contains(mouse_pos)
+
+    def _box_rect_contains(self, box_index, mouse_pos):
+        if box_index is None or not (0 <= box_index < len(self._editor.detection_boxes)):
+            return False
+
+        background_rect = self.get_background_rect()
+        if background_rect is None:
+            return False
+
+        box = self._editor.detection_boxes[box_index]
+        box_rect = QRectF(
+            box["x"] * self.background_scale + background_rect.left(),
+            box["y"] * self.background_scale + background_rect.top(),
+            box["width"] * self.background_scale,
+            box["height"] * self.background_scale,
+        )
+        return box_rect.contains(mouse_pos)
 
     def _drag_item(self):
         bg_rect = self.get_background_rect()
@@ -399,6 +504,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.is_dragging_box = False
         self.is_resizing_box = False
         self.resize_handle = None
+        self._check_hover()
         self.update()
 
     def wheelEvent(self, event):

@@ -5,7 +5,7 @@ import os
 import sys
 from datetime import datetime
 from PyQt5.QtWidgets import QMainWindow, QApplication
-from PyQt5.QtCore import QPoint, Qt, QUrl
+from PyQt5.QtCore import QPoint, Qt, QUrl, QTimer
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDrag
 
 from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG
@@ -65,11 +65,20 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.shortcut_config = settings.get('shortcuts', {})
         self._max_labels = settings.get('max_labels', 3)
 
-        from ..core.config import GRID_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG
         if settings.get('grid_line_width') is not None:
             GRID_CONFIG['line_width'] = settings['grid_line_width']
         if settings.get('grid_alpha') is not None:
             GRID_CONFIG['alpha'] = settings['grid_alpha']
+        if settings.get('resize_handle_size') is not None:
+            handle_size = max(3, min(15, int(settings['resize_handle_size'])))
+            DETECTION_BOX_CONFIG['resize_handle_size'] = handle_size
+            PASTE_ITEM_CONFIG['handle_size'] = handle_size
+        if settings.get('label_font_size') is not None:
+            DETECTION_BOX_CONFIG['label_font_size'] = max(5, min(15, int(settings['label_font_size'])))
+        if settings.get('label_position') in ('outside', 'inside'):
+            DETECTION_BOX_CONFIG['label_position'] = settings['label_position']
+        self._canvas_image_copy_enabled = bool(settings.get('canvas_image_copy_enabled', False))
 
     def _init_data(self):
         """初始化数据结构"""
@@ -89,6 +98,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.is_dragging = False
         self.is_resizing = False
         self._canvas_drag_active = False
+        if not hasattr(self, '_canvas_image_copy_enabled'):
+            self._canvas_image_copy_enabled = False
         self.drag_offset = QPoint(0, 0)
         self._busy = False
 
@@ -141,6 +152,12 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def load_memory_record(self, record):
         """用记忆记录替换当前打开的背景图、贴图和标签来源。"""
+        # 记忆弹窗关闭后直接等待加载完成，不再在画布上显示加载动画。
+        QApplication.processEvents()
+        self._load_memory_record_now(record)
+
+    def _load_memory_record_now(self, record):
+        """实际加载记忆记录。"""
         self._clear_memory_content()
         missing = []
 
@@ -149,21 +166,26 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         label_path = record.get('label_path') or ''
         saved_index = int(record.get('background_index', 0) or 0)
 
+        target_background_index = None
         if bg_path:
             if os.path.isdir(bg_path):
-                self.load_background_folder(bg_path)
+                self.load_background_folder(bg_path, load_first=False)
+                QApplication.processEvents()
                 if self.background_images:
-                    self.switch_background_to_index(saved_index)
+                    target_background_index = max(0, min(saved_index, len(self.background_images) - 1))
+                    QApplication.processEvents()
             else:
                 missing.append(bg_path)
         if paste_path:
             if os.path.isdir(paste_path):
                 self.load_paste_folder(paste_path)
+                QApplication.processEvents()
             else:
                 missing.append(paste_path)
         if label_path:
             if os.path.isfile(label_path):
                 self.load_paste_label_file(label_path)
+                QApplication.processEvents()
             else:
                 missing.append(label_path)
 
@@ -173,6 +195,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._set_edit_mode(edit_mode, animated=False)
 
         self.update_file_count()
+        if target_background_index is not None:
+            self.switch_background_to_index(target_background_index)
         if missing and hasattr(self, 'status_label'):
             self.status_label.setText(f"{tr('路径不存在')}: {missing[0]}")
 
@@ -765,7 +789,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self._draw_box_action.setText(f"  {tr('绘制BOX')}\t{sc}")
         if hasattr(self, '_menu_actions'):
             menu_texts = [tr("显示BOX"), tr("显示Label"),
-                         tr("自动保存"), tr("显示网格"), tr("显示贴图名"), tr("添加文件名前缀")]
+                          tr("自动保存"), tr("显示网格"), tr("显示贴图名"),
+                          tr("添加文件名前缀"), tr("画布图片复制")]
             for i, item in enumerate(self._menu_actions):
                 action = item[0]
                 shortcut_action = item[2] if len(item) > 2 else None
@@ -793,6 +818,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.save_btn.setToolTip(tr("保存图片"))
         if hasattr(self, 'save_all_btn'):
             self.save_all_btn.setToolTip(tr("全部保存"))
+        if hasattr(self, '_update_shortcut_status_label'):
+            self._update_shortcut_status_label()
 
     def _refresh_menu_shortcuts(self):
         """刷新选项菜单中的快捷键显示"""
@@ -803,7 +830,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self._draw_box_action.setText(f"  {tr('绘制BOX')}\t{sc}")
         if hasattr(self, '_menu_actions'):
             menu_texts = [tr("显示BOX"), tr("显示Label"),
-                         tr("自动保存"), tr("显示网格"), tr("显示贴图名"), tr("添加文件名前缀")]
+                          tr("自动保存"), tr("显示网格"), tr("显示贴图名"),
+                          tr("添加文件名前缀"), tr("画布图片复制")]
             for i, item in enumerate(self._menu_actions):
                 action = item[0]
                 shortcut_action = item[2] if len(item) > 2 else None
@@ -814,6 +842,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         if hasattr(self, 'draw_box_btn'):
             sc = self._get_shortcut('draw_box')
             self.draw_box_btn.setText(f"{tr('绘制BOX')}({sc})")
+        if hasattr(self, '_update_shortcut_status_label'):
+            self._update_shortcut_status_label()
 
     def save_undo_state(self):
         """保存撤销状态"""

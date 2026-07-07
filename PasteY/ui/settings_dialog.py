@@ -5,13 +5,13 @@ import json
 import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QGroupBox, QScrollArea, QWidget, QCheckBox,
-    QSpinBox
+    QPushButton, QGroupBox, QScrollArea, QWidget, QSpinBox, QStackedWidget,
+    QComboBox
 )
 from PyQt5.QtCore import Qt, QEvent
 
 from ..core.config import SHORTCUT_CONFIG
-from .theme import ThemeManager, ThemeMode
+from .theme import ThemeManager
 from .dwm import set_titlebar_dark
 from .dialog_helpers import center_on_parent
 from ..core import config_manager
@@ -27,7 +27,7 @@ class SettingsDialog(QDialog):
         tr = i18n.t
         self._editor = parent
         self.setWindowTitle(tr("设置"))
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(507)
         self.setMinimumHeight(500)
         self.setObjectName("settingsDialog")
 
@@ -70,6 +70,33 @@ class SettingsDialog(QDialog):
         from . import i18n
         tr = i18n.t
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(10)
+
+        nav_layout = QVBoxLayout()
+        nav_layout.setSpacing(8)
+
+        self.shortcut_page_btn = QPushButton(tr("快捷键设置"))
+        self.shortcut_page_btn.setCheckable(True)
+        self.shortcut_page_btn.setChecked(True)
+        self.shortcut_page_btn.setFixedWidth(108)
+        self.shortcut_page_btn.setMinimumHeight(38)
+        self.shortcut_page_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
+        self.shortcut_page_btn.clicked.connect(lambda: self._switch_page(0))
+        nav_layout.addWidget(self.shortcut_page_btn)
+
+        self.options_page_btn = QPushButton(tr("参数设置"))
+        self.options_page_btn.setCheckable(True)
+        self.options_page_btn.setFixedWidth(108)
+        self.options_page_btn.setMinimumHeight(38)
+        self.options_page_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
+        self.options_page_btn.clicked.connect(lambda: self._switch_page(1))
+        nav_layout.addWidget(self.options_page_btn)
+        nav_layout.addStretch()
+
+        self.stack = QStackedWidget()
 
         group = QGroupBox(tr("快捷键设置"))
         group_layout = QVBoxLayout(group)
@@ -82,8 +109,6 @@ class SettingsDialog(QDialog):
         shortcut_names = {
             'undo': tr("撤销"),
             'redo': tr("重做"),
-            'save': tr("保存"),
-            'save_all': tr("全部保存"),
             'toggle_grid': tr("显示网格"),
             'toggle_labels': tr("显示BOX"),
             'toggle_label_names': tr("显示Label"),
@@ -126,9 +151,9 @@ class SettingsDialog(QDialog):
 
         scroll.setWidget(scroll_content)
         group_layout.addWidget(scroll)
-        layout.addWidget(group)
+        self.stack.addWidget(group)
 
-        opt_group = QGroupBox(tr("选项设置"))
+        opt_group = QGroupBox(tr("参数设置"))
         opt_layout = QVBoxLayout(opt_group)
         opt_layout.setContentsMargins(19, 14, 9, 9)
 
@@ -143,7 +168,7 @@ class SettingsDialog(QDialog):
         prefix_row.addStretch()
         opt_layout.addLayout(prefix_row)
 
-        from ..core.config import GRID_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG
         grid_width_row = QHBoxLayout()
         grid_width_label = QLabel(tr("网格线粗细") + ":")
         grid_width_row.addWidget(grid_width_label, 2)
@@ -178,9 +203,49 @@ class SettingsDialog(QDialog):
         max_labels_row.addStretch()
         opt_layout.addLayout(max_labels_row)
 
-        layout.addWidget(opt_group)
+        handle_size_row = QHBoxLayout()
+        handle_size_label = QLabel(tr("缩放句柄大小") + ":")
+        handle_size_row.addWidget(handle_size_label, 2)
+        self.handle_size_spin = QSpinBox()
+        self.handle_size_spin.setRange(3, 15)
+        self.handle_size_spin.setValue(DETECTION_BOX_CONFIG.get('resize_handle_size', 8))
+        self.handle_size_spin.setMinimumWidth(150)
+        handle_size_row.addWidget(self.handle_size_spin)
+        handle_size_row.addStretch()
+        opt_layout.addLayout(handle_size_row)
 
-        layout.addStretch()
+        label_font_size_row = QHBoxLayout()
+        label_font_size_label = QLabel(tr("类别名字号") + ":")
+        label_font_size_row.addWidget(label_font_size_label, 2)
+        self.label_font_size_spin = QSpinBox()
+        self.label_font_size_spin.setRange(5, 15)
+        self.label_font_size_spin.setValue(DETECTION_BOX_CONFIG.get('label_font_size', 9))
+        self.label_font_size_spin.setMinimumWidth(150)
+        label_font_size_row.addWidget(self.label_font_size_spin)
+        label_font_size_row.addStretch()
+        opt_layout.addLayout(label_font_size_row)
+
+        label_position_row = QHBoxLayout()
+        label_position_label = QLabel(tr("类别名位置") + ":")
+        label_position_row.addWidget(label_position_label, 2)
+        self.label_position_combo = QComboBox()
+        self.label_position_combo.setMinimumWidth(150)
+        self.label_position_combo.addItem(tr("框外侧"), "outside")
+        self.label_position_combo.addItem(tr("框内侧"), "inside")
+        label_position = DETECTION_BOX_CONFIG.get('label_position', 'outside')
+        index = self.label_position_combo.findData(label_position)
+        self.label_position_combo.setCurrentIndex(index if index >= 0 else 0)
+        label_position_row.addWidget(self.label_position_combo)
+        label_position_row.addStretch()
+        opt_layout.addLayout(label_position_row)
+
+        opt_layout.addStretch()
+        self.stack.addWidget(opt_group)
+
+        content_layout.addLayout(nav_layout, 0)
+        content_layout.addWidget(self.stack, 1)
+
+        layout.addLayout(content_layout, 1)
 
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
@@ -197,6 +262,12 @@ class SettingsDialog(QDialog):
         btn_layout.addWidget(cancel_btn)
 
         layout.addLayout(btn_layout)
+
+    def _switch_page(self, index):
+        """切换左侧按钮对应的右侧设置页。"""
+        self.stack.setCurrentIndex(index)
+        self.shortcut_page_btn.setChecked(index == 0)
+        self.options_page_btn.setChecked(index == 1)
 
     def eventFilter(self, obj, event):
         """拦截快捷键输入框的按键事件（含Ctrl+组合键）"""
@@ -258,9 +329,14 @@ class SettingsDialog(QDialog):
         """加载选项状态"""
         if self._editor:
             self.prefix_input.setText(self._editor.prefix_input.text())
-        from ..core.config import GRID_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG
         self.grid_width_spin.setValue(GRID_CONFIG.get('line_width', 1))
         self.grid_alpha_spin.setValue(GRID_CONFIG.get('alpha', 120))
+        self.handle_size_spin.setValue(max(3, min(15, DETECTION_BOX_CONFIG.get('resize_handle_size', 8))))
+        self.label_font_size_spin.setValue(max(5, min(15, DETECTION_BOX_CONFIG.get('label_font_size', 9))))
+        label_position = DETECTION_BOX_CONFIG.get('label_position', 'outside')
+        index = self.label_position_combo.findData(label_position)
+        self.label_position_combo.setCurrentIndex(index if index >= 0 else 0)
 
     def _save_shortcuts(self):
         """保存快捷键到文件并立即生效"""
@@ -278,9 +354,18 @@ class SettingsDialog(QDialog):
             if hasattr(self._editor, '_refresh_menu_shortcuts'):
                 self._editor._refresh_menu_shortcuts()
 
-        from ..core.config import GRID_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG
         GRID_CONFIG['line_width'] = self.grid_width_spin.value()
         GRID_CONFIG['alpha'] = self.grid_alpha_spin.value()
+        handle_size = max(3, min(15, self.handle_size_spin.value()))
+        DETECTION_BOX_CONFIG['resize_handle_size'] = handle_size
+        PASTE_ITEM_CONFIG['handle_size'] = handle_size
+        label_font_size = max(5, min(15, self.label_font_size_spin.value()))
+        label_position = self.label_position_combo.currentData() or 'outside'
+        if label_position not in ('outside', 'inside'):
+            label_position = 'outside'
+        DETECTION_BOX_CONFIG['label_font_size'] = label_font_size
+        DETECTION_BOX_CONFIG['label_position'] = label_position
 
         from ..core import config_manager as cm
         max_labels = self.max_labels_spin.value()
@@ -289,9 +374,14 @@ class SettingsDialog(QDialog):
             max_labels=max_labels,
             grid_line_width=GRID_CONFIG['line_width'],
             grid_alpha=GRID_CONFIG['alpha'],
+            resize_handle_size=handle_size,
+            label_font_size=label_font_size,
+            label_position=label_position,
         )
         if self._editor:
             self._editor._max_labels = max_labels
+            if hasattr(self._editor, 'canvas'):
+                self._editor.canvas.update()
         self.accept()
 
 

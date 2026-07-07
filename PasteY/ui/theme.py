@@ -182,6 +182,12 @@ class ThemeManager:
                 background-color: transparent;
                 color: {t['text_primary']};
             }}
+            QLabel#statusLabel {{
+                color: {t['text_secondary']};
+            }}
+            QLabel#shortcutStatusLabel {{
+                padding: 2px 8px;
+            }}
             QListWidget {{
                 border: 1px solid {t['border_color']};
                 border-radius: 8px;

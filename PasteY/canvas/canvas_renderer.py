@@ -1,7 +1,7 @@
 """
 Canvas 绘制混入 - 负责所有绘制逻辑（背景、贴图、检测框、临时框、网格）
 """
-from PyQt5.QtGui import QPainter, QPixmap, QColor, QPen, QFontMetrics
+from PyQt5.QtGui import QPainter, QPixmap, QColor, QPen, QFontMetrics, QBrush
 from PyQt5.QtCore import Qt, QPointF, QRectF
 
 from ..core.config import DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, GRID_CONFIG, LABEL_COLORS
@@ -146,7 +146,11 @@ class CanvasRendererMixin:
         painter.drawRect(int(item_x), int(item_y), int(item_width), int(item_height))
 
         if is_selected:
-            self._draw_resize_handle(painter, item_rect, border_color)
+            is_handle_hovered = (
+                self.hover_resize_target == 'item' and
+                self.hover_resize_handle == 'br'
+            )
+            self._draw_resize_handle(painter, item_rect, border_color, is_handle_hovered)
 
         self._draw_paste_label(painter, item_x, item_y, label, is_selected, item_index)
 
@@ -171,29 +175,43 @@ class CanvasRendererMixin:
             temp_pixmap
         )
 
-    def _draw_resize_handle(self, painter, item_rect, color):
-        """绘制右下角缩放手柄"""
-        handle_size = PASTE_ITEM_CONFIG['handle_size']
+    def _draw_resize_handle(self, painter, item_rect, color, is_hovered=False):
+        """绘制右下角缩放手柄；悬停时显示白色正方形命中范围。"""
+        size = PASTE_ITEM_CONFIG['handle_size']
+        radius = size / 2
         br_handle = item_rect.bottomRight()
-        painter.fillRect(
-            int(br_handle.x() - handle_size),
-            int(br_handle.y() - handle_size),
-            handle_size, handle_size,
-            color
-        )
+
+        painter.save()
+        if is_hovered:
+            painter.setPen(QPen(color, 2))
+            painter.setBrush(QBrush(QColor(255, 255, 255)))
+            painter.drawRect(QRectF(br_handle.x() - radius, br_handle.y() - radius, size, size))
+        else:
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(color))
+            painter.drawEllipse(br_handle, radius, radius)
+        painter.restore()
 
     @staticmethod
-    def _draw_label_above_rect(painter, x, y, label, bg_color):
-        """在矩形上方绘制标签（背景 + 文字）"""
+    def _draw_label_above_rect(painter, x, y, label, bg_color, font_size=None, position='outside'):
+        """在矩形上方或内侧绘制标签（背景 + 文字）"""
+        painter.save()
         font = painter.font()
+        if font_size is not None:
+            font.setPointSize(font_size)
+        painter.setFont(font)
         metrics = QFontMetrics(font)
         text_width = metrics.horizontalAdvance(label)
         text_height = metrics.height()
+        padding_x = 2
 
-        painter.fillRect(int(x), int(y) - text_height, text_width, text_height, bg_color)
+        label_y = int(y) if position == 'inside' else int(y) - text_height
+        label_rect = QRectF(int(x), label_y, text_width + padding_x * 2, text_height)
+        painter.fillRect(label_rect, bg_color)
         painter.setPen(QColor(0, 0, 0))
-        painter.setFont(font)
-        painter.drawText(int(x), int(y) - 2, label)
+        text_rect = label_rect.adjusted(padding_x, 0, -padding_x, 0)
+        painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, label)
+        painter.restore()
 
     def _draw_paste_label(self, painter, x, y, label, is_selected, item_index=0):
         """绘制贴图标签"""
@@ -271,17 +289,38 @@ class CanvasRendererMixin:
 
     def _draw_box_label(self, painter, x, y, label, bg_color):
         """绘制检测框标签"""
-        self._draw_label_above_rect(painter, x, y, label, bg_color)
+        font_size = max(5, min(15, DETECTION_BOX_CONFIG.get('label_font_size', 9)))
+        position = DETECTION_BOX_CONFIG.get('label_position', 'outside')
+        if position not in ('outside', 'inside'):
+            position = 'outside'
+        self._draw_label_above_rect(painter, x, y, label, bg_color, font_size, position)
 
     def _draw_box_handles(self, painter, x, y, width, height, color):
-        """绘制检测框的四个调整手柄"""
-        handle_size = DETECTION_BOX_CONFIG['resize_handle_size']
+        """绘制检测框四个角的调整手柄；悬停时显示白色正方形命中范围。"""
+        size = DETECTION_BOX_CONFIG['resize_handle_size']
+        radius = size / 2
+        corners = (
+            ('tl', QPointF(x, y)),
+            ('tr', QPointF(x + width, y)),
+            ('bl', QPointF(x, y + height)),
+            ('br', QPointF(x + width, y + height)),
+        )
 
-        painter.fillRect(int(x), int(y), handle_size, handle_size, color)
-        painter.fillRect(int(x + width - handle_size), int(y), handle_size, handle_size, color)
-        painter.fillRect(int(x), int(y + height - handle_size), handle_size, handle_size, color)
-        painter.fillRect(int(x + width - handle_size), int(y + height - handle_size),
-                         handle_size, handle_size, color)
+        painter.save()
+        for handle_name, corner in corners:
+            is_hovered = (
+                self.hover_resize_target == 'box' and
+                self.hover_resize_handle == handle_name
+            )
+            if is_hovered:
+                painter.setPen(QPen(color, 2))
+                painter.setBrush(QBrush(QColor(255, 255, 255)))
+                painter.drawRect(QRectF(corner.x() - radius, corner.y() - radius, size, size))
+            else:
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QBrush(color))
+                painter.drawEllipse(corner, radius, radius)
+        painter.restore()
 
     def _draw_temp_box(self, painter):
         """绘制临时检测框（正在绘制中）"""

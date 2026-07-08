@@ -6,13 +6,13 @@ import sys
 from datetime import datetime
 from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtCore import QPoint, Qt, QUrl, QTimer
-from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDrag
+from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDrag, QIcon
 
 from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG
 from ..core.utils import create_app_icon
 from ..engine.save_manager import SaveManager
 from ..engine.label_manager import LabelManager
-from .ui_builder import UIBuilderMixin
+from .ui_builder import UIBuilderMixin, _load_svg_icon, SUN_SVG, MOON_SVG
 from ..engine.image_loader import ImageLoaderMixin
 from ..engine.paste_engine import PasteEngineMixin
 from ..engine.event_handler import EventHandlerMixin
@@ -295,7 +295,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.mode_seg.setStyleSheet(f"""
                 QFrame {{
                     background-color: {t['accent_light']};
-                    border: 1px solid {t['accent']};
+                    border: none;
                     border-radius: 5px;
                 }}
             """)
@@ -668,7 +668,10 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 pass
         if hasattr(self, 'theme_btn'):
             is_dark = ThemeManager.get_mode().value == "dark"
-            self.theme_btn.setText("🌙" if is_dark else "☀")
+            t = ThemeManager.get_theme()
+            svg = MOON_SVG if is_dark else SUN_SVG
+            icon = QIcon(_load_svg_icon(svg, 16, t['accent']))
+            self.theme_btn.setIcon(icon)
         if hasattr(self, 'prefix_input'):
             has_text = bool(self.prefix_input.text().strip())
             self.prefix_input.setProperty("placeholder", not has_text)

@@ -54,6 +54,13 @@ class TestLoadAll:
         finally:
             config_manager.CONFIG_PATH = original
 
+    def test_magnifier_zoom_defaults_to_config_when_config_missing(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            assert config_manager.load_all()['magnifier_zoom'] == config.MAGNIFIER_CONFIG['zoom']
+        finally:
+            config_manager.CONFIG_PATH = original
+
 
 class TestSaveLoadRoundtrip:
 
@@ -94,6 +101,14 @@ class TestSaveLoadRoundtrip:
         try:
             config_manager.save_all(magnifier_enabled=True)
             assert config_manager.load_all()['magnifier_enabled'] is True
+        finally:
+            config_manager.CONFIG_PATH = original
+
+    def test_magnifier_zoom_roundtrip_through_save_all(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            config_manager.save_all(magnifier_zoom=2.5)
+            assert config_manager.load_all()['magnifier_zoom'] == 2.5
         finally:
             config_manager.CONFIG_PATH = original
 

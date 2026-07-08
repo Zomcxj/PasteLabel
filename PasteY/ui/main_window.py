@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtCore import QPoint, Qt, QUrl, QTimer
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDrag, QIcon
 
-from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG
+from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG, MAGNIFIER_CONFIG
 from ..core.utils import create_app_icon
 from ..engine.save_manager import SaveManager
 from ..engine.label_manager import LabelManager
@@ -38,7 +38,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._init_data()
         self._is_delete_view = False
         self._nav_step = 1
-        self.edit_mode = 'paste'
+        self.edit_mode = 'annotate'
         self.init_ui()
         self._apply_theme()
         self._refresh_ui_texts()
@@ -80,6 +80,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             DETECTION_BOX_CONFIG['label_position'] = settings['label_position']
         self._canvas_image_copy_enabled = bool(settings.get('canvas_image_copy_enabled', False))
         self._magnifier_enabled = bool(settings.get('magnifier_enabled', False))
+        MAGNIFIER_CONFIG['zoom'] = max(0.8, min(3.0, float(settings.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom']))))
 
     def _init_data(self):
         """初始化数据结构"""
@@ -671,9 +672,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 pass
         if hasattr(self, 'theme_btn'):
             is_dark = ThemeManager.get_mode().value == "dark"
-            t = ThemeManager.get_theme()
             svg = MOON_SVG if is_dark else SUN_SVG
-            icon = QIcon(_load_svg_icon(svg, 16, t['accent']))
+            icon = QIcon(_load_svg_icon(svg, 16, "#D4AF37"))
             self.theme_btn.setIcon(icon)
         if hasattr(self, 'prefix_input'):
             has_text = bool(self.prefix_input.text().strip())
@@ -744,7 +744,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.save_btn.setText(tr("保存图片"))
         self.save_all_btn.setText(tr("全部保存"))
         if hasattr(self, 'view_stats_btn'):
-            self.view_stats_btn.setText(tr("查看"))
+            self.view_stats_btn.setText(tr("统计"))
             self.view_stats_btn.setToolTip(tr("标签统计"))
         if hasattr(self, 'view_toggle_btn'):
             if self._is_delete_view:

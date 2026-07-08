@@ -1,7 +1,7 @@
 """
 Canvas 绘制混入 - 负责所有绘制逻辑（背景、贴图、检测框、临时框、网格）
 """
-from PyQt5.QtGui import QPainter, QPixmap, QColor, QPen, QFontMetrics, QBrush
+from PyQt5.QtGui import QPainter, QPixmap, QColor, QPen, QFontMetrics
 from PyQt5.QtCore import Qt, QPointF, QRectF
 
 from ..core.config import DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, GRID_CONFIG, LABEL_COLORS, MAGNIFIER_CONFIG
@@ -187,11 +187,11 @@ class CanvasRendererMixin:
         painter.save()
         if is_hovered:
             painter.setPen(QPen(color, 2))
-            painter.setBrush(QBrush(QColor(255, 255, 255)))
+            painter.setBrush(QColor(255, 255, 255))
             painter.drawRect(QRectF(br_handle.x() - radius, br_handle.y() - radius, size, size))
         else:
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QBrush(color))
+            painter.setBrush(color)
             painter.drawEllipse(br_handle, radius, radius)
         painter.restore()
 
@@ -317,11 +317,11 @@ class CanvasRendererMixin:
             )
             if is_hovered:
                 painter.setPen(QPen(color, 2))
-                painter.setBrush(QBrush(QColor(255, 255, 255)))
+                painter.setBrush(QColor(255, 255, 255))
                 painter.drawRect(QRectF(corner.x() - radius, corner.y() - radius, size, size))
             else:
                 painter.setPen(Qt.NoPen)
-                painter.setBrush(QBrush(color))
+                painter.setBrush(color)
                 painter.drawEllipse(corner, radius, radius)
         painter.restore()
 
@@ -350,6 +350,8 @@ class CanvasRendererMixin:
         if not getattr(self._editor, '_magnifier_enabled', False):
             return
         if getattr(self._editor, 'edit_mode', 'paste') != 'annotate':
+            return
+        if self.selected_box is None and not self.is_drawing_box:
             return
         if not self.mouse_inside or self.mouse_pos is None:
             return

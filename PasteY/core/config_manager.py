@@ -3,7 +3,7 @@
 """
 import os
 import json
-from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG
+from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG
 
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), '.pastelabel.json')
@@ -178,6 +178,7 @@ def load_all():
         'label_position': config.get('label_position', DETECTION_BOX_CONFIG['label_position']),
         'canvas_image_copy_enabled': bool(config.get('canvas_image_copy_enabled', False)),
         'magnifier_enabled': bool(config.get('magnifier_enabled', False)),
+        'magnifier_zoom': float(config.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom'])),
         'memory': load_memory_records(),
     }
 
@@ -185,7 +186,8 @@ def load_all():
 def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
              grid_line_width=None, grid_alpha=None, resize_handle_size=None,
              label_font_size=None, label_position=None,
-             canvas_image_copy_enabled=None, magnifier_enabled=None):
+             canvas_image_copy_enabled=None, magnifier_enabled=None,
+             magnifier_zoom=None):
     """保存所有配置"""
     config = load_config()
     if shortcuts is not None:
@@ -210,4 +212,6 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['canvas_image_copy_enabled'] = bool(canvas_image_copy_enabled)
     if magnifier_enabled is not None:
         config['magnifier_enabled'] = bool(magnifier_enabled)
+    if magnifier_zoom is not None:
+        config['magnifier_zoom'] = max(0.8, min(3.0, float(magnifier_zoom)))
     return save_config(config)

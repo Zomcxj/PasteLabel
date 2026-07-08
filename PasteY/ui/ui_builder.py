@@ -176,7 +176,7 @@ class UIBuilderMixin:
         self.theme_btn.setObjectName("themeBtn")
         self.theme_btn.setFixedSize(28, 28)
         self.theme_btn.setToolTip(tr("切换深色/浅色主题"))
-        self.theme_btn.setIcon(QIcon(_load_svg_icon(SUN_SVG, 16, t['accent'])))
+        self.theme_btn.setIcon(QIcon(_load_svg_icon(SUN_SVG, 16, "#D4AF37")))
         self.theme_btn.clicked.connect(self.toggle_theme)
         upload_layout.addWidget(self.theme_btn)
 
@@ -318,7 +318,7 @@ class UIBuilderMixin:
 
         layout.addSpacing(4)
 
-        self.view_stats_btn = QPushButton(tr("查看"))
+        self.view_stats_btn = QPushButton(tr("统计"))
         self.view_stats_btn.setObjectName("optionsBtn")
         self.view_stats_btn.setFixedHeight(24)
         self.view_stats_btn.setFixedWidth(70)
@@ -345,26 +345,26 @@ class UIBuilderMixin:
         mode_layout.setContentsMargins(0, 0, 0, 0)
         mode_layout.setSpacing(0)
 
-        self.btn_paste_mode = QPushButton(tr("贴图"))
-        self.btn_paste_mode.setCheckable(True)
-        self.btn_paste_mode.setChecked(True)
-        self.btn_paste_mode.setFixedWidth(74)
-        self.btn_paste_mode.setFixedHeight(22)
-        self.btn_paste_mode.clicked.connect(lambda: self._toggle_edit_mode())
-        mode_layout.addWidget(self.btn_paste_mode)
-
         self.btn_annotate_mode = QPushButton(tr("标注"))
         self.btn_annotate_mode.setCheckable(True)
+        self.btn_annotate_mode.setChecked(True)
         self.btn_annotate_mode.setFixedWidth(74)
         self.btn_annotate_mode.setFixedHeight(22)
         self.btn_annotate_mode.clicked.connect(lambda: self._toggle_edit_mode())
         mode_layout.addWidget(self.btn_annotate_mode)
 
-        self.mode_seg_ctrl = AnimatedSegmentedControl(self.mode_seg, self.btn_paste_mode, self.btn_annotate_mode)
+        self.btn_paste_mode = QPushButton(tr("贴图"))
+        self.btn_paste_mode.setCheckable(True)
+        self.btn_paste_mode.setFixedWidth(74)
+        self.btn_paste_mode.setFixedHeight(22)
+        self.btn_paste_mode.clicked.connect(lambda: self._toggle_edit_mode())
+        mode_layout.addWidget(self.btn_paste_mode)
+
+        self.mode_seg_ctrl = AnimatedSegmentedControl(self.mode_seg, self.btn_annotate_mode, self.btn_paste_mode)
         self.mode_seg_ctrl.set_accent(t['accent'])
-        self.btn_paste_mode.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: #FFFFFF; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }}")
         self.btn_annotate_mode.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: #FFFFFF; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }}")
+        self.btn_paste_mode.setStyleSheet(
             f"QPushButton {{ background: transparent; color: {t['accent']}; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }}")
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(0, lambda: self.mode_seg_ctrl.update_position(animated=False))

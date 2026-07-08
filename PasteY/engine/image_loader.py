@@ -105,14 +105,20 @@ class ImageLoaderMixin:
 
                 self.canvas_items_dict[new_index] = []
                 self.detection_boxes_dict[new_index] = []
+                if load_first and self.current_background is None:
+                    self.current_background_index = new_index
+                    self.current_background = self._get_cached_pixmap(file_path)
+                    self.canvas_items = []
+                    self._load_detection_boxes_for_index(new_index, file_path)
+                    self.background_list.setCurrentRow(new_index)
+                    self.canvas.reset_view()
+                    self.update_label_list()
+                    self.canvas.update()
                 if not load_first and new_index % 20 == 0:
                     QApplication.processEvents()
 
         if self.background_images:
             if load_first:
-                self.current_background_index = 0
-                self.background_list.setCurrentRow(0)
-                self.load_image_by_index(0)
                 self._aggregate_all_labels()
                 self.update_label_list()
                 self.update_file_count()

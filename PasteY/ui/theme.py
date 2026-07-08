@@ -230,7 +230,7 @@ class ThemeManager:
             QLineEdit:focus {{
                 border-color: {t['accent']};
             }}
-            QSpinBox {{
+            QSpinBox, QDoubleSpinBox {{
                 border: 1px solid {t['border_color']};
                 border-radius: 6px;
                 padding: 3px 6px;
@@ -239,13 +239,14 @@ class ThemeManager:
                 color: {t['text_primary']};
                 font-family: 'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif;
             }}
-            QSpinBox:hover {{
+            QSpinBox:hover, QDoubleSpinBox:hover {{
                 border-color: {t['border_hover']};
             }}
-            QSpinBox:focus {{
+            QSpinBox:focus, QDoubleSpinBox:focus {{
                 border-color: {t['accent']};
             }}
-            QSpinBox::up-button, QSpinBox::down-button {{
+            QSpinBox::up-button, QSpinBox::down-button,
+            QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
                 width: 16px;
                 border: none;
                 background-color: transparent;
@@ -769,7 +770,7 @@ class ThemeManager:
     def get_spinbox_style(cls):
         t = cls._current_theme
         return f"""
-            QSpinBox {{
+            QSpinBox, QDoubleSpinBox {{
                 border: 1px solid {t['border_color']};
                 border-radius: 6px;
                 padding: 3px 6px;

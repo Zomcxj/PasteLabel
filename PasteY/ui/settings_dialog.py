@@ -6,7 +6,7 @@ import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QGroupBox, QScrollArea, QWidget, QSpinBox, QStackedWidget,
-    QComboBox
+    QComboBox, QDoubleSpinBox
 )
 from PyQt5.QtCore import Qt, QEvent
 
@@ -168,7 +168,7 @@ class SettingsDialog(QDialog):
         prefix_row.addStretch()
         opt_layout.addLayout(prefix_row)
 
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG
         grid_width_row = QHBoxLayout()
         grid_width_label = QLabel(tr("网格线粗细") + ":")
         grid_width_row.addWidget(grid_width_label, 2)
@@ -238,6 +238,20 @@ class SettingsDialog(QDialog):
         label_position_row.addWidget(self.label_position_combo)
         label_position_row.addStretch()
         opt_layout.addLayout(label_position_row)
+
+        magnifier_zoom_row = QHBoxLayout()
+        magnifier_zoom_label = QLabel(tr("放大倍率") + ":")
+        magnifier_zoom_row.addWidget(magnifier_zoom_label, 2)
+        self.magnifier_zoom_spin = QDoubleSpinBox()
+        self.magnifier_zoom_spin.setObjectName("paramSpin")
+        self.magnifier_zoom_spin.setRange(0.8, 3.0)
+        self.magnifier_zoom_spin.setSingleStep(0.1)
+        self.magnifier_zoom_spin.setDecimals(1)
+        self.magnifier_zoom_spin.setMinimumWidth(150)
+        self.magnifier_zoom_spin.setValue(max(0.8, min(3.0, float(MAGNIFIER_CONFIG.get('zoom', 2.0)))))
+        magnifier_zoom_row.addWidget(self.magnifier_zoom_spin)
+        magnifier_zoom_row.addStretch()
+        opt_layout.addLayout(magnifier_zoom_row)
 
         opt_layout.addStretch()
         self.stack.addWidget(opt_group)
@@ -329,7 +343,7 @@ class SettingsDialog(QDialog):
         """加载选项状态"""
         if self._editor:
             self.prefix_input.setText(self._editor.prefix_input.text())
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG
         self.grid_width_spin.setValue(GRID_CONFIG.get('line_width', 1))
         self.grid_alpha_spin.setValue(GRID_CONFIG.get('alpha', 120))
         self.handle_size_spin.setValue(max(3, min(15, DETECTION_BOX_CONFIG.get('resize_handle_size', 8))))
@@ -337,6 +351,7 @@ class SettingsDialog(QDialog):
         label_position = DETECTION_BOX_CONFIG.get('label_position', 'outside')
         index = self.label_position_combo.findData(label_position)
         self.label_position_combo.setCurrentIndex(index if index >= 0 else 0)
+        self.magnifier_zoom_spin.setValue(max(0.8, min(3.0, float(MAGNIFIER_CONFIG.get('zoom', 2.0)))))
 
     def _save_shortcuts(self):
         """保存快捷键到文件并立即生效"""
@@ -354,7 +369,7 @@ class SettingsDialog(QDialog):
             if hasattr(self._editor, '_refresh_menu_shortcuts'):
                 self._editor._refresh_menu_shortcuts()
 
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, MAGNIFIER_CONFIG
         GRID_CONFIG['line_width'] = self.grid_width_spin.value()
         GRID_CONFIG['alpha'] = self.grid_alpha_spin.value()
         handle_size = max(3, min(15, self.handle_size_spin.value()))
@@ -366,6 +381,8 @@ class SettingsDialog(QDialog):
             label_position = 'outside'
         DETECTION_BOX_CONFIG['label_font_size'] = label_font_size
         DETECTION_BOX_CONFIG['label_position'] = label_position
+        magnifier_zoom = max(0.8, min(3.0, float(self.magnifier_zoom_spin.value())))
+        MAGNIFIER_CONFIG['zoom'] = magnifier_zoom
 
         from ..core import config_manager as cm
         max_labels = self.max_labels_spin.value()
@@ -377,6 +394,7 @@ class SettingsDialog(QDialog):
             resize_handle_size=handle_size,
             label_font_size=label_font_size,
             label_position=label_position,
+            magnifier_zoom=magnifier_zoom,
         )
         if self._editor:
             self._editor._max_labels = max_labels

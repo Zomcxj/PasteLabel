@@ -511,12 +511,12 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         if not self._editor.current_background:
             return
 
-        if self._editor.selected_item is not None:
+        if event.modifiers() & Qt.ControlModifier:
+            self._scale_background(event)
+        elif self._editor.selected_item is not None:
             self._scale_selected_item(event)
         elif self.selected_box is not None:
             self._scale_selected_box(event)
-        elif event.modifiers() & Qt.ControlModifier:
-            self._scale_background(event)
 
         self.update()
 

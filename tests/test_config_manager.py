@@ -6,6 +6,7 @@ import sys
 import json
 import importlib.util
 import tempfile
+from pathlib import Path
 
 def _load_module(name, path):
     spec = importlib.util.spec_from_file_location(name, os.path.abspath(path),
@@ -18,6 +19,12 @@ def _load_module(name, path):
 _base = os.path.join(os.path.dirname(__file__), '..', 'PasteY', 'core')
 config = _load_module('config', os.path.join(_base, 'config.py'))
 config_manager = _load_module('config_manager', os.path.join(_base, 'config_manager.py'))
+
+
+def _with_temp_config(tmp_path):
+    original = config_manager.CONFIG_PATH
+    config_manager.CONFIG_PATH = str(Path(tmp_path) / 'missing.json')
+    return original
 
 
 class TestLoadAll:
@@ -39,6 +46,13 @@ class TestLoadAll:
     def test_default_language(self):
         lang = config_manager.load_all()['language']
         assert lang in ('zh', 'en')
+
+    def test_magnifier_disabled_by_default_when_config_missing(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            assert config_manager.load_all()['magnifier_enabled'] is False
+        finally:
+            config_manager.CONFIG_PATH = original
 
 
 class TestSaveLoadRoundtrip:
@@ -74,6 +88,14 @@ class TestSaveLoadRoundtrip:
             theme=original['theme'],
             language=original['language'],
         )
+
+    def test_magnifier_enabled_roundtrip_through_save_all(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            config_manager.save_all(magnifier_enabled=True)
+            assert config_manager.load_all()['magnifier_enabled'] is True
+        finally:
+            config_manager.CONFIG_PATH = original
 
     def test_memory_records_dedupe_limit_and_edit_mode(self):
         original = config_manager.load_memory_records()

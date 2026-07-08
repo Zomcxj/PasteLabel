@@ -79,6 +79,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         if settings.get('label_position') in ('outside', 'inside'):
             DETECTION_BOX_CONFIG['label_position'] = settings['label_position']
         self._canvas_image_copy_enabled = bool(settings.get('canvas_image_copy_enabled', False))
+        self._magnifier_enabled = bool(settings.get('magnifier_enabled', False))
 
     def _init_data(self):
         """初始化数据结构"""
@@ -100,6 +101,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._canvas_drag_active = False
         if not hasattr(self, '_canvas_image_copy_enabled'):
             self._canvas_image_copy_enabled = False
+        if not hasattr(self, '_magnifier_enabled'):
+            self._magnifier_enabled = False
         self.drag_offset = QPoint(0, 0)
         self._busy = False
 
@@ -793,7 +796,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         if hasattr(self, '_menu_actions'):
             menu_texts = [tr("显示BOX"), tr("显示Label"),
                           tr("自动保存"), tr("显示网格"), tr("显示贴图名"),
-                          tr("添加文件名前缀"), tr("画布图片复制")]
+                          tr("添加文件名前缀"), tr("画布图片复制"),
+                          tr("窗口放大器")]
             for i, item in enumerate(self._menu_actions):
                 action = item[0]
                 shortcut_action = item[2] if len(item) > 2 else None
@@ -834,7 +838,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         if hasattr(self, '_menu_actions'):
             menu_texts = [tr("显示BOX"), tr("显示Label"),
                           tr("自动保存"), tr("显示网格"), tr("显示贴图名"),
-                          tr("添加文件名前缀"), tr("画布图片复制")]
+                          tr("添加文件名前缀"), tr("画布图片复制"),
+                          tr("窗口放大器")]
             for i, item in enumerate(self._menu_actions):
                 action = item[0]
                 shortcut_action = item[2] if len(item) > 2 else None

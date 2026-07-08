@@ -122,28 +122,28 @@ class UIBuilderMixin:
 
         self.bg_lbl = QLabel(tr("背景图:"))
         upload_layout.addWidget(self.bg_lbl)
-        self.upload_a_btn = self._create_svg_button(
-            SVG_FILE, self.upload_background, tr("选择背景图片"), bg_color, "bgBtn"
-        )
-        upload_layout.addWidget(self.upload_a_btn)
-
         self.load_folder_btn = self._create_svg_button(
             SVG_FOLDER, self.load_folder_images, tr("加载文件夹图片"), bg_color, "bgBtn"
         )
         upload_layout.addWidget(self.load_folder_btn)
 
+        self.upload_a_btn = self._create_svg_button(
+            SVG_FILE, self.upload_background, tr("选择背景图片"), bg_color, "bgBtn"
+        )
+        upload_layout.addWidget(self.upload_a_btn)
+
         upload_layout.addSpacing(2)
         self.paste_lbl = QLabel(tr("贴图:"))
         upload_layout.addWidget(self.paste_lbl)
-        self.upload_b_btn = self._create_svg_button(
-            SVG_FILE, self.upload_small_images, tr("选择贴图"), paste_color, "pasteBtn"
-        )
-        upload_layout.addWidget(self.upload_b_btn)
-
         self.load_small_folder_btn = self._create_svg_button(
             SVG_FOLDER, self.load_small_folder_images, tr("加载贴图文件夹"), paste_color, "pasteBtn"
         )
         upload_layout.addWidget(self.load_small_folder_btn)
+
+        self.upload_b_btn = self._create_svg_button(
+            SVG_FILE, self.upload_small_images, tr("选择贴图"), paste_color, "pasteBtn"
+        )
+        upload_layout.addWidget(self.upload_b_btn)
 
         upload_layout.addSpacing(2)
         self.label_lbl = QLabel(tr("标签:"))

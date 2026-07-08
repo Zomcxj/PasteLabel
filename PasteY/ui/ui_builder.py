@@ -306,6 +306,13 @@ class UIBuilderMixin:
         self.options_menu.addAction(self.canvas_copy_action)
         self._menu_actions.append((self.canvas_copy_action, None, None))
 
+        self.magnifier_action = QAction(tr("窗口放大器"), self)
+        self.magnifier_action.setCheckable(True)
+        self.magnifier_action.setChecked(getattr(self, '_magnifier_enabled', False))
+        self.magnifier_action.triggered.connect(self._on_magnifier_menu_changed)
+        self.options_menu.addAction(self.magnifier_action)
+        self._menu_actions.append((self.magnifier_action, None, None))
+
         self.options_btn.setMenu(self.options_menu)
         layout.addWidget(self.options_btn)
 
@@ -368,6 +375,14 @@ class UIBuilderMixin:
         self._canvas_image_copy_enabled = bool(checked)
         from ..core import config_manager
         config_manager.save_all(canvas_image_copy_enabled=self._canvas_image_copy_enabled)
+
+    def _on_magnifier_menu_changed(self, checked):
+        """切换窗口放大器，直接重绘画布即可生效。"""
+        self._magnifier_enabled = bool(checked)
+        from ..core import config_manager
+        config_manager.save_all(magnifier_enabled=self._magnifier_enabled)
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
 
     def _show_memory_records(self):
         """显示记忆记录弹窗"""

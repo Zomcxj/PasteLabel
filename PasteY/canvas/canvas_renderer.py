@@ -4,7 +4,7 @@ Canvas 绘制混入 - 负责所有绘制逻辑（背景、贴图、检测框、�
 from PyQt5.QtGui import QPainter, QPixmap, QColor, QPen, QFontMetrics, QBrush
 from PyQt5.QtCore import Qt, QPointF, QRectF
 
-from ..core.config import DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, GRID_CONFIG, LABEL_COLORS
+from ..core.config import DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, GRID_CONFIG, LABEL_COLORS, MAGNIFIER_CONFIG
 from ..ui.theme import ThemeManager
 
 _label_color_map = {}
@@ -51,6 +51,9 @@ class CanvasRendererMixin:
 
         if self.is_drawing_box:
             self._draw_temp_box(painter)
+
+        if background_rect:
+            self._draw_magnifier(painter, background_rect)
 
     def _draw_background(self, painter, background_rect):
         """绘制背景图"""
@@ -341,3 +344,49 @@ class CanvasRendererMixin:
                 QPointF(self.mouse_pos.x(), 0),
                 QPointF(self.mouse_pos.x(), self.height())
             )
+
+    def _draw_magnifier(self, painter, background_rect):
+        """在画布内绘制放大预览；不建浮窗，避免抢焦点和鼠标事件。"""
+        if not getattr(self._editor, '_magnifier_enabled', False):
+            return
+        if getattr(self._editor, 'edit_mode', 'paste') != 'annotate':
+            return
+        if not self.mouse_inside or self.mouse_pos is None:
+            return
+        pixmap = self._editor.current_background
+        if pixmap is None or pixmap.isNull() or not background_rect.contains(self.mouse_pos):
+            return
+
+        size = int(MAGNIFIER_CONFIG.get('size', 160))
+        zoom = float(MAGNIFIER_CONFIG.get('zoom', 2.0))
+        if size <= 0 or zoom <= 0:
+            return
+
+        src_size = max(1, int(size / zoom))
+        orig_x = int((self.mouse_pos.x() - background_rect.left()) / self.background_scale)
+        orig_y = int((self.mouse_pos.y() - background_rect.top()) / self.background_scale)
+        src_x = max(0, min(pixmap.width() - src_size, orig_x - src_size // 2))
+        src_y = max(0, min(pixmap.height() - src_size, orig_y - src_size // 2))
+
+        margin = 18
+        dst_x = self.mouse_pos.x() + margin
+        dst_y = self.mouse_pos.y() + margin
+        if dst_x + size > self.width():
+            dst_x = self.mouse_pos.x() - margin - size
+        if dst_y + size > self.height():
+            dst_y = self.mouse_pos.y() - margin - size
+        dst_x = max(0, min(self.width() - size, int(dst_x)))
+        dst_y = max(0, min(self.height() - size, int(dst_y)))
+        dst = QRectF(dst_x, dst_y, size, size)
+
+        painter.save()
+        painter.fillRect(dst, QColor(255, 255, 255, 210))
+        painter.drawPixmap(dst, pixmap, QRectF(src_x, src_y, src_size, src_size))
+        painter.setPen(QPen(QColor(60, 60, 60, 180), 1))
+        painter.drawRect(dst)
+        painter.setPen(QPen(QColor(255, 80, 80, 190), 1, Qt.DashLine))
+        center_x = dst.left() + size / 2
+        center_y = dst.top() + size / 2
+        painter.drawLine(QPointF(center_x, dst.top()), QPointF(center_x, dst.bottom()))
+        painter.drawLine(QPointF(dst.left(), center_y), QPointF(dst.right(), center_y))
+        painter.restore()

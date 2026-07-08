@@ -87,6 +87,13 @@ AUTO_SAVE_CONFIG = {
     'enabled': False,  # 默认不启用自动保存
 }
 
+# 窗口放大器配置
+MAGNIFIER_CONFIG = {
+    'enabled': False,  # 默认关闭，避免影响标注视野
+    'size': 160,
+    'zoom': 2.0,
+}
+
 # 主题配置
 THEME_CONFIG = {
     'default_mode': 'light',  # 默认主题: 'light' 或 'dark'

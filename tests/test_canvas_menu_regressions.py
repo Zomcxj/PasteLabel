@@ -1,5 +1,5 @@
 """画布右键菜单回归测试。"""
-from PasteY.canvas.canvas_menu import CanvasMenuMixin
+from pastelabel.canvas.canvas_menu import CanvasMenuMixin
 
 
 class FakeCheckbox:

@@ -25,6 +25,8 @@ def _make_mock_module(name):
         'QSplitter', 'QScrollArea', 'QFileDialog', 'QMessageBox',
         'QInputDialog', 'QMenu', 'QAction', 'QShortcut', 'QKeySequence',
         'QProgressDialog', 'QSvgRenderer', 'QCursor',
+        'QStackedWidget', 'QComboBox', 'QDoubleSpinBox', 'QTextBrowser',
+        'QTabWidget', 'QToolButton', 'QSlider', 'QRadioButton',
     ]:
         setattr(mod, attr, type(f'Mock{attr}', (), {
             '__init__': lambda self, *a, **kw: None,
@@ -303,10 +305,22 @@ qtcore.Qt = type('Qt', (), {
     'LeftButton': 1, 'RightButton': 2,
     'ControlModifier': 0x04000000, 'KeepAspectRatio': 1,
     'SmoothTransformation': 1, 'transparent': 0,
+    'PointingHandCursor': 18,
+    'OpenHandCursor': 17,
+    'ArrowCursor': 0,
 })()
 qtcore.QPoint = type('QPoint', (), {'__init__': lambda self, x=0, y=0: None})
 qtcore.QPointF = type('QPointF', (), {'__init__': lambda self, x=0, y=0: None})
-qtcore.QRectF = type('QRectF', (), {'__init__': lambda self, *a: None})
+qtcore.QRectF = type('QRectF', (), {
+    '__init__': lambda self, *a: None,
+    'contains': lambda self, p: True,
+    'x': lambda self: 0,
+    'y': lambda self: 0,
+    'width': lambda self: 10,
+    'height': lambda self: 10,
+    'left': lambda self: 0,
+    'top': lambda self: 0,
+})
 qtcore.QRect = type('QRect', (), {'__init__': lambda self, *a: None})
 qtcore.QSize = type('QSize', (), {'__init__': lambda self, w=0, h=0: None})
 qtcore.QSizeF = type('QSizeF', (), {'__init__': lambda self, w=0, h=0: None})
@@ -379,6 +393,13 @@ qtwidgets.QDialog = _MockQDialog
 qtwidgets.QListWidget = _MockQListWidget
 qtwidgets.QListWidgetItem = _MockQListWidgetItem
 qtwidgets.QSplitter = _MockQSplitter
+qtwidgets.QStackedWidget = type('QStackedWidget', (_MockQWidget,), {
+    'addWidget': lambda self, *a: None,
+    'setCurrentIndex': lambda self, *a: None,
+    'currentIndex': lambda self: 0,
+    'count': lambda self: 1,
+    'widget': lambda self, i: None,
+})
 qtwidgets.QScrollArea = _MockQScrollArea
 qtwidgets.QVBoxLayout = type('QVBoxLayout', (_MockQBoxLayout,), {})
 qtwidgets.QHBoxLayout = type('QHBoxLayout', (_MockQBoxLayout,), {})
@@ -386,6 +407,20 @@ qtwidgets.QLabel = _MockQLabel
 qtwidgets.QPushButton = _MockQPushButton
 qtwidgets.QCheckBox = _MockQCheckBox
 qtwidgets.QSpinBox = _MockQSpinBox
+qtwidgets.QDoubleSpinBox = type('QDoubleSpinBox', (_MockQWidget,), {
+    'minimum': lambda self: 0.0,
+    'maximum': lambda self: 100.0,
+    'value': lambda self: 0.0,
+    'setValue': lambda self, *a: None,
+    'setMinimum': lambda self, *a: None,
+    'setMaximum': lambda self, *a: None,
+    'setSingleStep': lambda self, *a: None,
+    'setDecimals': lambda self, *a: None,
+    'setMinimumWidth': lambda self, *a: None,
+    'setStyleSheet': lambda self, *a: None,
+    'valueChanged': type('Signal', (), {'connect': lambda self, f: None})(),
+    'editingFinished': type('Signal', (), {'connect': lambda self, f: None})(),
+})
 qtwidgets.QLineEdit = _MockQLineEdit
 qtwidgets.QProgressDialog = _MockQProgressDialog
 qtwidgets.QInputDialog = _MockQInputDialog

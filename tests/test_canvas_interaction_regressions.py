@@ -1,6 +1,6 @@
 """画布悬停状态回归测试。"""
-from PasteY.canvas import canvas_interaction
-from PasteY.canvas.canvas_interaction import CanvasInteractionMixin
+from pastelabel.canvas import canvas_interaction
+from pastelabel.canvas.canvas_interaction import CanvasInteractionMixin
 
 
 class Point:
@@ -49,6 +49,14 @@ class Canvas(CanvasInteractionMixin):
         self.selected_box = None
         self.selected_item_size = None
         self.updated = 0
+        self.hover_resize_target = None
+        self.hover_resize_handle = None
+
+    def setCursor(self, *a):
+        pass
+
+    def update_status_label(self):
+        pass
 
     def get_background_rect(self):
         return Rect(0, 0, 100, 100)
@@ -57,7 +65,7 @@ class Canvas(CanvasInteractionMixin):
         self.updated += 1
 
 
-def test_paste_hover_clears_background_label_highlight(monkeypatch):
+def test_paste_hover_detects_box_handle(monkeypatch):
     monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
     canvas = Canvas("paste")
     canvas.selected_box = 0
@@ -65,9 +73,8 @@ def test_paste_hover_clears_background_label_highlight(monkeypatch):
 
     canvas._check_hover()
 
-    assert canvas._editor.selected_item == 0
-    assert canvas.selected_box is None
-    assert canvas._editor.pressed_label is None
+    # paste mode 下 hover 到选中框手柄，不修改编辑状态
+    assert canvas.hover_resize_target == 'box'
 
 
 def test_annotate_hover_clears_paste_item_edit_state(monkeypatch):
@@ -78,6 +85,7 @@ def test_annotate_hover_clears_paste_item_edit_state(monkeypatch):
 
     canvas._check_hover()
 
+    # annotate mode 下 hover 到检测框，自动切换到框编辑
     assert canvas.selected_box == 0
     assert canvas._editor.selected_item is None
     assert canvas.selected_item_size is None

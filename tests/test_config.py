@@ -11,14 +11,14 @@ def _load_module(name, path):
     spec.loader.exec_module(mod)
     return mod
 
-_base = os.path.join(os.path.dirname(__file__), '..', 'PasteY', 'core')
+_base = os.path.join(os.path.dirname(__file__), '..', 'pastelabel', 'core')
 config = _load_module('config', os.path.join(_base, 'config.py'))
 
 
 class TestShortcutConfig:
 
     REQUIRED_KEYS = [
-        'undo', 'redo', 'save', 'save_all', 'toggle_grid',
+        'undo', 'redo', 'toggle_grid',
         'toggle_labels', 'toggle_label_names', 'toggle_auto_save',
         'toggle_paste_names', 'draw_box', 'quit_draw',
         'next_image', 'prev_image', 'delete_selected', 'fit_view',

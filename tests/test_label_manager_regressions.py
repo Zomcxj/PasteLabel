@@ -1,5 +1,5 @@
 """标签管理回归测试。"""
-from PasteY.engine.label_manager import LabelManager
+from pastelabel.engine.label_manager import LabelManager
 
 
 class FakeSignal:
@@ -79,7 +79,7 @@ def test_delete_label_does_not_pass_detection_boxes_as_canvas_items(monkeypatch)
     ]
     editor.detection_boxes_dict = {0: list(editor.detection_boxes)}
 
-    from PasteY.engine import label_manager
+    from pastelabel.engine import label_manager
     monkeypatch.setattr(
         label_manager.dialog_helpers,
         "question",
@@ -109,7 +109,7 @@ def test_delete_label_saves_each_background_with_its_own_index(monkeypatch):
         1: list(editor.detection_boxes),
     }
 
-    from PasteY.engine import label_manager
+    from pastelabel.engine import label_manager
     monkeypatch.setattr(
         label_manager.dialog_helpers,
         "question",

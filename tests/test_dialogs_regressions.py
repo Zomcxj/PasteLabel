@@ -1,7 +1,7 @@
 """对话框回归测试。"""
-from PasteY.ui import i18n
-from PasteY.ui.dialog_helpers import center_on_parent
-from PasteY.ui.dialogs import ProgressDialogFactory
+from pastelabel.ui import i18n
+from pastelabel.ui.dialog_helpers import center_on_parent
+from pastelabel.ui.dialogs import ProgressDialogFactory
 
 
 def test_progress_dialog_cancel_button_uses_current_language():

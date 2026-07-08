@@ -2,11 +2,11 @@
 
 
 a = Analysis(
-    ['D:\\VsPro\\PasteLabel/PasteY/main.py'],
+    ['D:\\VsPro\\PasteLabel/pastelabel/main.py'],
     pathex=['D:\\VsPro\\PasteLabel'],
     binaries=[('D:\\software\\miniforge3\\envs\\llm\\Library\\bin\\ffi.dll', '.')],
     datas=[('D:\\VsPro\\PasteLabel/ico_image', 'ico_image')],
-    hiddenimports=['PasteY', 'PasteY.ui', 'PasteY.ui.main_window', 'PasteY.ui.ui_builder', 'PasteY.ui.settings_dialog', 'PasteY.ui.theme', 'PasteY.ui.dwm', 'PasteY.ui.dialogs', 'PasteY.ui.i18n', 'PasteY.engine', 'PasteY.engine.save_manager', 'PasteY.engine.undo_manager', 'PasteY.engine.label_manager', 'PasteY.engine.image_loader', 'PasteY.engine.paste_engine', 'PasteY.engine.event_handler', 'PasteY.canvas', 'PasteY.canvas.canvas', 'PasteY.canvas.canvas_renderer', 'PasteY.canvas.canvas_interaction', 'PasteY.canvas.canvas_drawing', 'PasteY.canvas.canvas_menu', 'PasteY.core', 'PasteY.core.config', 'PasteY.core.config_manager', 'PasteY.core.utils', 'PasteY.core.editor_protocol', 'PasteY.core.exception_hook'],
+    hiddenimports=['pastelabel', 'pastelabel.ui', 'pastelabel.ui.main_window', 'pastelabel.ui.ui_builder', 'pastelabel.ui.settings_dialog', 'pastelabel.ui.theme', 'pastelabel.ui.dwm', 'pastelabel.ui.dialogs', 'pastelabel.ui.i18n', 'pastelabel.engine', 'pastelabel.engine.save_manager', 'pastelabel.engine.undo_manager', 'pastelabel.engine.label_manager', 'pastelabel.engine.image_loader', 'pastelabel.engine.paste_engine', 'pastelabel.engine.event_handler', 'pastelabel.canvas', 'pastelabel.canvas.canvas', 'pastelabel.canvas.canvas_renderer', 'pastelabel.canvas.canvas_interaction', 'pastelabel.canvas.canvas_drawing', 'pastelabel.canvas.canvas_menu', 'pastelabel.core', 'pastelabel.core.config', 'pastelabel.core.config_manager', 'pastelabel.core.utils', 'pastelabel.core.editor_protocol', 'pastelabel.core.exception_hook'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

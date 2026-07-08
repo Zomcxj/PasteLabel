@@ -16,7 +16,7 @@ def _load_module(name, path):
     spec.loader.exec_module(mod)
     return mod
 
-_base = os.path.join(os.path.dirname(__file__), '..', 'PasteY', 'core')
+_base = os.path.join(os.path.dirname(__file__), '..', 'pastelabel', 'core')
 config = _load_module('config', os.path.join(_base, 'config.py'))
 config_manager = _load_module('config_manager', os.path.join(_base, 'config_manager.py'))
 

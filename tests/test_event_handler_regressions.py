@@ -1,5 +1,5 @@
 """事件处理回归测试。"""
-from PasteY.engine.event_handler import EventHandlerMixin
+from pastelabel.engine.event_handler import EventHandlerMixin
 
 
 class FakeEditor(EventHandlerMixin):

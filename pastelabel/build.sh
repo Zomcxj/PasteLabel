@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-#  PasteLabel 构建脚本（PasteY）
+#  PasteLabel 构建脚本（pastelabel）
 #  贴图标注工具主应用
 #  支持: Linux / Windows (MSYS2 / Git Bash / Cygwin) / macOS
 #  用法: ./build.sh [options]
@@ -79,6 +79,9 @@ log_ok "当前平台: $PLATFORM (uname: $OS)"
 # ==================== 平台相关配置 ====================
 if [ -n "${PYTHON:-}" ]; then
     PYTHON_CMD="$PYTHON"
+elif [ "$PLATFORM" = "windows" ] && command -v python &> /dev/null; then
+    # Windows 下 python3 可能是 Windows Store stub，优先 python
+    PYTHON_CMD="python"
 elif command -v python3 &> /dev/null; then
     PYTHON_CMD="python3"
 elif command -v python &> /dev/null; then
@@ -185,7 +188,7 @@ log_ok "PyInstaller 可用"
 log_ok "PyQt5 可用"
 
 # 检查主脚本是否存在
-MAIN_SCRIPT_PATH="${PROJECT_ROOT}${SEP}PasteY${SEP}main.py"
+MAIN_SCRIPT_PATH="${PROJECT_ROOT}${SEP}pastelabel${SEP}main.py"
 if [ ! -f "$MAIN_SCRIPT_PATH" ]; then
     log_error "主脚本 '$MAIN_SCRIPT_PATH' 不存在"
     exit 1
@@ -210,9 +213,9 @@ fi
 
 # ==================== 生成 spec 文件 ====================
 # 策略：动态生成 spec 文件，与 Windows 已验证的方案一致
-# 确保 pathex 指向项目根目录，让 PyInstaller 能正确发现 PasteY 包结构
+# 确保 pathex 指向项目根目录，让 PyInstaller 能正确发现 pastelabel 包结构
 
-SPEC_FILE="${PROJECT_ROOT}${SEP}PasteY${SEP}PasteLabel_build.spec"
+SPEC_FILE="${PROJECT_ROOT}${SEP}pastelabel${SEP}PasteLabel_build.spec"
 MAIN_SCRIPT_SPEC="$($PYTHON_CMD -c 'import sys; print(repr(sys.argv[1]))' "$MAIN_SCRIPT_PATH")"
 PROJECT_ROOT_SPEC="$($PYTHON_CMD -c 'import sys; print(repr(sys.argv[1]))' "$PROJECT_ROOT")"
 RESOURCE_DIR_SPEC="$($PYTHON_CMD -c 'import sys; print(repr(sys.argv[1]))' "$RESOURCE_DIR")"
@@ -235,19 +238,19 @@ a = Analysis(
     binaries=[],
     datas=[(${RESOURCE_DIR_SPEC}, 'ico_image')],
     hiddenimports=[
-        'PasteY', 'PasteY.ui', 'PasteY.ui.main_window', 'PasteY.ui.ui_builder',
-        'PasteY.ui.settings_dialog', 'PasteY.ui.theme', 'PasteY.ui.dwm',
-        'PasteY.ui.dialogs', 'PasteY.ui.widgets', 'PasteY.ui.i18n', 'PasteY.ui.styles',
-        'PasteY.engine', 'PasteY.engine.save_manager',
-        'PasteY.engine.undo_manager', 'PasteY.engine.label_manager',
-        'PasteY.engine.image_loader', 'PasteY.engine.paste_engine',
-        'PasteY.engine.event_handler',
-        'PasteY.canvas', 'PasteY.canvas.canvas', 'PasteY.canvas.canvas_renderer',
-        'PasteY.canvas.canvas_interaction', 'PasteY.canvas.canvas_drawing',
-        'PasteY.canvas.canvas_menu',
-        'PasteY.core', 'PasteY.core.config', 'PasteY.core.config_manager',
-        'PasteY.core.utils', 'PasteY.core.models', 'PasteY.core.editor_protocol',
-        'PasteY.core.exception_hook',
+        'pastelabel', 'pastelabel.ui', 'pastelabel.ui.main_window', 'pastelabel.ui.ui_builder',
+        'pastelabel.ui.settings_dialog', 'pastelabel.ui.theme', 'pastelabel.ui.dwm',
+        'pastelabel.ui.dialogs', 'pastelabel.ui.widgets', 'pastelabel.ui.i18n', 'pastelabel.ui.styles',
+        'pastelabel.engine', 'pastelabel.engine.save_manager',
+        'pastelabel.engine.undo_manager', 'pastelabel.engine.label_manager',
+        'pastelabel.engine.image_loader', 'pastelabel.engine.paste_engine',
+        'pastelabel.engine.event_handler',
+        'pastelabel.canvas', 'pastelabel.canvas.canvas', 'pastelabel.canvas.canvas_renderer',
+        'pastelabel.canvas.canvas_interaction', 'pastelabel.canvas.canvas_drawing',
+        'pastelabel.canvas.canvas_menu',
+        'pastelabel.core', 'pastelabel.core.config', 'pastelabel.core.config_manager',
+        'pastelabel.core.utils', 'pastelabel.core.models', 'pastelabel.core.editor_protocol',
+        'pastelabel.core.exception_hook',
     ],
     hookspath=[],
     hooksconfig={},

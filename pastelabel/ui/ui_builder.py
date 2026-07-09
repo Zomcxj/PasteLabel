@@ -304,7 +304,8 @@ class UIBuilderMixin:
         self.options_menu.setObjectName("optionsMenu")
         self.options_menu.setMinimumWidth(200)
 
-        self._draw_box_action = self.options_menu.addAction(tr("绘制BOX"))
+        sc_w = self._get_shortcut('draw_box')
+        self._draw_box_action = self.options_menu.addAction(f"{tr('绘制BOX')}\t{sc_w}")
         self._draw_box_action.setCheckable(True)
         self._draw_box_action.setChecked(False)
         self._draw_box_action.triggered.connect(self._trigger_draw_box_menu_action)
@@ -591,8 +592,6 @@ class UIBuilderMixin:
             self.canvas_copy_action.setChecked(self._canvas_image_copy_enabled)
         from ..core import config_manager
         config_manager.save_all(canvas_image_copy_enabled=self._canvas_image_copy_enabled)
-        if hasattr(self, '_refresh_options_popup_texts'):
-            self._refresh_options_popup_texts()
 
     def _on_magnifier_menu_changed(self, checked):
         """切换窗口放大器，直接重绘画布即可生效。"""
@@ -601,8 +600,6 @@ class UIBuilderMixin:
             self.magnifier_action.setChecked(self._magnifier_enabled)
         from ..core import config_manager
         config_manager.save_all(magnifier_enabled=self._magnifier_enabled)
-        if hasattr(self, '_refresh_options_popup_texts'):
-            self._refresh_options_popup_texts()
         if hasattr(self, 'canvas'):
             self.canvas.update()
 

@@ -171,7 +171,18 @@ class SettingsDialog(QDialog):
         prefix_row.addStretch()
         opt_layout.addLayout(prefix_row)
 
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG
+        nudge_step_row = QHBoxLayout()
+        nudge_step_label = QLabel(tr("移动步长") + ":")
+        nudge_step_row.addWidget(nudge_step_label, 2)
+        self.nudge_step_spin = QSpinBox()
+        self.nudge_step_spin.setRange(1, 5)
+        self.nudge_step_spin.setValue(NUDGE_CONFIG.get('step', 1))
+        self.nudge_step_spin.setMinimumWidth(150)
+        nudge_step_row.addWidget(self.nudge_step_spin)
+        nudge_step_row.addStretch()
+        opt_layout.addLayout(nudge_step_row)
+
         grid_width_row = QHBoxLayout()
         grid_width_label = QLabel(tr("网格线粗细") + ":")
         grid_width_row.addWidget(grid_width_label, 2)
@@ -355,7 +366,7 @@ class SettingsDialog(QDialog):
         """加载选项状态"""
         if self._editor:
             self.prefix_input.setText(self._editor.prefix_input.text())
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG
         self.grid_width_spin.setValue(GRID_CONFIG.get('line_width', 1))
         self.grid_alpha_spin.setValue(GRID_CONFIG.get('alpha', 120))
         self.handle_size_spin.setValue(max(3, min(15, DETECTION_BOX_CONFIG.get('resize_handle_size', 8))))
@@ -364,6 +375,7 @@ class SettingsDialog(QDialog):
         index = self.label_position_combo.findData(label_position)
         self.label_position_combo.setCurrentIndex(index if index >= 0 else 0)
         self.magnifier_zoom_spin.setValue(max(0.8, min(3.0, float(MAGNIFIER_CONFIG.get('zoom', 2.0)))))
+        self.nudge_step_spin.setValue(NUDGE_CONFIG.get('step', 1))
 
     def _save_shortcuts(self):
         """保存快捷键到文件并立即生效"""
@@ -393,7 +405,7 @@ class SettingsDialog(QDialog):
             if hasattr(self._editor, '_rebuild_label_cache_menu'):
                 self._editor._rebuild_label_cache_menu()
 
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, MAGNIFIER_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG
         GRID_CONFIG['line_width'] = self.grid_width_spin.value()
         GRID_CONFIG['alpha'] = self.grid_alpha_spin.value()
         handle_size = max(3, min(15, self.handle_size_spin.value()))
@@ -407,6 +419,8 @@ class SettingsDialog(QDialog):
         DETECTION_BOX_CONFIG['label_position'] = label_position
         magnifier_zoom = max(0.8, min(3.0, float(self.magnifier_zoom_spin.value())))
         MAGNIFIER_CONFIG['zoom'] = magnifier_zoom
+        nudge_step = max(1, min(5, self.nudge_step_spin.value()))
+        NUDGE_CONFIG['step'] = nudge_step
 
         from ..core import config_manager as cm
         max_labels = self.max_labels_spin.value()
@@ -420,6 +434,7 @@ class SettingsDialog(QDialog):
             label_position=label_position,
             magnifier_zoom=magnifier_zoom,
             label_cache_slots=label_cache_slots,
+            nudge_step=nudge_step,
         )
         if self._editor:
             self._editor._max_labels = max_labels

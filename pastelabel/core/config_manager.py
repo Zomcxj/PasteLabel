@@ -3,7 +3,7 @@
 """
 import os
 import json
-from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS
+from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG
 
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), '.pastelabel.json')
@@ -198,6 +198,7 @@ def load_all():
         'magnifier_enabled': bool(config.get('magnifier_enabled', False)),
         'magnifier_zoom': float(config.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom'])),
         'label_cache_slots': _normalize_label_cache_slots(config.get('label_cache_slots')),
+        'nudge_step': int(config.get('nudge_step', NUDGE_CONFIG['step'])),
         'memory': load_memory_records(),
     }
 
@@ -206,7 +207,7 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
              grid_line_width=None, grid_alpha=None, resize_handle_size=None,
              label_font_size=None, label_position=None,
              canvas_image_copy_enabled=None, magnifier_enabled=None,
-             magnifier_zoom=None, label_cache_slots=None):
+             magnifier_zoom=None, label_cache_slots=None, nudge_step=None):
     """保存所有配置"""
     config = load_config()
     if shortcuts is not None:
@@ -235,4 +236,6 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['magnifier_zoom'] = max(0.8, min(3.0, float(magnifier_zoom)))
     if label_cache_slots is not None:
         config['label_cache_slots'] = _normalize_label_cache_slots(label_cache_slots)
+    if nudge_step is not None:
+        config['nudge_step'] = max(1, min(5, int(nudge_step)))
     return save_config(config)

@@ -39,6 +39,7 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
 
         # 检测框相关
         self.selected_box = None
+        self.selected_boxes = []
         self.is_dragging_box = False
         self.box_drag_start = QPoint()
         self.is_resizing_box = False

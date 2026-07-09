@@ -23,7 +23,7 @@ def _make_mock_module(name):
         'QLabel', 'QPushButton', 'QListWidget', 'QListWidgetItem',
         'QLineEdit', 'QCheckBox', 'QSpinBox', 'QGroupBox', 'QFrame',
         'QSplitter', 'QScrollArea', 'QFileDialog', 'QMessageBox',
-        'QInputDialog', 'QMenu', 'QAction', 'QShortcut', 'QKeySequence',
+        'QInputDialog', 'QMenu', 'QAction', 'QWidgetAction', 'QShortcut', 'QKeySequence',
         'QProgressDialog', 'QSvgRenderer', 'QCursor',
         'QStackedWidget', 'QComboBox', 'QDoubleSpinBox', 'QTextBrowser',
         'QTabWidget', 'QToolButton', 'QSlider', 'QRadioButton',
@@ -433,6 +433,10 @@ qtwidgets.QMenu = type('QMenu', (_MockQWidget,), {
     'exec_': lambda self, *a: None,
 })
 qtwidgets.QAction = type('QAction', (), {'__init__': lambda self, *a: None})
+qtwidgets.QWidgetAction = type('QWidgetAction', (), {
+    '__init__': lambda self, *a: None,
+    'setDefaultWidget': lambda self, *a: None,
+})
 qtwidgets.QGroupBox = type('QGroupBox', (_MockQWidget,), {
     'setStyleSheet': lambda self, *a: None,
 })

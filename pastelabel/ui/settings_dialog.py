@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QEvent
 
-from ..core.config import SHORTCUT_CONFIG
+from ..core.config import SHORTCUT_CONFIG, LABEL_CACHE_SLOTS
 from .theme import ThemeManager
 from .dwm import set_titlebar_dark
 from .dialog_helpers import center_on_parent
@@ -124,6 +124,9 @@ class SettingsDialog(QDialog):
             'zoom_out': tr("缩小"),
             'remove_image': tr("移除图片"),
             'restore_image': tr("恢复到工作路径"),
+            'label_cache_slot_1': tr("缓存槽1"),
+            'label_cache_slot_2': tr("缓存槽2"),
+            'label_cache_slot_3': tr("缓存槽3"),
         }
 
         for key, name in shortcut_names.items():
@@ -330,13 +333,22 @@ class SettingsDialog(QDialog):
 
     def _reset_shortcut(self, key, field):
         """重置单个快捷键"""
+        if key.startswith('label_cache_slot_'):
+            slot_index = int(key.rsplit('_', 1)[-1]) - 1
+            field.setText(LABEL_CACHE_SLOTS[slot_index].get('shortcut', ''))
+            return
         field.setText(SHORTCUT_CONFIG.get(key, ''))
 
     def _load_shortcuts(self):
         """加载保存的快捷键"""
         shortcuts = config_manager.load_shortcuts()
+        label_cache_slots = config_manager.load_all().get('label_cache_slots', LABEL_CACHE_SLOTS)
         for key, field in self.shortcut_inputs.items():
-            if key in shortcuts:
+            if key.startswith('label_cache_slot_'):
+                slot_index = int(key.rsplit('_', 1)[-1]) - 1
+                if slot_index < len(label_cache_slots):
+                    field.setText(label_cache_slots[slot_index].get('shortcut', ''))
+            elif key in shortcuts:
                 field.setText(shortcuts[key])
 
     def _load_options(self):
@@ -356,18 +368,30 @@ class SettingsDialog(QDialog):
     def _save_shortcuts(self):
         """保存快捷键到文件并立即生效"""
         shortcuts = {}
+        label_cache_slots = []
+        if self._editor and hasattr(self._editor, 'label_cache_slots'):
+            label_cache_slots = [dict(slot) for slot in self._editor.label_cache_slots]
+        else:
+            label_cache_slots = [dict(slot) for slot in config_manager.load_all().get('label_cache_slots', LABEL_CACHE_SLOTS)]
         for key, field in self.shortcut_inputs.items():
             text = field.text().strip()
-            if text:
+            if key.startswith('label_cache_slot_'):
+                slot_index = int(key.rsplit('_', 1)[-1]) - 1
+                if slot_index < len(label_cache_slots):
+                    label_cache_slots[slot_index]['shortcut'] = text or str(slot_index + 1)
+            elif text:
                 shortcuts[key] = text
 
         if self._editor:
             self._editor.prefix_input.setText(self.prefix_input.text())
             self._editor.shortcut_config = shortcuts
+            self._editor.label_cache_slots = label_cache_slots
             if hasattr(self._editor, 'update_shortcuts'):
                 self._editor.update_shortcuts()
             if hasattr(self._editor, '_refresh_menu_shortcuts'):
                 self._editor._refresh_menu_shortcuts()
+            if hasattr(self._editor, '_rebuild_label_cache_menu'):
+                self._editor._rebuild_label_cache_menu()
 
         from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, MAGNIFIER_CONFIG
         GRID_CONFIG['line_width'] = self.grid_width_spin.value()
@@ -395,6 +419,7 @@ class SettingsDialog(QDialog):
             label_font_size=label_font_size,
             label_position=label_position,
             magnifier_zoom=magnifier_zoom,
+            label_cache_slots=label_cache_slots,
         )
         if self._editor:
             self._editor._max_labels = max_labels

@@ -121,7 +121,7 @@ def test_draw_box_menu_item_does_not_use_manual_left_padding_hacks():
     ui_source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
     main_source = (ROOT / "pastelabel" / "ui" / "main_window.py").read_text(encoding="utf-8")
 
-    assert 'self._draw_box_action = self.options_menu.addAction(tr("绘制BOX"))' in ui_source
+    assert 'self._draw_box_action = self.options_menu.addAction(f"{tr(\'绘制BOX\')}\\t{sc_w}")' in ui_source
     assert 'self._draw_box_action.setCheckable(True)' in ui_source
     assert 'self._draw_box_action.setChecked(False)' in ui_source
     assert 'self._draw_box_action.triggered.connect(self._trigger_draw_box_menu_action)' in ui_source
@@ -133,7 +133,7 @@ def test_draw_box_menu_item_does_not_use_manual_left_padding_hacks():
 def test_draw_box_action_stays_in_same_menu_section_as_display_toggles():
     source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
 
-    draw_box_pos = source.index('self._draw_box_action = self.options_menu.addAction(tr("绘制BOX"))')
+    draw_box_pos = source.index('self._draw_box_action = self.options_menu.addAction(f"{tr(\'绘制BOX\')}\\t{sc_w}")')
     items_pos = source.index('items = [')
     first_separator_after_items = source.index('self.options_menu.addSeparator()', items_pos)
     assert draw_box_pos < items_pos < first_separator_after_items

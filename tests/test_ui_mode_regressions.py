@@ -105,16 +105,19 @@ def test_options_menu_separates_prefix_and_special_toggles_into_third_group():
 def test_cache_slot_name_input_explicitly_enables_input_method():
     source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
 
-    assert 'popup.setAttribute(Qt.WA_InputMethodEnabled, True)' in source
     assert 'slot_name_input.setAttribute(Qt.WA_InputMethodEnabled, True)' in source
 
 
-def test_cache_popup_does_not_use_qt_popup_flag_for_inline_rename():
+def test_cache_popup_uses_qmenu_via_setmenu():
     source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
 
     cache_popup_block = source.split('def _rebuild_label_cache_menu(self):', 1)[1].split('def _handle_cache_slot_row_click', 1)[0]
-    assert 'popup_flags = Qt.Tool | Qt.FramelessWindowHint' in cache_popup_block
-    assert 'Qt.Popup' not in cache_popup_block
+    assert 'HoverKeepMenu' in cache_popup_block
+    assert 'QWidgetAction' in cache_popup_block
+    assert 'setMenu' in cache_popup_block
+
+    create_block = source.split('def _create_options_menu', 1)[1].split('layout.addSpacing', 1)[0]
+    assert 'cache_btn.clicked.connect' not in create_block
 
 
 def test_draw_box_menu_item_does_not_use_manual_left_padding_hacks():

@@ -157,3 +157,8 @@ UNDO_CONFIG = {
 LOCK_CONFIG = {
     'enabled': False,  # 默认不锁定
 }
+
+# 方向键步进移动配置
+NUDGE_CONFIG = {
+    'step': 1,  # 每次方向键移动步长（像素）
+}

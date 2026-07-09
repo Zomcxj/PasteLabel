@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QIcon, QPixmap, QPainter, QDrag
 from PyQt5.QtCore import Qt, QSize, QTimer, QPoint, QMimeData, QUrl
+from PyQt5.QtWidgets import QWidgetAction
 from .segmented_control import AnimatedSegmentedControl
 
 from ..core.config import WINDOW_CONFIG, PASTE_PARAMS, THUMBNAIL_CONFIG, DEFAULT_PREFIX
@@ -74,7 +75,7 @@ class DragOutListWidget(QListWidget):
         super().mouseReleaseEvent(event)
 
 
-class HoverDismissPopup(QFrame):
+class HoverDismissPopup(QWidget):
     """鼠标移出后自动收起的轻量弹层。"""
 
     def leaveEvent(self, event):
@@ -289,7 +290,6 @@ class UIBuilderMixin:
         self.cache_btn.setFixedHeight(24)
         self.cache_btn.setToolTip(tr("复制缓存管理"))
         self.cache_menu = None
-        self.cache_btn.clicked.connect(self._toggle_cache_popup)
         layout.addWidget(self.cache_btn)
         self._rebuild_label_cache_menu()
 
@@ -420,42 +420,31 @@ class UIBuilderMixin:
     def _rebuild_label_cache_menu(self):
         if not hasattr(self, 'cache_btn'):
             return
-        if getattr(self, 'cache_menu', None) is not None:
-            self.cache_menu.deleteLater()
 
-        popup_flags = Qt.Tool | Qt.FramelessWindowHint
-        no_shadow_flag = getattr(Qt, 'NoDropShadowWindowHint', None)
-        if no_shadow_flag is not None:
-            popup_flags |= no_shadow_flag
-        popup = HoverDismissPopup(self, popup_flags)
-        popup.setObjectName("cachePopup")
-        popup.setAttribute(Qt.WA_InputMethodEnabled, True)
-        popup.setFocusPolicy(Qt.StrongFocus)
-        theme = ThemeManager.get_theme()
-        popup.setStyleSheet(
-            "QFrame#cachePopup { background-color: %s; border: none; }"
-            "QPushButton { background: transparent; border: none; padding: 0; color: %s; }"
-            "QLabel { color: %s; }"
-            "QLineEdit { background: transparent; border: none; padding: 0; color: %s; }"
-            % (theme['widget_bg'], theme['text_primary'], theme['text_primary'], theme['text_primary'])
-        )
-        popup_layout = QVBoxLayout(popup)
-        popup_layout.setContentsMargins(4, 4, 4, 4)
-        popup_layout.setSpacing(2)
+        if getattr(self, 'cache_menu', None) is None:
+            menu = HoverKeepMenu(self)
+            menu.setObjectName("cacheMenu")
+            menu.setMinimumWidth(200)
+            self.cache_menu = menu
+            self.cache_btn.setMenu(menu)
+        else:
+            menu = self.cache_menu
+            menu.clear()
 
         for index, slot in enumerate(getattr(self, 'label_cache_slots', [])):
-            row_widget = QWidget(popup)
+            action = QWidgetAction(menu)
+            row_widget = QWidget()
             row_layout = QHBoxLayout(row_widget)
             row_layout.setContentsMargins(8, 4, 8, 4)
             row_layout.setSpacing(8)
 
             lock_btn = QPushButton(tr("上锁") if slot.get('locked') else tr("解锁"))
             lock_btn.setCursor(Qt.PointingHandCursor)
-            lock_btn.clicked.connect(lambda checked=False, idx=index: self._toggle_cache_slot_lock_from_popup(idx))
+            lock_btn.clicked.connect(lambda checked=False, idx=index, btn=lock_btn: self._toggle_cache_slot_lock_from_popup(idx, btn))
             row_layout.addWidget(lock_btn, 0)
 
             copied_at = slot.get('copied_at') or '--:--:--'
-            middle_widget = QWidget(popup)
+            middle_widget = QWidget()
             middle_layout = QHBoxLayout(middle_widget)
             middle_layout.setContentsMargins(0, 0, 0, 0)
             middle_layout.setSpacing(2)
@@ -480,40 +469,28 @@ class UIBuilderMixin:
             shortcut_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             row_layout.addWidget(shortcut_label, 0)
 
-            popup_layout.addWidget(row_widget)
-
-        self.cache_menu = popup
+            action.setDefaultWidget(row_widget)
+            menu.addAction(action)
 
     def _handle_cache_slot_row_click(self, slot_index):
         self.set_active_label_cache_slot(slot_index)
 
     def _commit_cache_slot_name(self, slot_index, field):
-        popup = getattr(self, 'cache_menu', None)
-        was_visible = bool(popup and popup.isVisible())
-        popup_pos = popup.pos() if was_visible else None
-        self.rename_label_cache_slot(slot_index, field.text())
-        if was_visible and getattr(self, 'cache_menu', None) is not None:
-            self.cache_menu.move(popup_pos)
-            self.cache_menu.show()
-
-    def _toggle_cache_slot_lock_from_popup(self, slot_index):
-        popup = getattr(self, 'cache_menu', None)
-        was_visible = bool(popup and popup.isVisible())
-        popup_pos = popup.pos() if was_visible else None
-        self.toggle_label_cache_slot_lock(slot_index)
-        if was_visible and getattr(self, 'cache_menu', None) is not None:
-            self.cache_menu.move(popup_pos)
-            self.cache_menu.show()
-
-    def _toggle_cache_popup(self):
-        if getattr(self, 'cache_menu', None) is None:
-            self._rebuild_label_cache_menu()
-        if self.cache_menu.isVisible():
-            self.cache_menu.hide()
+        if slot_index < 0 or slot_index >= len(getattr(self, 'label_cache_slots', [])):
             return
-        global_pos = self.cache_btn.mapToGlobal(QPoint(0, self.cache_btn.height()))
-        self.cache_menu.move(global_pos)
-        self.cache_menu.show()
+        text = str(field.text() or '').strip()
+        if not text:
+            text = f"{tr('缓存槽')}{slot_index + 1}"
+            field.setText(text)
+        self.label_cache_slots[slot_index]['name'] = text
+        self._save_label_cache_slots()
+
+    def _toggle_cache_slot_lock_from_popup(self, slot_index, btn):
+        if slot_index < 0 or slot_index >= len(getattr(self, 'label_cache_slots', [])):
+            return
+        self.label_cache_slots[slot_index]['locked'] = not self.label_cache_slots[slot_index].get('locked')
+        self._save_label_cache_slots()
+        btn.setText(tr("上锁") if self.label_cache_slots[slot_index].get('locked') else tr("解锁"))
 
     def _trigger_draw_box_menu_action(self, checked=False):
         self._draw_box_action.setChecked(False)
@@ -531,7 +508,7 @@ class UIBuilderMixin:
         popup.setObjectName("optionsPopup")
         theme = ThemeManager.get_theme()
         popup.setStyleSheet(
-            "QFrame#optionsPopup { background-color: %s; border: none; }"
+            "#optionsPopup { background-color: %s; border: none; }"
             "QPushButton { background: transparent; border: none; padding: 6px 16px; text-align:left; color: %s; }"
             % (theme['widget_bg'], theme['text_primary'])
         )

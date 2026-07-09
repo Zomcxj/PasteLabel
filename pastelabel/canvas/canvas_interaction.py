@@ -5,7 +5,7 @@ import os
 from PyQt5.QtCore import Qt, QRectF, QUrl, QMimeData
 from PyQt5.QtGui import QDrag
 
-from ..core.config import BACKGROUND_SCALE_CONFIG, PASTE_ITEM_CONFIG
+from ..core.config import BACKGROUND_SCALE_CONFIG, PASTE_ITEM_CONFIG, NUDGE_CONFIG
 from .canvas_drawing import CanvasDrawingMixin
 from .canvas_menu import CanvasMenuMixin
 
@@ -684,6 +684,31 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             min(self.background_scale, BACKGROUND_SCALE_CONFIG['max_scale'])
         )
         self.is_manual_scale = True
+
+    def _nudge_selected(self, dx, dy):
+        if self.selected_box is not None and 0 <= self.selected_box < len(self._editor.detection_boxes):
+            box = self._editor.detection_boxes[self.selected_box]
+            step = NUDGE_CONFIG['step']
+            bg = self._editor.current_background
+            bw = bg.width() if bg else 0
+            bh = bg.height() if bg else 0
+            nx = max(0, min(box["x"] + dx * step, bw - box["width"]))
+            ny = max(0, min(box["y"] + dy * step, bh - box["height"]))
+            box["x"] = nx
+            box["y"] = ny
+            self._sync_detection_box_to_dict(self.selected_box)
+            self.update()
+        elif self._editor.selected_item is not None and 0 <= self._editor.selected_item < len(self._editor.canvas_items):
+            p, rect, label = self._editor.canvas_items[self._editor.selected_item]
+            step = NUDGE_CONFIG['step']
+            bg = self._editor.current_background
+            bw = bg.width() if bg else 0
+            bh = bg.height() if bg else 0
+            nx = max(0, min(rect.x() + dx * step, bw - rect.width()))
+            ny = max(0, min(rect.y() + dy * step, bh - rect.height()))
+            nr = QRectF(nx, ny, rect.width(), rect.height())
+            self._editor.canvas_items[self._editor.selected_item] = (p, nr, label)
+            self.update()
 
     def keyPressEvent(self, event):
         super().keyPressEvent(event)

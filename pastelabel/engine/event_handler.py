@@ -7,7 +7,7 @@ from PyQt5.QtCore import Qt, QEvent
 from PyQt5.QtWidgets import QShortcut
 
 from ..core.utils import extract_label_name
-from ..core.config import SHORTCUT_CONFIG
+from ..core.config import SHORTCUT_CONFIG, NUDGE_CONFIG
 from ..ui.i18n import t as tr
 
 
@@ -109,6 +109,12 @@ class EventHandlerMixin:
                 shortcut = QShortcut(QKeySequence(sc_str), self)
                 shortcut.activated.connect(lambda idx=slot_index: self.paste_label_cache_slot(idx))
                 self._shortcuts.append(shortcut)
+        step = NUDGE_CONFIG['step']
+        for key_code, dx, dy in [(Qt.Key_Left, -1, 0), (Qt.Key_Right, 1, 0),
+                                  (Qt.Key_Up, 0, -1), (Qt.Key_Down, 0, 1)]:
+            sc = QShortcut(QKeySequence(key_code), self)
+            sc.activated.connect(lambda ddx=dx, ddy=dy: self.canvas._nudge_selected(ddx, ddy))
+            self._shortcuts.append(sc)
         self._update_shortcut_status_label()
 
     def _update_shortcut_status_label(self):

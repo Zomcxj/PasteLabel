@@ -70,7 +70,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             [int(slot.get('copy_order', 0) or 0) for slot in self.label_cache_slots] or [0]
         )
 
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, NUDGE_CONFIG
         if settings.get('grid_line_width') is not None:
             GRID_CONFIG['line_width'] = settings['grid_line_width']
         if settings.get('grid_alpha') is not None:
@@ -86,6 +86,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._canvas_image_copy_enabled = bool(settings.get('canvas_image_copy_enabled', False))
         self._magnifier_enabled = bool(settings.get('magnifier_enabled', False))
         MAGNIFIER_CONFIG['zoom'] = max(0.8, min(3.0, float(settings.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom']))))
+        NUDGE_CONFIG['step'] = max(1, min(5, int(settings.get('nudge_step', NUDGE_CONFIG['step']))))
 
     def _init_data(self):
         """初始化数据结构"""

@@ -5,7 +5,7 @@ import os
 import sys
 from datetime import datetime
 from PyQt5.QtWidgets import QMainWindow, QApplication
-from PyQt5.QtCore import QPoint, Qt, QUrl, QTimer
+from PyQt5.QtCore import QPoint, Qt, QUrl, QTimer, QRectF
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDrag, QIcon
 
 from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG, MAGNIFIER_CONFIG
@@ -64,6 +64,11 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
         self.shortcut_config = settings.get('shortcuts', {})
         self._max_labels = settings.get('max_labels', 3)
+        self.label_cache_slots = settings.get('label_cache_slots', [])
+        self.active_label_cache_slot = 0
+        self._label_cache_copy_counter = max(
+            [int(slot.get('copy_order', 0) or 0) for slot in self.label_cache_slots] or [0]
+        )
 
         from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG
         if settings.get('grid_line_width') is not None:
@@ -127,6 +132,137 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         from ..engine.undo_manager import UndoManager
         self.undo_manager = UndoManager()
 
+    def _save_label_cache_slots(self):
+        from ..core import config_manager
+        config_manager.save_all(label_cache_slots=self.label_cache_slots)
+
+    def _get_next_writable_label_cache_slot_index(self):
+        writable_slots = [
+            (index, slot) for index, slot in enumerate(self.label_cache_slots)
+            if not slot.get('locked')
+        ]
+        if not writable_slots:
+            return None
+        return min(
+            writable_slots,
+            key=lambda item: int(item[1].get('copy_order', 0) or 0),
+        )[0]
+
+    def _reset_label_cache_slots(self):
+        for index, slot in enumerate(self.label_cache_slots):
+            default_shortcut = str(index + 1)
+            default_name = f"{tr('缓存槽')}{index + 1}"
+            slot['name'] = default_name
+            slot['locked'] = False
+            slot['items'] = []
+            slot['copied_at'] = ''
+            slot['copy_order'] = 0
+            slot['shortcut'] = str(slot.get('shortcut') or default_shortcut)
+        self.active_label_cache_slot = 0
+        self._label_cache_copy_counter = 0
+
+    def set_active_label_cache_slot(self, slot_index):
+        if slot_index < 0 or slot_index >= len(self.label_cache_slots):
+            return
+        self.active_label_cache_slot = slot_index
+        self._rebuild_label_cache_menu()
+
+    def _get_selected_detection_boxes(self):
+        multi_indexes = [
+            index for index in getattr(self.canvas, 'selected_boxes', [])
+            if 0 <= index < len(self.detection_boxes)
+        ]
+        if multi_indexes:
+            return [dict(self.detection_boxes[index]) for index in multi_indexes]
+
+        index = getattr(self.canvas, 'selected_box', None)
+        if index is None or index < 0 or index >= len(self.detection_boxes):
+            return []
+        return [dict(self.detection_boxes[index])]
+
+    def copy_selected_labels_to_active_cache_slot(self):
+        items = self._get_selected_detection_boxes()
+        if not items and getattr(self, 'canvas', None):
+            # hover 选中态可能还没同步到 selected_box，需要补一次同步。
+            check_hover = getattr(self.canvas, '_check_hover', None)
+            if callable(check_hover):
+                check_hover()
+                items = self._get_selected_detection_boxes()
+        if not items:
+            self.status_label.setText(tr("无可复制标签"))
+            return
+        slot_index = ImageEditor._get_next_writable_label_cache_slot_index(self)
+        if slot_index is None:
+            self.status_label.setText(tr("没有可写入的缓存槽"))
+            return
+        self.active_label_cache_slot = slot_index
+        slot = self.label_cache_slots[slot_index]
+        self._label_cache_copy_counter = getattr(self, '_label_cache_copy_counter', 0) + 1
+        slot['items'] = items
+        slot['copied_at'] = datetime.now().strftime('%H:%M:%S')
+        slot['copy_order'] = self._label_cache_copy_counter
+        self._save_label_cache_slots()
+        self._rebuild_label_cache_menu()
+
+    def paste_label_cache_slot(self, slot_index):
+        if self.current_background is None:
+            return
+        if slot_index < 0 or slot_index >= len(self.label_cache_slots):
+            return
+        slot = self.label_cache_slots[slot_index]
+        if not slot.get('items'):
+            self.status_label.setText(tr("缓存槽为空"))
+            return
+        pasted_group = []
+        for box in slot['items']:
+            pasted_group.append((
+                QRectF(box['x'], box['y'], box['width'], box['height']),
+                box['label'],
+            ))
+        adjusted_group = self._offset_overlapping_paste_group(pasted_group)
+        if adjusted_group:
+            self.save_undo_state()
+        for rect, label in adjusted_group:
+            self.detection_boxes.append({
+                'x': rect.x(),
+                'y': rect.y(),
+                'width': rect.width(),
+                'height': rect.height(),
+                'label': label,
+            })
+        if adjusted_group and self.current_background_index >= 0:
+            self.detection_boxes_dict[self.current_background_index] = self.detection_boxes.copy()
+        self.update_label_list()
+        self.canvas.update()
+
+    def toggle_label_cache_slot_lock(self, slot_index):
+        if slot_index < 0 or slot_index >= len(self.label_cache_slots):
+            return
+        self.label_cache_slots[slot_index]['locked'] = not self.label_cache_slots[slot_index].get('locked')
+        self._save_label_cache_slots()
+        self._rebuild_label_cache_menu()
+
+    def clear_label_cache_slot(self, slot_index):
+        if slot_index < 0 or slot_index >= len(self.label_cache_slots):
+            return
+        if self.label_cache_slots[slot_index].get('locked'):
+            return
+        self.label_cache_slots[slot_index]['items'] = []
+        self.label_cache_slots[slot_index]['copied_at'] = ''
+        self.label_cache_slots[slot_index]['copy_order'] = 0
+        self._save_label_cache_slots()
+        self._rebuild_label_cache_menu()
+
+    def rename_label_cache_slot(self, slot_index, name):
+        if slot_index < 0 or slot_index >= len(self.label_cache_slots):
+            return
+        text = str(name or '').strip()
+        if not text:
+            text = f"{tr('缓存槽')}{slot_index + 1}"
+        self.label_cache_slots[slot_index]['name'] = text
+        self._save_label_cache_slots()
+        self._rebuild_label_cache_menu()
+
     def _connect_manager_signals(self):
         """连接管理器信号 → 编辑器 UI 刷新（需在 init_ui 之后调用）"""
         self.label_manager.data_changed.connect(self.canvas.update)
@@ -153,6 +289,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 record['note'] = existing.get('note', '')
                 break
         config_manager.upsert_memory_record(record)
+        self._reset_label_cache_slots()
+        self._save_label_cache_slots()
 
     def load_memory_record(self, record):
         """用记忆记录替换当前打开的背景图、贴图和标签来源。"""
@@ -460,6 +598,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 self.canvas.is_manual_scale = False
                 self.canvas.reset_view()
                 self.canvas.selected_box = None
+                self.canvas.selected_boxes = []
                 self.selected_item = None
                 self.canvas_items = []
                 self.detection_boxes = self.load_detection_boxes(self._delete_files[idx])
@@ -787,12 +926,17 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.size_lbl.setText(tr("短边尺寸:"))
         if hasattr(self, 'options_btn'):
             self.options_btn.setText(tr("选项"))
+        if hasattr(self, 'cache_btn'):
+            self.cache_btn.setText(tr("缓存"))
+            self.cache_btn.setToolTip(tr("复制缓存管理"))
         if hasattr(self, 'memory_btn'):
             self.memory_btn.setText(tr("记忆"))
             self.memory_btn.setToolTip(tr("记忆记录"))
+        if hasattr(self, '_rebuild_label_cache_menu'):
+            self._rebuild_label_cache_menu()
         if hasattr(self, '_draw_box_action'):
             sc = self._get_shortcut('draw_box')
-            self._draw_box_action.setText(f"  {tr('绘制BOX')}\t{sc}")
+            self._draw_box_action.setText(f"{tr('绘制BOX')}\t{sc}")
         if hasattr(self, '_menu_actions'):
             menu_texts = [tr("显示BOX"), tr("显示Label"),
                           tr("自动保存"), tr("显示网格"), tr("显示贴图名"),
@@ -834,7 +978,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         tr = i18n.t
         if hasattr(self, '_draw_box_action'):
             sc = self._get_shortcut('draw_box')
-            self._draw_box_action.setText(f"  {tr('绘制BOX')}\t{sc}")
+            self._draw_box_action.setText(f"{tr('绘制BOX')}\t{sc}")
         if hasattr(self, '_menu_actions'):
             menu_texts = [tr("显示BOX"), tr("显示Label"),
                           tr("自动保存"), tr("显示网格"), tr("显示贴图名"),

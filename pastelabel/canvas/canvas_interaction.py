@@ -102,6 +102,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.hover_resize_target = None
         self.hover_resize_handle = None
         self.selected_box = None
+        self.selected_boxes = []
         _, rect, _ = self._editor.canvas_items[item_index]
 
         if self._editor.selected_item != item_index:
@@ -168,6 +169,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         if not background_rect:
             return False
 
+        ctrl_pressed = bool(self._current_modifiers() & Qt.ControlModifier)
+
         for i, box in enumerate(self._editor.detection_boxes):
             box_x = box["x"] * self.background_scale + background_rect.left()
             box_y = box["y"] * self.background_scale + background_rect.top()
@@ -181,13 +184,21 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             if box_rect.contains(mouse_pos):
                 self.hover_resize_target = None
                 self.hover_resize_handle = None
+                self._editor.selected_item = None
+                self.selected_item_size = None
+
+                if ctrl_pressed:
+                    self._toggle_box_selection(i)
+                    self.update_status_label()
+                    self.update()
+                    return True
+
                 self._editor.save_undo_state()
+                self.selected_boxes = [i]
                 self.selected_box = i
                 self.box_drag_start = mouse_pos
                 self.is_dragging_box = True
                 self.setCursor(Qt.ClosedHandCursor)
-                self._editor.selected_item = None
-                self.selected_item_size = None
                 self.update_status_label()
                 self.update()
                 return True
@@ -217,11 +228,35 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self._editor.selected_item = None
         self.selected_item_size = None
         self.selected_box = None
+        self.selected_boxes = []
         self.hover_resize_target = None
         self.hover_resize_handle = None
         self.setCursor(Qt.ArrowCursor)
         self.update_status_label()
         self.update()
+
+    def _toggle_box_selection(self, box_index):
+        if box_index in self.selected_boxes:
+            self.selected_boxes = [idx for idx in self.selected_boxes if idx != box_index]
+        else:
+            self.selected_boxes = [
+                idx for idx in self.selected_boxes
+                if 0 <= idx < len(self._editor.detection_boxes)
+            ]
+            self.selected_boxes.append(box_index)
+
+        self.selected_box = self.selected_boxes[-1] if self.selected_boxes else None
+        self.is_dragging_box = False
+        self.is_resizing_box = False
+        self.resize_handle = None
+
+    def _current_modifiers(self):
+        app = getattr(self._editor, 'app', None)
+        if app is not None and hasattr(app, 'keyboardModifiers'):
+            return app.keyboardModifiers()
+
+        from PyQt5.QtWidgets import QApplication
+        return QApplication.keyboardModifiers()
 
     def _do_canvas_drag_out(self):
         """检测鼠标是否离开窗口，触发拖出复制"""
@@ -329,8 +364,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 self.update()
             return
 
-        is_annotate = getattr(self._editor, 'edit_mode', 'paste') == 'annotate'
-        if (is_annotate and self._editor.show_labels_checkbox.isChecked() and
+        if (self._editor.show_labels_checkbox.isChecked() and
                 self._select_hovered_detection_box(bg_rect)):
             pass
         elif (self._editor.selected_item is not None and
@@ -363,7 +397,13 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self.update()
 
     def _select_hovered_detection_box(self, background_rect):
-        """标注模式下，鼠标移入检测框即进入该框编辑状态。"""
+        """鼠标移入检测框即进入该框编辑状态。"""
+        try:
+            modifiers = self._current_modifiers()
+        except AttributeError:
+            modifiers = 0
+        ctrl_pressed = bool(modifiers & Qt.ControlModifier)
+
         for i, box in enumerate(self._editor.detection_boxes):
             box_rect = QRectF(
                 box["x"] * self.background_scale + background_rect.left(),
@@ -372,13 +412,29 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 box["height"] * self.background_scale,
             )
 
-            handle = self._box_handle_at_pos(
-                self.mouse_pos, i,
-                box_rect.x(), box_rect.y(), box_rect.width(), box_rect.height()
-            )
-            if handle or box_rect.contains(self.mouse_pos):
-                if self.selected_box != i:
+            if box_rect.contains(self.mouse_pos):
+                handle = self._box_handle_at_pos(
+                    self.mouse_pos, i,
+                    box_rect.x(), box_rect.y(), box_rect.width(), box_rect.height()
+                )
+                selection_changed = self.selected_box != i
+                if ctrl_pressed:
+                    valid_indexes = [
+                        idx for idx in self.selected_boxes
+                        if 0 <= idx < len(self._editor.detection_boxes)
+                    ]
+                    if i not in valid_indexes:
+                        valid_indexes.append(i)
+                        selection_changed = True
+                    self.selected_boxes = valid_indexes
                     self.selected_box = i
+                else:
+                    if self.selected_boxes != [i]:
+                        selection_changed = True
+                    self.selected_box = i
+                    self.selected_boxes = [i]
+
+                if selection_changed:
                     self._editor.selected_item = None
                     self.selected_item_size = None
                     self.update_status_label()
@@ -390,6 +446,16 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 else:
                     self.setCursor(Qt.OpenHandCursor)
                 return True
+
+        if self.selected_box is None or not (0 <= self.selected_box < len(self._editor.detection_boxes)):
+            return False
+
+        handle = self._box_handle_at_pos(self.mouse_pos, self.selected_box)
+        if handle:
+            self.hover_resize_target = 'box'
+            self.hover_resize_handle = handle
+            self.setCursor(Qt.PointingHandCursor)
+            return True
 
         return False
 

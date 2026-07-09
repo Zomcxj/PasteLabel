@@ -61,6 +61,31 @@ class TestLoadAll:
         finally:
             config_manager.CONFIG_PATH = original
 
+    def test_label_cache_slots_defaults_to_three_numeric_shortcuts(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            result = config_manager.load_all()
+            assert 'label_cache_slots' in result
+            assert len(result['label_cache_slots']) == 3
+            assert [slot['name'] for slot in result['label_cache_slots']] == ['缓存槽1', '缓存槽2', '缓存槽3']
+            assert [slot['shortcut'] for slot in result['label_cache_slots']] == ['1', '2', '3']
+        finally:
+            config_manager.CONFIG_PATH = original
+
+    def test_label_cache_slots_load_preserves_saved_shortcuts(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            config_manager.save_all(label_cache_slots=[
+                {'name': '一号槽', 'locked': True, 'items': [], 'shortcut': 'Ctrl+1'},
+                {'name': '二号槽', 'locked': False, 'items': [], 'shortcut': 'Ctrl+2'},
+                {'name': '三号槽', 'locked': False, 'items': [], 'shortcut': 'Ctrl+3'},
+            ])
+            result = config_manager.load_all()['label_cache_slots']
+            assert [slot['name'] for slot in result] == ['一号槽', '二号槽', '三号槽']
+            assert [slot['shortcut'] for slot in result] == ['Ctrl+1', 'Ctrl+2', 'Ctrl+3']
+        finally:
+            config_manager.CONFIG_PATH = original
+
 
 class TestSaveLoadRoundtrip:
 

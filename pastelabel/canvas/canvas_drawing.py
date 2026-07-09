@@ -23,6 +23,7 @@ class CanvasDrawingMixin:
             self.draw_start_pos = mouse_pos
             self.temp_draw_box = QRectF(mouse_pos, QSizeF())
             self.selected_box = None
+            self.selected_boxes = []
             self._editor.selected_item = None
             self.update_status_label()
             self.update()
@@ -189,6 +190,7 @@ class CanvasDrawingMixin:
         handle_name = self._box_handle_at_pos(mouse_pos, box_index, x, y, width, height)
         if handle_name:
             self.selected_box = box_index
+            self.selected_boxes = [box_index]
             self.box_resize_start = mouse_pos
             self.is_resizing_box = True
             self.resize_handle = handle_name

@@ -240,7 +240,7 @@ class CanvasRendererMixin:
             box_width = box["width"] * self.background_scale
             box_height = box["height"] * self.background_scale
 
-            is_selected = (i == self.selected_box)
+            is_selected = (i == self.selected_box or i in getattr(self, 'selected_boxes', []))
             is_pressed_label = self._is_pressed_label(box)
 
             self._draw_single_detection_box(

@@ -243,6 +243,7 @@ class LabelManager(QObject):
             else:
                 self.editor.detection_boxes = []
             self.editor.canvas.selected_box = None
+            self.editor.canvas.selected_boxes = []
             
             # 更新全局标签
             if label_to_delete in self.editor.global_labels:

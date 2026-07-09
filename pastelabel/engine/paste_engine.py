@@ -12,8 +12,42 @@ from ..core.utils import extract_label_name, calculate_iou
 from ..ui.i18n import t as tr
 
 
+OVERLAP_OFFSET_STEP = 3
+
+
 class PasteEngineMixin:
     """贴图引擎混入类 - 管理贴图的添加、删除、随机和批量放置"""
+
+    def _offset_overlapping_paste_group(self, pasted_group):
+        existing_boxes = {
+            (box['x'], box['y'], box['width'], box['height'])
+            for box in getattr(self, 'detection_boxes', [])
+        }
+        if not existing_boxes:
+            return pasted_group
+
+        adjusted_group = []
+        for rect, label in pasted_group:
+            adjusted_group.append((QRectF(rect.x(), rect.y(), rect.width(), rect.height()), label))
+        while True:
+            group_boxes = [
+                (rect.x(), rect.y(), rect.width(), rect.height())
+                for rect, label in adjusted_group
+            ]
+            if not any(box in existing_boxes for box in group_boxes):
+                return adjusted_group
+            adjusted_group = [
+                (
+                    QRectF(
+                        rect.x() + OVERLAP_OFFSET_STEP,
+                        rect.y() + OVERLAP_OFFSET_STEP,
+                        rect.width(),
+                        rect.height(),
+                    ),
+                    label,
+                )
+                for rect, label in adjusted_group
+            ]
 
     def add_small_to_canvas(self, item):
         """添加贴图到画布"""

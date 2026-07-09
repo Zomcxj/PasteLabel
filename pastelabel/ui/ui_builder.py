@@ -5,7 +5,7 @@ import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QSplitter, QScrollArea,
-    QLineEdit, QCheckBox, QSpinBox, QGroupBox, QFrame
+    QLineEdit, QCheckBox, QSpinBox, QGroupBox, QFrame, QMenu, QApplication
 )
 from PyQt5.QtGui import QIcon, QPixmap, QPainter, QDrag
 from PyQt5.QtCore import Qt, QSize, QTimer, QPoint, QMimeData, QUrl
@@ -72,6 +72,37 @@ class DragOutListWidget(QListWidget):
     def mouseReleaseEvent(self, event):
         self._drag_start_pos = None
         super().mouseReleaseEvent(event)
+
+
+class HoverDismissPopup(QFrame):
+    """鼠标移出后自动收起的轻量弹层。"""
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        focus_widget = QApplication.focusWidget()
+        if isinstance(focus_widget, QLineEdit) and self.isAncestorOf(focus_widget):
+            return
+        self.hide()
+
+
+class HoverKeepMenu(QMenu):
+    """点击菜单项不关闭，鼠标移开后关闭。"""
+
+    def mouseReleaseEvent(self, event):
+        action = self.actionAt(event.pos())
+        if action and action.isEnabled():
+            if action == self.actions()[0]:
+                action.triggered.emit(False)
+                event.accept()
+                return
+            action.trigger()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self.hide()
 
 
 class UIBuilderMixin:
@@ -251,15 +282,16 @@ class UIBuilderMixin:
 
     def _create_options_menu(self, layout):
         """创建选项下拉菜单按钮"""
-        from PyQt5.QtWidgets import QMenu, QAction
 
-        self.memory_btn = QPushButton(tr("记忆"))
-        self.memory_btn.setObjectName("optionsBtn")
-        self.memory_btn.setFixedWidth(70)
-        self.memory_btn.setFixedHeight(24)
-        self.memory_btn.setToolTip(tr("记忆记录"))
-        self.memory_btn.clicked.connect(self._show_memory_records)
-        layout.addWidget(self.memory_btn)
+        self.cache_btn = QPushButton(tr("缓存"))
+        self.cache_btn.setObjectName("optionsBtn")
+        self.cache_btn.setFixedWidth(70)
+        self.cache_btn.setFixedHeight(24)
+        self.cache_btn.setToolTip(tr("复制缓存管理"))
+        self.cache_menu = None
+        self.cache_btn.clicked.connect(self._toggle_cache_popup)
+        layout.addWidget(self.cache_btn)
+        self._rebuild_label_cache_menu()
 
         layout.addSpacing(4)
 
@@ -268,15 +300,14 @@ class UIBuilderMixin:
         self.options_btn.setFixedHeight(24)
         self.options_btn.setFixedWidth(70)
         self.options_btn.setToolTip(tr("选项设置"))
-
-        self.options_menu = QMenu()
+        self.options_menu = HoverKeepMenu()
         self.options_menu.setObjectName("optionsMenu")
         self.options_menu.setMinimumWidth(200)
 
-        self._draw_box_action = QAction("  " + tr("绘制BOX"), self)
-        self._draw_box_action.triggered.connect(self.toggle_draw_mode)
-        self.options_menu.addAction(self._draw_box_action)
-        self.options_menu.addSeparator()
+        self._draw_box_action = self.options_menu.addAction(tr("绘制BOX"))
+        self._draw_box_action.setCheckable(True)
+        self._draw_box_action.setChecked(False)
+        self._draw_box_action.triggered.connect(self._trigger_draw_box_menu_action)
 
         items = [
             (tr("显示BOX"), "toggle_labels", self.show_labels_checkbox),
@@ -284,37 +315,52 @@ class UIBuilderMixin:
             (tr("自动保存"), "toggle_auto_save", self.auto_save_checkbox),
             (tr("显示网格"), "toggle_grid", self.show_grid_checkbox),
             (tr("显示贴图名"), "toggle_paste_names", self.show_paste_names_checkbox),
-            (tr("添加文件名前缀"), None, self.prefix_checkbox),
         ]
 
         self._menu_actions = []
         for text, shortcut_action, checkbox in items:
             sc = self._get_shortcut(shortcut_action) if shortcut_action else ''
             label = f"{text}\t{sc}" if sc else text
-            action = QAction(label, self)
+            action = self.options_menu.addAction(label)
             action.setCheckable(True)
             action.setChecked(checkbox.isChecked())
             action.triggered.connect(lambda checked, cb=checkbox: cb.setChecked(checked))
             checkbox.stateChanged.connect(lambda state, a=action: a.setChecked(state == Qt.Checked))
-            self.options_menu.addAction(action)
             self._menu_actions.append((action, checkbox, shortcut_action))
 
-        self.canvas_copy_action = QAction(tr("画布图片复制"), self)
+        self.options_menu.addSeparator()
+
+        prefix_action = self.options_menu.addAction(tr("添加文件名前缀"))
+        prefix_action.setCheckable(True)
+        prefix_action.setChecked(self.prefix_checkbox.isChecked())
+        prefix_action.triggered.connect(lambda checked, cb=self.prefix_checkbox: cb.setChecked(checked))
+        self.prefix_checkbox.stateChanged.connect(lambda state, a=prefix_action: a.setChecked(state == Qt.Checked))
+        self._menu_actions.append((prefix_action, self.prefix_checkbox, None))
+
+        self.canvas_copy_action = self.options_menu.addAction(tr("画布图片复制"))
         self.canvas_copy_action.setCheckable(True)
         self.canvas_copy_action.setChecked(getattr(self, '_canvas_image_copy_enabled', False))
         self.canvas_copy_action.triggered.connect(self._on_canvas_copy_menu_changed)
-        self.options_menu.addAction(self.canvas_copy_action)
         self._menu_actions.append((self.canvas_copy_action, None, None))
 
-        self.magnifier_action = QAction(tr("窗口放大器"), self)
+        self.magnifier_action = self.options_menu.addAction(tr("窗口放大器"))
         self.magnifier_action.setCheckable(True)
         self.magnifier_action.setChecked(getattr(self, '_magnifier_enabled', False))
         self.magnifier_action.triggered.connect(self._on_magnifier_menu_changed)
-        self.options_menu.addAction(self.magnifier_action)
         self._menu_actions.append((self.magnifier_action, None, None))
 
         self.options_btn.setMenu(self.options_menu)
         layout.addWidget(self.options_btn)
+
+        layout.addSpacing(4)
+
+        self.memory_btn = QPushButton(tr("记忆"))
+        self.memory_btn.setObjectName("optionsBtn")
+        self.memory_btn.setFixedWidth(70)
+        self.memory_btn.setFixedHeight(24)
+        self.memory_btn.setToolTip(tr("记忆记录"))
+        self.memory_btn.clicked.connect(self._show_memory_records)
+        layout.addWidget(self.memory_btn)
 
         layout.addSpacing(4)
 
@@ -370,17 +416,193 @@ class UIBuilderMixin:
         QTimer.singleShot(0, lambda: self.mode_seg_ctrl.update_position(animated=False))
         layout.addWidget(self.mode_seg)
 
+    def _rebuild_label_cache_menu(self):
+        if not hasattr(self, 'cache_btn'):
+            return
+        if getattr(self, 'cache_menu', None) is not None:
+            self.cache_menu.deleteLater()
+
+        popup_flags = Qt.Tool | Qt.FramelessWindowHint
+        no_shadow_flag = getattr(Qt, 'NoDropShadowWindowHint', None)
+        if no_shadow_flag is not None:
+            popup_flags |= no_shadow_flag
+        popup = HoverDismissPopup(self, popup_flags)
+        popup.setObjectName("cachePopup")
+        popup.setAttribute(Qt.WA_InputMethodEnabled, True)
+        popup.setFocusPolicy(Qt.StrongFocus)
+        theme = ThemeManager.get_theme()
+        popup.setStyleSheet(
+            "QFrame#cachePopup { background-color: %s; border: none; }"
+            "QPushButton { background: transparent; border: none; padding: 0; color: %s; }"
+            "QLabel { color: %s; }"
+            "QLineEdit { background: transparent; border: none; padding: 0; color: %s; }"
+            % (theme['widget_bg'], theme['text_primary'], theme['text_primary'], theme['text_primary'])
+        )
+        popup_layout = QVBoxLayout(popup)
+        popup_layout.setContentsMargins(4, 4, 4, 4)
+        popup_layout.setSpacing(2)
+
+        for index, slot in enumerate(getattr(self, 'label_cache_slots', [])):
+            row_widget = QWidget(popup)
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(8, 4, 8, 4)
+            row_layout.setSpacing(8)
+
+            lock_btn = QPushButton(tr("上锁") if slot.get('locked') else tr("解锁"))
+            lock_btn.setCursor(Qt.PointingHandCursor)
+            lock_btn.clicked.connect(lambda checked=False, idx=index: self._toggle_cache_slot_lock_from_popup(idx))
+            row_layout.addWidget(lock_btn, 0)
+
+            copied_at = slot.get('copied_at') or '--:--:--'
+            middle_widget = QWidget(popup)
+            middle_layout = QHBoxLayout(middle_widget)
+            middle_layout.setContentsMargins(0, 0, 0, 0)
+            middle_layout.setSpacing(2)
+
+            slot_name_input = QLineEdit(slot.get('name', f"{tr('缓存槽')}{index + 1}"))
+            slot_name_input.setFrame(False)
+            slot_name_input.setAttribute(Qt.WA_InputMethodEnabled, True)
+            slot_name_input.setFixedWidth(slot_name_input.fontMetrics().horizontalAdvance("测" * 9) + 24)
+            slot_name_input.setStyleSheet("padding: 0 6px;")
+            if index == getattr(self, 'active_label_cache_slot', 0):
+                slot_name_input.setStyleSheet("padding: 0 6px; font-weight:bold;")
+            slot_name_input.editingFinished.connect(
+                lambda idx=index, field=slot_name_input: self._commit_cache_slot_name(idx, field)
+            )
+            middle_layout.addWidget(slot_name_input, 1)
+
+            time_label = QLabel(copied_at)
+            middle_layout.addWidget(time_label, 0)
+            row_layout.addWidget(middle_widget, 1)
+
+            shortcut_label = QLabel(slot.get('shortcut', ''))
+            shortcut_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            row_layout.addWidget(shortcut_label, 0)
+
+            popup_layout.addWidget(row_widget)
+
+        self.cache_menu = popup
+
+    def _handle_cache_slot_row_click(self, slot_index):
+        self.set_active_label_cache_slot(slot_index)
+
+    def _commit_cache_slot_name(self, slot_index, field):
+        popup = getattr(self, 'cache_menu', None)
+        was_visible = bool(popup and popup.isVisible())
+        popup_pos = popup.pos() if was_visible else None
+        self.rename_label_cache_slot(slot_index, field.text())
+        if was_visible and getattr(self, 'cache_menu', None) is not None:
+            self.cache_menu.move(popup_pos)
+            self.cache_menu.show()
+
+    def _toggle_cache_slot_lock_from_popup(self, slot_index):
+        popup = getattr(self, 'cache_menu', None)
+        was_visible = bool(popup and popup.isVisible())
+        popup_pos = popup.pos() if was_visible else None
+        self.toggle_label_cache_slot_lock(slot_index)
+        if was_visible and getattr(self, 'cache_menu', None) is not None:
+            self.cache_menu.move(popup_pos)
+            self.cache_menu.show()
+
+    def _toggle_cache_popup(self):
+        if getattr(self, 'cache_menu', None) is None:
+            self._rebuild_label_cache_menu()
+        if self.cache_menu.isVisible():
+            self.cache_menu.hide()
+            return
+        global_pos = self.cache_btn.mapToGlobal(QPoint(0, self.cache_btn.height()))
+        self.cache_menu.move(global_pos)
+        self.cache_menu.show()
+
+    def _trigger_draw_box_menu_action(self, checked=False):
+        self._draw_box_action.setChecked(False)
+        self.toggle_draw_mode()
+
+    def _rebuild_options_popup(self):
+        if getattr(self, 'options_menu', None) is not None:
+            self.options_menu.deleteLater()
+
+        popup_flags = Qt.Popup | Qt.FramelessWindowHint
+        no_shadow_flag = getattr(Qt, 'NoDropShadowWindowHint', None)
+        if no_shadow_flag is not None:
+            popup_flags |= no_shadow_flag
+        popup = HoverDismissPopup(self, popup_flags)
+        popup.setObjectName("optionsPopup")
+        theme = ThemeManager.get_theme()
+        popup.setStyleSheet(
+            "QFrame#optionsPopup { background-color: %s; border: none; }"
+            "QPushButton { background: transparent; border: none; padding: 6px 16px; text-align:left; color: %s; }"
+            % (theme['widget_bg'], theme['text_primary'])
+        )
+        popup_layout = QVBoxLayout(popup)
+        popup_layout.setContentsMargins(4, 4, 4, 4)
+        popup_layout.setSpacing(2)
+
+        self._option_popup_rows = []
+        self._draw_box_action = QPushButton()
+        self._draw_box_action.clicked.connect(self.toggle_draw_mode)
+        popup_layout.addWidget(self._draw_box_action)
+
+        items = [
+            (tr("显示BOX"), "toggle_labels", self.show_labels_checkbox, lambda cb=self.show_labels_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.show_labels_checkbox: cb.isChecked()),
+            (tr("显示Label"), "toggle_label_names", self.show_label_names_checkbox, lambda cb=self.show_label_names_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.show_label_names_checkbox: cb.isChecked()),
+            (tr("自动保存"), "toggle_auto_save", self.auto_save_checkbox, lambda cb=self.auto_save_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.auto_save_checkbox: cb.isChecked()),
+            (tr("显示网格"), "toggle_grid", self.show_grid_checkbox, lambda cb=self.show_grid_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.show_grid_checkbox: cb.isChecked()),
+            (tr("显示贴图名"), "toggle_paste_names", self.show_paste_names_checkbox, lambda cb=self.show_paste_names_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.show_paste_names_checkbox: cb.isChecked()),
+            (tr("添加文件名前缀"), None, self.prefix_checkbox, lambda cb=self.prefix_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.prefix_checkbox: cb.isChecked()),
+            (tr("画布图片复制"), None, None, lambda: self._on_canvas_copy_menu_changed(not getattr(self, '_canvas_image_copy_enabled', False)), lambda: getattr(self, '_canvas_image_copy_enabled', False)),
+            (tr("窗口放大器"), None, None, lambda: self._on_magnifier_menu_changed(not getattr(self, '_magnifier_enabled', False)), lambda: getattr(self, '_magnifier_enabled', False)),
+        ]
+        for text, shortcut_action, checkbox, handler, getter in items:
+            button = QPushButton()
+            button.clicked.connect(handler)
+            if checkbox is not None:
+                checkbox.stateChanged.connect(lambda state: self._refresh_options_popup_texts())
+            popup_layout.addWidget(button)
+            self._option_popup_rows.append((button, text, shortcut_action, getter))
+
+        self.options_menu = popup
+        self._refresh_options_popup_texts()
+
+    def _refresh_options_popup_texts(self):
+        if hasattr(self, '_draw_box_action'):
+            sc = self._get_shortcut('draw_box')
+            self._draw_box_action.setText(f"{tr('绘制BOX')}    {sc}" if sc else tr('绘制BOX'))
+        for button, text, shortcut_action, getter in getattr(self, '_option_popup_rows', []):
+            sc = self._get_shortcut(shortcut_action) if shortcut_action else ''
+            prefix = "√ " if getter() else ""
+            button.setText(f"{prefix}{text}    {sc}" if sc else f"{prefix}{text}")
+
+    def _toggle_options_popup(self):
+        if getattr(self, 'options_menu', None) is None:
+            self._rebuild_options_popup()
+        if self.options_menu.isVisible():
+            self.options_menu.hide()
+            return
+        self._refresh_options_popup_texts()
+        global_pos = self.options_btn.mapToGlobal(QPoint(0, self.options_btn.height()))
+        self.options_menu.move(global_pos)
+        self.options_menu.show()
+
     def _on_canvas_copy_menu_changed(self, checked):
         """切换画布图片复制功能（仅保留在顶部选项菜单中）。"""
         self._canvas_image_copy_enabled = bool(checked)
+        if hasattr(self, 'canvas_copy_action'):
+            self.canvas_copy_action.setChecked(self._canvas_image_copy_enabled)
         from ..core import config_manager
         config_manager.save_all(canvas_image_copy_enabled=self._canvas_image_copy_enabled)
+        if hasattr(self, '_refresh_options_popup_texts'):
+            self._refresh_options_popup_texts()
 
     def _on_magnifier_menu_changed(self, checked):
         """切换窗口放大器，直接重绘画布即可生效。"""
         self._magnifier_enabled = bool(checked)
+        if hasattr(self, 'magnifier_action'):
+            self.magnifier_action.setChecked(self._magnifier_enabled)
         from ..core import config_manager
         config_manager.save_all(magnifier_enabled=self._magnifier_enabled)
+        if hasattr(self, '_refresh_options_popup_texts'):
+            self._refresh_options_popup_texts()
         if hasattr(self, 'canvas'):
             self.canvas.update()
 

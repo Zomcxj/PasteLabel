@@ -67,3 +67,91 @@ def test_theme_styles_qdouble_spinbox_like_other_numeric_inputs():
     assert 'QDoubleSpinBox {' in source
     assert 'QDoubleSpinBox:hover {' in source
     assert 'QDoubleSpinBox:focus {' in source
+
+
+def test_options_button_keeps_qmenu_layout():
+    source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+
+    assert 'class HoverKeepMenu(QMenu):' in source
+    assert 'self.options_menu = HoverKeepMenu()' in source
+    assert 'self.options_btn.setMenu(self.options_menu)' in source
+    assert 'if action == self.actions()[0]:' in source
+    assert 'action.triggered.emit(False)' in source
+
+
+def test_cache_popup_keeps_line_edit_open_while_editing():
+    source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+
+    assert 'focus_widget = QApplication.focusWidget()' in source
+    assert 'isinstance(focus_widget, QLineEdit)' in source
+
+
+def test_option_menu_special_actions_sync_checked_state_from_runtime_flags():
+    source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+
+    assert "self.canvas_copy_action.setChecked(self._canvas_image_copy_enabled)" in source
+    assert "self.magnifier_action.setChecked(self._magnifier_enabled)" in source
+
+
+def test_options_menu_separates_prefix_and_special_toggles_into_third_group():
+    source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+
+    assert 'self.options_menu.addSeparator()' in source
+    assert '(tr("显示贴图名"), "toggle_paste_names", self.show_paste_names_checkbox)' in source
+    assert 'prefix_action = self.options_menu.addAction(tr("添加文件名前缀"))' in source
+    assert 'self.options_menu.addSeparator()' in source
+
+
+def test_cache_slot_name_input_explicitly_enables_input_method():
+    source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+
+    assert 'popup.setAttribute(Qt.WA_InputMethodEnabled, True)' in source
+    assert 'slot_name_input.setAttribute(Qt.WA_InputMethodEnabled, True)' in source
+
+
+def test_cache_popup_does_not_use_qt_popup_flag_for_inline_rename():
+    source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+
+    cache_popup_block = source.split('def _rebuild_label_cache_menu(self):', 1)[1].split('def _handle_cache_slot_row_click', 1)[0]
+    assert 'popup_flags = Qt.Tool | Qt.FramelessWindowHint' in cache_popup_block
+    assert 'Qt.Popup' not in cache_popup_block
+
+
+def test_draw_box_menu_item_does_not_use_manual_left_padding_hacks():
+    ui_source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+    main_source = (ROOT / "pastelabel" / "ui" / "main_window.py").read_text(encoding="utf-8")
+
+    assert 'self._draw_box_action = self.options_menu.addAction(tr("绘制BOX"))' in ui_source
+    assert 'self._draw_box_action.setCheckable(True)' in ui_source
+    assert 'self._draw_box_action.setChecked(False)' in ui_source
+    assert 'self._draw_box_action.triggered.connect(self._trigger_draw_box_menu_action)' in ui_source
+    assert '"  " + tr("绘制BOX")' not in ui_source
+    assert 'f"  {tr(\'绘制BOX\')}\\t{sc}"' not in main_source
+    assert 'self._draw_box_action.setText(f"{tr(\'绘制BOX\')}\\t{sc}")' in main_source
+
+
+def test_draw_box_action_stays_in_same_menu_section_as_display_toggles():
+    source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+
+    draw_box_pos = source.index('self._draw_box_action = self.options_menu.addAction(tr("绘制BOX"))')
+    items_pos = source.index('items = [')
+    first_separator_after_items = source.index('self.options_menu.addSeparator()', items_pos)
+    assert draw_box_pos < items_pos < first_separator_after_items
+
+
+def test_cache_slot_name_width_is_limited_to_six_cjk_chars():
+    source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+
+    assert 'slot_name_input.setFixedWidth(slot_name_input.fontMetrics().horizontalAdvance("测" * 9) + 24)' in source
+
+
+def test_toolbar_places_options_before_memory_and_cache_has_tooltip():
+    source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+    i18n_source = (ROOT / "pastelabel" / "ui" / "i18n.py").read_text(encoding="utf-8")
+
+    options_pos = source.index('self.options_btn = QPushButton(tr("选项"))')
+    memory_pos = source.index('self.memory_btn = QPushButton(tr("记忆"))')
+    assert options_pos < memory_pos
+    assert 'self.cache_btn.setToolTip(tr("复制缓存管理"))' in source
+    assert '"复制缓存管理": "复制缓存管理"' in i18n_source
+    assert '"复制缓存管理": "Copy Cache Manager"' in i18n_source

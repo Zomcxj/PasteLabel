@@ -1,4 +1,6 @@
 """画布悬停状态回归测试。"""
+from PyQt5.QtCore import Qt
+
 from pastelabel.canvas import canvas_interaction
 from pastelabel.canvas.canvas_interaction import CanvasInteractionMixin
 
@@ -47,6 +49,7 @@ class Canvas(CanvasInteractionMixin):
         self.background_scale = 1
         self.mouse_pos = Point(5, 5)
         self.selected_box = None
+        self.selected_boxes = []
         self.selected_item_size = None
         self.updated = 0
         self.hover_resize_target = None
@@ -63,6 +66,9 @@ class Canvas(CanvasInteractionMixin):
 
     def update(self):
         self.updated += 1
+
+    def _current_modifiers(self):
+        return Qt.NoModifier
 
 
 def test_paste_hover_detects_box_handle(monkeypatch):
@@ -89,3 +95,28 @@ def test_annotate_hover_clears_paste_item_edit_state(monkeypatch):
     assert canvas.selected_box == 0
     assert canvas._editor.selected_item is None
     assert canvas.selected_item_size is None
+
+
+def test_paste_hover_selects_detection_box_without_click(monkeypatch):
+    monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
+    canvas = Canvas("paste")
+
+    canvas._check_hover()
+
+    assert canvas.selected_box == 0
+    assert canvas.selected_boxes == [0]
+
+
+def test_ctrl_hover_adds_detection_box_to_selected_boxes_without_click(monkeypatch):
+    monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
+    canvas = Canvas("annotate")
+    canvas.selected_box = 0
+    canvas.selected_boxes = [0]
+    canvas.mouse_pos = Point(25, 5)
+    canvas._editor.detection_boxes.append({"label": "dog", "x": 20, "y": 0, "width": 10, "height": 10})
+    canvas._current_modifiers = lambda: Qt.ControlModifier
+
+    canvas._check_hover()
+
+    assert canvas.selected_box == 1
+    assert canvas.selected_boxes == [0, 1]

@@ -142,6 +142,12 @@ SHORTCUT_CONFIG = {
     'restore_image': 'Ctrl+Shift+R',
 }
 
+LABEL_CACHE_SLOTS = [
+    {'name': '缓存槽1', 'locked': False, 'items': [], 'shortcut': '1'},
+    {'name': '缓存槽2', 'locked': False, 'items': [], 'shortcut': '2'},
+    {'name': '缓存槽3', 'locked': False, 'items': [], 'shortcut': '3'},
+]
+
 # 撤销/重做配置
 UNDO_CONFIG = {
     'max_history': 50,  # 最大历史记录数

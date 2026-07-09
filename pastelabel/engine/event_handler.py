@@ -85,6 +85,7 @@ class EventHandlerMixin:
             'remove_image': lambda: self.canvas._remove_current_background(),
             'restore_image': lambda: self.canvas._restore_current_background(),
             'fit_view': lambda: (self.canvas.reset_view(), self.canvas.update()),
+            'copy_selected_labels': self.copy_selected_labels_to_active_cache_slot,
         }
         self._shortcuts = []
         for action, handler in action_handlers.items():
@@ -93,6 +94,20 @@ class EventHandlerMixin:
                 seq = QKeySequence(sc_str)
                 shortcut = QShortcut(seq, self)
                 shortcut.activated.connect(handler)
+                self._shortcuts.append(shortcut)
+        copy_shortcut = QShortcut(QKeySequence('Ctrl+C'), self)
+        copy_shortcut.activated.connect(self.copy_selected_labels_to_active_cache_slot)
+        self._shortcuts.append(copy_shortcut)
+        paste_shortcut = QShortcut(QKeySequence('Ctrl+V'), self)
+        paste_shortcut.activated.connect(
+            lambda: self.paste_label_cache_slot(self.active_label_cache_slot)
+        )
+        self._shortcuts.append(paste_shortcut)
+        for slot_index, slot in enumerate(getattr(self, 'label_cache_slots', [])):
+            sc_str = slot.get('shortcut', '')
+            if sc_str:
+                shortcut = QShortcut(QKeySequence(sc_str), self)
+                shortcut.activated.connect(lambda idx=slot_index: self.paste_label_cache_slot(idx))
                 self._shortcuts.append(shortcut)
         self._update_shortcut_status_label()
 
@@ -152,11 +167,33 @@ class EventHandlerMixin:
             self.canvas.update()
 
     def _delete_selected_box(self):
+        selected_boxes = sorted({
+            index for index in getattr(self.canvas, 'selected_boxes', [])
+            if 0 <= index < len(self.detection_boxes)
+        }, reverse=True)
+        if selected_boxes:
+            self.save_undo_state()
+            for index in selected_boxes:
+                del self.detection_boxes[index]
+            self.canvas.selected_box = None
+            self.canvas.selected_boxes = []
+            if self.current_background_index >= 0:
+                self.detection_boxes_dict[self.current_background_index] = \
+                    self.detection_boxes.copy()
+            self.update_label_list()
+            self.canvas.update()
+            if self.current_background and self.current_background_index >= 0:
+                background_path = self.background_images[self.current_background_index]
+                background_name = os.path.basename(background_path)
+                self.save_json(background_path, background_name, "", canvas_items=[])
+            return
+
         if (self.canvas.selected_box is not None and
                 0 <= self.canvas.selected_box < len(self.detection_boxes)):
             self.save_undo_state()
             del self.detection_boxes[self.canvas.selected_box]
             self.canvas.selected_box = None
+            self.canvas.selected_boxes = []
             if self.current_background_index >= 0:
                 self.detection_boxes_dict[self.current_background_index] = \
                     self.detection_boxes.copy()
@@ -191,6 +228,7 @@ class EventHandlerMixin:
 
             self.selected_item = None
             self.canvas.selected_box = None
+            self.canvas.selected_boxes = []
 
             self.canvas.setFocus()
             self.canvas.update()
@@ -259,6 +297,8 @@ class EventHandlerMixin:
         self.background_list.setCurrentRow(new_index)
         self.update_file_count()
         self.selected_item = None
+        self.canvas.selected_box = None
+        self.canvas.selected_boxes = []
         self.canvas.update()
 
     def on_labels_checkbox_changed(self):

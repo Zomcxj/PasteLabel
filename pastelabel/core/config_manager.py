@@ -3,12 +3,30 @@
 """
 import os
 import json
-from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG
+from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS
 
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), '.pastelabel.json')
 MEMORY_LIMIT = 10
 DISABLED_SHORTCUT_ACTIONS = {'save', 'save_all'}
+
+
+def _normalize_label_cache_slots(slots):
+    defaults = [dict(slot) for slot in LABEL_CACHE_SLOTS]
+    if not isinstance(slots, list):
+        return defaults
+
+    normalized = []
+    for index, default in enumerate(defaults):
+        slot = slots[index] if index < len(slots) and isinstance(slots[index], dict) else {}
+        items = slot.get('items', default['items'])
+        normalized.append({
+            'name': str(slot.get('name', default['name']) or default['name']),
+            'locked': bool(slot.get('locked', default['locked'])),
+            'items': items if isinstance(items, list) else [],
+            'shortcut': str(slot.get('shortcut', default['shortcut']) or default['shortcut']),
+        })
+    return normalized
 
 
 def _filter_shortcuts(shortcuts):
@@ -179,6 +197,7 @@ def load_all():
         'canvas_image_copy_enabled': bool(config.get('canvas_image_copy_enabled', False)),
         'magnifier_enabled': bool(config.get('magnifier_enabled', False)),
         'magnifier_zoom': float(config.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom'])),
+        'label_cache_slots': _normalize_label_cache_slots(config.get('label_cache_slots')),
         'memory': load_memory_records(),
     }
 
@@ -187,7 +206,7 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
              grid_line_width=None, grid_alpha=None, resize_handle_size=None,
              label_font_size=None, label_position=None,
              canvas_image_copy_enabled=None, magnifier_enabled=None,
-             magnifier_zoom=None):
+             magnifier_zoom=None, label_cache_slots=None):
     """保存所有配置"""
     config = load_config()
     if shortcuts is not None:
@@ -214,4 +233,6 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['magnifier_enabled'] = bool(magnifier_enabled)
     if magnifier_zoom is not None:
         config['magnifier_zoom'] = max(0.8, min(3.0, float(magnifier_zoom)))
+    if label_cache_slots is not None:
+        config['label_cache_slots'] = _normalize_label_cache_slots(label_cache_slots)
     return save_config(config)

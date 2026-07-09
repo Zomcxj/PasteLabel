@@ -91,45 +91,51 @@ class ImageLoaderMixin:
         self.canvas_items_dict.clear()
         self.canvas_items.clear()
 
-        for file_name in sorted(os.listdir(folder_path), key=natural_sort_key):
-            ext = os.path.splitext(file_name)[1].lower()
-            if ext in SUPPORTED_IMAGE_EXTENSIONS:
-                file_path = os.path.join(folder_path, file_name)
-                new_index = len(self.background_images)
-                self.background_images.append(file_path)
-                display_path = PathUtils.to_display_path(file_path)
-                item = QListWidgetItem(display_path)
-                item.setData(Qt.UserRole, new_index)
-                item.setData(Qt.UserRole + 1, file_path)
-                self.background_list.addItem(item)
+        # 延后列表刷新，避免路径先显示而首图还没完成首轮渲染。
+        self.background_list.setUpdatesEnabled(False)
+        try:
+            for file_name in sorted(os.listdir(folder_path), key=natural_sort_key):
+                ext = os.path.splitext(file_name)[1].lower()
+                if ext in SUPPORTED_IMAGE_EXTENSIONS:
+                    file_path = os.path.join(folder_path, file_name)
+                    new_index = len(self.background_images)
+                    self.background_images.append(file_path)
+                    display_path = PathUtils.to_display_path(file_path)
+                    item = QListWidgetItem(display_path)
+                    item.setData(Qt.UserRole, new_index)
+                    item.setData(Qt.UserRole + 1, file_path)
+                    self.background_list.addItem(item)
 
-                self.canvas_items_dict[new_index] = []
-                self.detection_boxes_dict[new_index] = []
-                if load_first and self.current_background is None:
-                    self.current_background_index = new_index
-                    self.current_background = self._get_cached_pixmap(file_path)
-                    self.canvas_items = []
-                    self._load_detection_boxes_for_index(new_index, file_path)
-                    self.background_list.setCurrentRow(new_index)
-                    self.canvas.reset_view()
+                    self.canvas_items_dict[new_index] = []
+                    self.detection_boxes_dict[new_index] = []
+                    if load_first and self.current_background is None:
+                        self.current_background_index = new_index
+                        self.current_background = self._get_cached_pixmap(file_path)
+                        self.canvas_items = []
+                        self._load_detection_boxes_for_index(new_index, file_path)
+                        self.background_list.setCurrentRow(new_index)
+                        self.canvas.reset_view()
+                        self.update_label_list()
+                        self.canvas.update()
+                    if not load_first and new_index % 20 == 0:
+                        QApplication.processEvents()
+
+            if self.background_images:
+                if load_first:
+                    self._aggregate_all_labels()
                     self.update_label_list()
-                    self.canvas.update()
-                if not load_first and new_index % 20 == 0:
-                    QApplication.processEvents()
-
-        if self.background_images:
-            if load_first:
-                self._aggregate_all_labels()
-                self.update_label_list()
-                self.update_file_count()
+                    self.update_file_count()
+                else:
+                    self.current_background_index = -1
+                    self._aggregate_all_labels()
+                    self.update_label_list()
+                    self.update_file_count()
             else:
-                self.current_background_index = -1
-                self._aggregate_all_labels()
-                self.update_label_list()
+                QMessageBox.warning(self, tr("警告"), tr("该文件夹中没有找到支持的图片文件"))
                 self.update_file_count()
-        else:
-            QMessageBox.warning(self, tr("警告"), tr("该文件夹中没有找到支持的图片文件"))
-            self.update_file_count()
+        finally:
+            self.background_list.setUpdatesEnabled(True)
+            self.background_list.viewport().update()
 
     def upload_small_images(self):
         """上传贴图"""

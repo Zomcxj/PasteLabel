@@ -162,3 +162,16 @@ LOCK_CONFIG = {
 NUDGE_CONFIG = {
     'step': 1,  # 每次方向键移动步长（像素）
 }
+
+# 检测框滚轮编辑配置
+DETECTION_BOX_WHEEL_CONFIG = {
+    'scale_step': 0.03,  # 框内滚轮整体缩放步长
+    'edge_step': 5,      # 框外滚轮单边位移像素
+}
+
+# 标注模式十字线配置
+CROSSHAIR_CONFIG = {
+    'width': 1.0,
+    'color': '#00FF80',
+    'alpha': 160,
+}

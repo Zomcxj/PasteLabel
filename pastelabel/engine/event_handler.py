@@ -274,13 +274,12 @@ class EventHandlerMixin:
         if new_index == self.current_background_index:
             return
 
-        if hasattr(self, 'auto_save_checkbox') and self.auto_save_checkbox.isChecked():
-            if self.canvas_items:
-                self.auto_save_current_canvas()
-
         if self.current_background_index >= 0:
             self.canvas_items_dict[self.current_background_index] = self.canvas_items.copy()
             self.detection_boxes_dict[self.current_background_index] = self.detection_boxes.copy()
+            self.save_current_json()
+            if hasattr(self, 'auto_save_checkbox') and self.auto_save_checkbox.isChecked() and self.canvas_items:
+                self.auto_save_current_canvas()
 
         self.current_background_index = new_index
 
@@ -339,6 +338,10 @@ class EventHandlerMixin:
 
     def closeEvent(self, event):
         """关闭窗口事件 - 直接关闭，不弹确认框"""
+        if self.current_background_index >= 0:
+            self.canvas_items_dict[self.current_background_index] = self.canvas_items.copy()
+            self.detection_boxes_dict[self.current_background_index] = self.detection_boxes.copy()
+            self.save_current_json()
         if hasattr(self, '_save_memory_record_on_close'):
             self._save_memory_record_on_close()
         event.accept()

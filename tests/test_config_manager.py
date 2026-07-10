@@ -137,6 +137,27 @@ class TestSaveLoadRoundtrip:
         finally:
             config_manager.CONFIG_PATH = original
 
+    def test_detection_box_wheel_settings_roundtrip_through_save_all(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            config_manager.save_all(detection_box_wheel_scale_step=0.08, detection_box_wheel_edge_step=9)
+            result = config_manager.load_all()
+            assert result['detection_box_wheel_scale_step'] == 0.08
+            assert result['detection_box_wheel_edge_step'] == 9
+        finally:
+            config_manager.CONFIG_PATH = original
+
+    def test_crosshair_settings_roundtrip_through_save_all(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            config_manager.save_all(crosshair_width=2.5, crosshair_color='#123456', crosshair_alpha=96)
+            result = config_manager.load_all()
+            assert result['crosshair_width'] == 2.5
+            assert result['crosshair_color'] == '#123456'
+            assert result['crosshair_alpha'] == 96
+        finally:
+            config_manager.CONFIG_PATH = original
+
     def test_memory_records_dedupe_limit_and_edit_mode(self):
         original = config_manager.load_memory_records()
         try:

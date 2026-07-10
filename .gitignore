@@ -10,6 +10,7 @@ build/
 
 AGENTS.md
 plan/
+docs/superpowers/
 .atomcode/
 .mimocode/
 .vscode/

@@ -90,6 +90,9 @@ def test_switch_background_to_index_clears_stale_box_selection():
         def update_file_count(self):
             self.updated += 1
 
+        def save_current_json(self):
+            pass
+
     editor = Editor()
 
     editor.switch_background_to_index(1)
@@ -98,3 +101,12 @@ def test_switch_background_to_index_clears_stale_box_selection():
     assert editor.canvas.selected_boxes == []
     assert editor.selected_item is None
     assert editor.background_list.row == 1
+
+
+def test_switch_and_close_save_current_json_after_syncing_current_objects():
+    source = Path('pastelabel/engine/event_handler.py').read_text(encoding='utf-8')
+
+    switch_block = source.split('def switch_background_to_index', 1)[1].split('def on_labels_checkbox_changed', 1)[0]
+    close_block = source.split('def closeEvent', 1)[1]
+    assert switch_block.index('self.detection_boxes_dict[self.current_background_index] = self.detection_boxes.copy()') < switch_block.index('self.save_current_json()')
+    assert 'self.save_current_json()' in close_block

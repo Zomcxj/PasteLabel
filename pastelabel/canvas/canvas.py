@@ -84,10 +84,19 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         return QRectF(x, y, scaled_width, scaled_height)
 
     def reset_view(self):
-        """重置画布视图状态（缩放、偏移）"""
-        self.background_scale = 1.0
+        """重置画布视图为适应窗口"""
+        if self._editor.current_background is None:
+            return
+        bg_w = self._editor.current_background.width()
+        bg_h = self._editor.current_background.height()
+        if bg_w > 0 and bg_h > 0:
+            scale_x = self.width() / bg_w
+            scale_y = self.height() / bg_h
+            self.background_scale = min(scale_x, scale_y)
+        else:
+            self.background_scale = 1.0
         self.background_offset = QPoint(0, 0)
-        self.is_manual_scale = False
+        self.is_manual_scale = True
 
     def find_item_at_position(self, pos):
         """查找指定位置的贴图索引"""

@@ -68,6 +68,12 @@ class CanvasMenuMixin:
         )
         menu.addAction(modify_action)
 
+        remove_action = QAction(tr("移除"), self)
+        remove_action.triggered.connect(
+            lambda checked: self._editor._delete_selected_box()
+        )
+        menu.addAction(remove_action)
+
         menu.addSeparator()
 
         label_items = []

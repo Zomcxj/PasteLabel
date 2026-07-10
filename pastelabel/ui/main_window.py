@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtCore import QPoint, Qt, QUrl, QTimer, QRectF
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDrag, QIcon
 
-from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG, MAGNIFIER_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG
+from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG, MAGNIFIER_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG
 from ..core.utils import create_app_icon
 from ..engine.save_manager import SaveManager
 from ..engine.label_manager import LabelManager
@@ -87,12 +87,14 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._magnifier_enabled = bool(settings.get('magnifier_enabled', False))
         MAGNIFIER_CONFIG['zoom'] = max(0.8, min(3.0, float(settings.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom']))))
         NUDGE_CONFIG['step'] = max(1, min(5, int(settings.get('nudge_step', NUDGE_CONFIG['step']))))
-        DETECTION_BOX_WHEEL_CONFIG['scale_step'] = max(0.01, min(0.5, float(settings.get('detection_box_wheel_scale_step', DETECTION_BOX_WHEEL_CONFIG['scale_step']))))
+        DETECTION_BOX_WHEEL_CONFIG['scale_step'] = max(0.01, min(0.2, float(settings.get('detection_box_wheel_scale_step', DETECTION_BOX_WHEEL_CONFIG['scale_step']))))
         DETECTION_BOX_WHEEL_CONFIG['edge_step'] = max(1, min(50, int(settings.get('detection_box_wheel_edge_step', DETECTION_BOX_WHEEL_CONFIG['edge_step']))))
         CROSSHAIR_CONFIG['width'] = max(0.5, min(3.0, float(settings.get('crosshair_width', CROSSHAIR_CONFIG['width']))))
         color = str(settings.get('crosshair_color', CROSSHAIR_CONFIG['color']))
         CROSSHAIR_CONFIG['color'] = color if len(color) == 7 and color.startswith('#') else CROSSHAIR_CONFIG['color']
         CROSSHAIR_CONFIG['alpha'] = max(0, min(255, int(settings.get('crosshair_alpha', CROSSHAIR_CONFIG['alpha']))))
+        from ..core.config import BOX_BORDER_CONFIG
+        BOX_BORDER_CONFIG['width'] = max(0.5, min(3.5, float(settings.get('box_border_width', BOX_BORDER_CONFIG['width']))))
 
     def _init_data(self):
         """初始化数据结构"""

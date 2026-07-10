@@ -61,12 +61,93 @@ def test_settings_dialog_magnifier_zoom_supports_wheel_adjustment():
     assert 'self.magnifier_zoom_spin.setSingleStep(0.1)' in source
 
 
+def test_settings_dialog_exposes_detection_box_wheel_scale_and_edge_step_controls():
+    source = (ROOT / "pastelabel" / "ui" / "settings_dialog.py").read_text(encoding="utf-8")
+    i18n_source = (ROOT / "pastelabel" / "ui" / "i18n.py").read_text(encoding="utf-8")
+
+    assert 'self.detection_box_wheel_scale_step_spin = QDoubleSpinBox()' in source
+    assert 'self.detection_box_wheel_edge_step_spin = QSpinBox()' in source
+    assert 'tr("检测框缩放步长")' in source
+    assert 'tr("单侧位移像素")' in source
+    assert '"检测框缩放步长": "检测框缩放步长"' in i18n_source
+    assert '"单侧位移像素": "单侧位移像素"' in i18n_source
+
+
+def test_settings_dialog_minimum_width_is_560_pixels():
+    source = (ROOT / "pastelabel" / "ui" / "settings_dialog.py").read_text(encoding="utf-8")
+
+    assert 'self.setMinimumWidth(560)' in source
+
+
+def test_settings_dialog_minimum_height_is_600_pixels():
+    source = (ROOT / "pastelabel" / "ui" / "settings_dialog.py").read_text(encoding="utf-8")
+
+    assert 'self.setMinimumHeight(600)' in source
+
+
+def test_settings_dialog_exposes_crosshair_width_and_color_controls():
+    source = (ROOT / "pastelabel" / "ui" / "settings_dialog.py").read_text(encoding="utf-8")
+
+    assert 'self.crosshair_width_spin = QDoubleSpinBox()' in source
+    assert 'self.crosshair_color_btn = QPushButton()' in source
+    assert 'class _ColorDialog(QColorDialog):' in source
+    assert 'dialog = _ColorDialog(self)' in source
+    assert 'dialog.setOption(QColorDialog.DontUseNativeDialog, True)' in source
+    assert 'tr("十字线粗细")' in source
+    assert 'tr("十字线颜色")' in source
+
+
+def test_settings_dialog_crosshair_width_uses_decimal_range_and_half_step():
+    source = (ROOT / "pastelabel" / "ui" / "settings_dialog.py").read_text(encoding="utf-8")
+
+    assert 'self.crosshair_width_spin.setRange(0.5, 3.0)' in source
+    assert 'self.crosshair_width_spin.setSingleStep(0.5)' in source
+    assert "float(CROSSHAIR_CONFIG.get('width', 1.0))" in source
+
+
+def test_crosshair_color_button_uses_white_text_on_its_color_background():
+    source = (ROOT / "pastelabel" / "ui" / "settings_dialog.py").read_text(encoding="utf-8")
+
+    assert 'color: white;' in source
+
+
+def test_crosshair_color_dialog_localizes_its_builtin_labels_and_buttons():
+    source = (ROOT / "pastelabel" / "ui" / "settings_dialog.py").read_text(encoding="utf-8")
+
+    assert 'def showEvent(color_dialog, event):' in source
+    assert "'&Basic colors': '基本颜色：'" in source
+    assert "'&Custom colors': '自定义颜色：'" in source
+    assert "'&Pick Screen Color': '拾取屏幕颜色'" in source
+    assert "'&Add to Custom Colors': '添加到自定义颜色'" in source
+    assert 'widget.setText(i18n.t(translations[text]))' in source
+
+
+def test_settings_dialog_exposes_crosshair_alpha_control():
+    source = (ROOT / "pastelabel" / "ui" / "settings_dialog.py").read_text(encoding="utf-8")
+
+    assert 'self.crosshair_alpha_spin = QSpinBox()' in source
+    assert 'self.crosshair_alpha_spin.setRange(0, 255)' in source
+    assert 'tr("十字线透明度")' in source
+
+
+def test_main_window_clamps_crosshair_width_to_decimal_range():
+    source = (ROOT / "pastelabel" / "ui" / "main_window.py").read_text(encoding="utf-8")
+
+    assert "CROSSHAIR_CONFIG['width'] = max(0.5, min(3.0, float(settings.get('crosshair_width', CROSSHAIR_CONFIG['width']))))" in source
+
+
 def test_theme_styles_qdouble_spinbox_like_other_numeric_inputs():
     source = (ROOT / "pastelabel" / "ui" / "theme.py").read_text(encoding="utf-8")
 
     assert 'QDoubleSpinBox {' in source
     assert 'QDoubleSpinBox:hover {' in source
     assert 'QDoubleSpinBox:focus {' in source
+
+
+def test_theme_styles_do_not_include_unsupported_box_shadow_property():
+    source = (ROOT / "pastelabel" / "ui" / "theme.py").read_text(encoding="utf-8")
+
+    assert 'box-shadow:' not in source
 
 
 def test_options_button_keeps_qmenu_layout():

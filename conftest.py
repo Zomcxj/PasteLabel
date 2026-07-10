@@ -26,7 +26,7 @@ def _make_mock_module(name):
         'QInputDialog', 'QMenu', 'QAction', 'QWidgetAction', 'QShortcut', 'QKeySequence',
         'QProgressDialog', 'QSvgRenderer', 'QCursor',
         'QStackedWidget', 'QComboBox', 'QDoubleSpinBox', 'QTextBrowser',
-        'QTabWidget', 'QToolButton', 'QSlider', 'QRadioButton',
+        'QTabWidget', 'QToolButton', 'QSlider', 'QRadioButton', 'QColorDialog', 'QDialogButtonBox',
     ]:
         setattr(mod, attr, type(f'Mock{attr}', (), {
             '__init__': lambda self, *a, **kw: None,
@@ -357,7 +357,12 @@ qtgui.QPixmap = type('QPixmap', (), {
     'fill': lambda self, *a: None,
 })
 qtgui.QIcon = type('QIcon', (), {'__init__': lambda self, *a: None})
-qtgui.QColor = type('QColor', (), {'__init__': lambda self, *a: None})
+qtgui.QColor = type('QColor', (), {
+    '__init__': lambda self, *a: None,
+    'setAlpha': lambda self, *a: None,
+    'isValid': lambda self: True,
+    'name': lambda self: '#00FF80',
+})
 qtgui.QPainter = type('QPainter', (), {
     '__init__': lambda self, *a: None,
     'setRenderHint': lambda self, *a: None,
@@ -426,6 +431,21 @@ qtwidgets.QProgressDialog = _MockQProgressDialog
 qtwidgets.QInputDialog = _MockQInputDialog
 qtwidgets.QMessageBox = _MockQMessageBox
 qtwidgets.QFileDialog = _MockQFileDialog
+qtwidgets.QColorDialog = type('QColorDialog', (), {
+    'DontUseNativeDialog': 1,
+    '__init__': lambda self, *a, **kw: None,
+    'getColor': staticmethod(lambda *a, **kw: qtgui.QColor()),
+    'setOption': lambda self, *a: None,
+    'setWindowTitle': lambda self, *a: None,
+    'setCurrentColor': lambda self, *a: None,
+    'setStyleSheet': lambda self, *a: None,
+    'showEvent': lambda self, *a: None,
+    'findChild': lambda self, *a: None,
+    'findChildren': lambda self, *a: [],
+    'exec_': lambda self: _MockQDialog.Rejected,
+    'currentColor': lambda self: qtgui.QColor(),
+})
+qtwidgets.QDialogButtonBox = type('QDialogButtonBox', (), {'Ok': 1, 'Cancel': 2})
 qtwidgets.QApplication = _MockQApplication
 qtwidgets.QMenu = type('QMenu', (_MockQWidget,), {
     'addAction': lambda self, *a: None,

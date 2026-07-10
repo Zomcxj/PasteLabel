@@ -40,3 +40,14 @@ def test_center_on_parent_uses_parent_window_geometry():
     center_on_parent(dialog)
 
     assert dialog.moved_to == (400, 450)
+
+
+def test_label_stats_dialog_centers_after_show_event():
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "pastelabel" / "ui" / "main_window.py").read_text(encoding="utf-8")
+    stats_block = source.split('def _show_label_stats', 1)[1].split('def _set_titlebar_dark', 1)[0]
+
+    assert 'class _StatsDialog(QDialog):' in stats_block
+    assert 'def showEvent(self, event):' in stats_block
+    assert 'center_on_parent(self, self.parent())' in stats_block

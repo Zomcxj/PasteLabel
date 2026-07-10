@@ -14,8 +14,8 @@
 #    ./build.sh fast      # 快速构建（日常开发）= --no-clean
 # ==============================================================================
 
-# 记录项目根目录（build.sh 所在目录的上级）
-PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# 记录项目根目录（build.sh 所在目录）
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 # 解析命令行参数
 CLEAN_BUILD=true
@@ -240,7 +240,7 @@ a = Analysis(
     hiddenimports=[
         'pastelabel', 'pastelabel.ui', 'pastelabel.ui.main_window', 'pastelabel.ui.ui_builder',
         'pastelabel.ui.settings_dialog', 'pastelabel.ui.theme', 'pastelabel.ui.dwm',
-        'pastelabel.ui.dialogs', 'pastelabel.ui.widgets', 'pastelabel.ui.i18n', 'pastelabel.ui.styles',
+        'pastelabel.ui.dialogs', 'pastelabel.ui.i18n',
         'pastelabel.engine', 'pastelabel.engine.save_manager',
         'pastelabel.engine.undo_manager', 'pastelabel.engine.label_manager',
         'pastelabel.engine.image_loader', 'pastelabel.engine.paste_engine',
@@ -249,7 +249,7 @@ a = Analysis(
         'pastelabel.canvas.canvas_interaction', 'pastelabel.canvas.canvas_drawing',
         'pastelabel.canvas.canvas_menu',
         'pastelabel.core', 'pastelabel.core.config', 'pastelabel.core.config_manager',
-        'pastelabel.core.utils', 'pastelabel.core.models', 'pastelabel.core.editor_protocol',
+        'pastelabel.core.utils', 'pastelabel.core.editor_protocol',
         'pastelabel.core.exception_hook',
     ],
     hookspath=[],

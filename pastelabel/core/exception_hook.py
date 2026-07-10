@@ -5,12 +5,10 @@ import sys
 import os
 import traceback
 from datetime import datetime
+from . import config_manager
 
 
-if getattr(sys, 'frozen', False):
-    LOG_FILE = os.path.join(os.path.dirname(sys.executable), "crash_log.txt")
-else:
-    LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash_log.txt")
+LOG_FILE = os.path.join(os.path.dirname(config_manager.CONFIG_PATH), "pastelabel.log")
 
 
 def _write_log(message):
@@ -49,14 +47,21 @@ def exception_hook(exctype, value, tb):
     
     # 尝试使用 QMessageBox 显示错误
     try:
-        from PyQt5.QtWidgets import QMessageBox, QApplication
+        from PyQt5.QtWidgets import QMessageBox, QApplication, QPushButton
+        from ..ui import i18n
         app = QApplication.instance()
         if app:
             msg_box = QMessageBox()
             msg_box.setIcon(QMessageBox.Critical)
             msg_box.setWindowTitle("程序错误")
-            msg_box.setText("程序遇到意外错误，错误信息已保存到 crash_log.txt")
+            msg_box.setText("程序遇到意外错误，错误信息已保存到 pastelabel.log")
             msg_box.setDetailedText(error_msg)
+            ok_button = msg_box.button(QMessageBox.Ok)
+            if ok_button:
+                ok_button.setText(i18n.t("确定"))
+            details_button = msg_box.findChild(QPushButton, "qt_msgbox_details")
+            if details_button:
+                details_button.setText(i18n.t("显示详情"))
             msg_box.exec_()
     except Exception:
         pass

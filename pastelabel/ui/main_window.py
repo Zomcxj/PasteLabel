@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtCore import QPoint, Qt, QUrl, QTimer, QRectF
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDrag, QIcon
 
-from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG, MAGNIFIER_CONFIG
+from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG, MAGNIFIER_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG
 from ..core.utils import create_app_icon
 from ..engine.save_manager import SaveManager
 from ..engine.label_manager import LabelManager
@@ -70,7 +70,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             [int(slot.get('copy_order', 0) or 0) for slot in self.label_cache_slots] or [0]
         )
 
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, NUDGE_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG
         if settings.get('grid_line_width') is not None:
             GRID_CONFIG['line_width'] = settings['grid_line_width']
         if settings.get('grid_alpha') is not None:
@@ -87,6 +87,12 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._magnifier_enabled = bool(settings.get('magnifier_enabled', False))
         MAGNIFIER_CONFIG['zoom'] = max(0.8, min(3.0, float(settings.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom']))))
         NUDGE_CONFIG['step'] = max(1, min(5, int(settings.get('nudge_step', NUDGE_CONFIG['step']))))
+        DETECTION_BOX_WHEEL_CONFIG['scale_step'] = max(0.01, min(0.5, float(settings.get('detection_box_wheel_scale_step', DETECTION_BOX_WHEEL_CONFIG['scale_step']))))
+        DETECTION_BOX_WHEEL_CONFIG['edge_step'] = max(1, min(50, int(settings.get('detection_box_wheel_edge_step', DETECTION_BOX_WHEEL_CONFIG['edge_step']))))
+        CROSSHAIR_CONFIG['width'] = max(0.5, min(3.0, float(settings.get('crosshair_width', CROSSHAIR_CONFIG['width']))))
+        color = str(settings.get('crosshair_color', CROSSHAIR_CONFIG['color']))
+        CROSSHAIR_CONFIG['color'] = color if len(color) == 7 and color.startswith('#') else CROSSHAIR_CONFIG['color']
+        CROSSHAIR_CONFIG['alpha'] = max(0, min(255, int(settings.get('crosshair_alpha', CROSSHAIR_CONFIG['alpha']))))
 
     def _init_data(self):
         """初始化数据结构"""
@@ -381,6 +387,10 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         """自动保存当前画布"""
         self.save_manager.auto_save_current_canvas()
 
+    def save_current_json(self):
+        """保存当前图的标注 JSON。"""
+        self.save_manager.save_current_json()
+
     def save_canvas(self):
         """保存当前画布"""
         self.save_manager.save_canvas()
@@ -670,12 +680,18 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
     def _show_label_stats(self):
         """显示标签统计弹窗"""
         from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView
+        from .dialog_helpers import center_on_parent
         from .theme import ThemeManager
         from . import i18n
         tr = i18n.t
 
+        class _StatsDialog(QDialog):
+            def showEvent(self, event):
+                super().showEvent(event)
+                center_on_parent(self, self.parent())
+
         t = ThemeManager.get_theme()
-        dialog = QDialog(self)
+        dialog = _StatsDialog(self)
         dialog.setWindowTitle(tr("标签统计"))
         dialog.setMinimumSize(400, 300)
         from PyQt5.QtCore import QTimer
@@ -743,8 +759,6 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         total.setStyleSheet("font-size: 12px; margin-top: 8px;")
         layout.addWidget(total)
 
-        from .dialog_helpers import center_on_parent
-        center_on_parent(dialog, self)
         dialog.exec_()
 
     def showEvent(self, event):

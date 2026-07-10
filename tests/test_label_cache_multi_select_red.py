@@ -1,6 +1,7 @@
 """标签缓存多选复制的 RED 回归测试。"""
 from pathlib import Path
 
+from pastelabel.ui import i18n
 from pastelabel.ui.main_window import ImageEditor
 from pastelabel.ui.ui_builder import UIBuilderMixin
 
@@ -105,6 +106,7 @@ def test_copy_selected_labels_falls_back_to_first_unlocked_slot_when_active_slot
 
 
 def test_reset_label_cache_slots_clears_items_and_locked_state():
+    i18n.set_lang("zh")
     editor = type("Editor", (), {})()
     editor.label_cache_slots = [
         {"name": "自定义1", "items": [{"label": "cat"}], "locked": True, "copied_at": "10:00:00", "shortcut": "1"},

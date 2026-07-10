@@ -16,6 +16,17 @@ def test_magnifier_only_appears_for_selected_box_or_draw_mode():
     assert "if getattr(self._editor, 'edit_mode', 'paste') != 'annotate':" in source
 
 
+def test_crosshair_is_drawn_only_in_annotate_mode_while_mouse_is_inside_canvas():
+    source = (ROOT / "pastelabel" / "canvas" / "canvas_renderer.py").read_text(encoding="utf-8")
+
+    assert "if (getattr(self._editor, 'edit_mode', 'paste') == 'annotate' and" in source
+    assert "self.mouse_inside and self._editor.current_background is not None and" in source
+    assert "background_rect is not None):" in source
+    assert "def _draw_crosshair(self, painter):" in source
+    assert "CROSSHAIR_CONFIG" in source
+    assert "CROSSHAIR_CONFIG.get('alpha', 160)" in source
+
+
 def test_paste_engine_offsets_fully_overlapping_group_by_three_pixels():
     source = (ROOT / "pastelabel" / "engine" / "paste_engine.py").read_text(encoding="utf-8")
 

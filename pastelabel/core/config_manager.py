@@ -3,7 +3,7 @@
 """
 import os
 import json
-from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG
+from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG
 
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), '.pastelabel.json')
@@ -199,6 +199,11 @@ def load_all():
         'magnifier_zoom': float(config.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom'])),
         'label_cache_slots': _normalize_label_cache_slots(config.get('label_cache_slots')),
         'nudge_step': int(config.get('nudge_step', NUDGE_CONFIG['step'])),
+        'detection_box_wheel_scale_step': float(config.get('detection_box_wheel_scale_step', DETECTION_BOX_WHEEL_CONFIG['scale_step'])),
+        'detection_box_wheel_edge_step': int(config.get('detection_box_wheel_edge_step', DETECTION_BOX_WHEEL_CONFIG['edge_step'])),
+        'crosshair_width': float(config.get('crosshair_width', CROSSHAIR_CONFIG['width'])),
+        'crosshair_color': str(config.get('crosshair_color', CROSSHAIR_CONFIG['color'])),
+        'crosshair_alpha': int(config.get('crosshair_alpha', CROSSHAIR_CONFIG['alpha'])),
         'memory': load_memory_records(),
     }
 
@@ -207,7 +212,9 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
              grid_line_width=None, grid_alpha=None, resize_handle_size=None,
              label_font_size=None, label_position=None,
              canvas_image_copy_enabled=None, magnifier_enabled=None,
-             magnifier_zoom=None, label_cache_slots=None, nudge_step=None):
+             magnifier_zoom=None, label_cache_slots=None, nudge_step=None,
+              detection_box_wheel_scale_step=None, detection_box_wheel_edge_step=None,
+              crosshair_width=None, crosshair_color=None, crosshair_alpha=None):
     """保存所有配置"""
     config = load_config()
     if shortcuts is not None:
@@ -238,4 +245,15 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['label_cache_slots'] = _normalize_label_cache_slots(label_cache_slots)
     if nudge_step is not None:
         config['nudge_step'] = max(1, min(5, int(nudge_step)))
+    if detection_box_wheel_scale_step is not None:
+        config['detection_box_wheel_scale_step'] = max(0.01, min(0.5, float(detection_box_wheel_scale_step)))
+    if detection_box_wheel_edge_step is not None:
+        config['detection_box_wheel_edge_step'] = max(1, min(50, int(detection_box_wheel_edge_step)))
+    if crosshair_width is not None:
+        config['crosshair_width'] = max(0.5, min(3.0, float(crosshair_width)))
+    if crosshair_color is not None:
+        color = str(crosshair_color)
+        config['crosshair_color'] = color if len(color) == 7 and color.startswith('#') else CROSSHAIR_CONFIG['color']
+    if crosshair_alpha is not None:
+        config['crosshair_alpha'] = max(0, min(255, int(crosshair_alpha)))
     return save_config(config)

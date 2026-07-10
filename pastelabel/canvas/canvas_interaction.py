@@ -5,7 +5,7 @@ import os
 from PyQt5.QtCore import Qt, QRectF, QUrl, QMimeData
 from PyQt5.QtGui import QDrag
 
-from ..core.config import BACKGROUND_SCALE_CONFIG, PASTE_ITEM_CONFIG, NUDGE_CONFIG
+from ..core.config import BACKGROUND_SCALE_CONFIG, PASTE_ITEM_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG
 from .canvas_drawing import CanvasDrawingMixin
 from .canvas_menu import CanvasMenuMixin
 
@@ -22,6 +22,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.mouse_inside = False
         self.update_status_label()
         self._drag_out_pending = False
+        self.update()
         super().leaveEvent(event)
 
     def _do_canvas_drag_out(self):
@@ -582,9 +583,24 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         elif self._editor.selected_item is not None:
             self._scale_selected_item(event)
         elif self.selected_box is not None:
-            self._scale_selected_box(event)
+            if self._is_mouse_inside_selected_box():
+                self._scale_selected_box(event)
+            else:
+                self._adjust_selected_box_edge(event)
 
         self.update()
+
+    def _is_mouse_inside_selected_box(self):
+        return self._box_rect_contains(self.selected_box, self.mouse_pos)
+
+    def _get_mouse_pos_in_image_coords(self):
+        background_rect = self.get_background_rect()
+        if background_rect is None or not self.background_scale:
+            return None
+        return (
+            (self.mouse_pos.x() - background_rect.left()) / self.background_scale,
+            (self.mouse_pos.y() - background_rect.top()) / self.background_scale,
+        )
 
     @staticmethod
     def _clamp_size_with_aspect(new_w, new_h, orig_w, orig_h, min_size=10, max_size=None):
@@ -642,7 +658,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             return
 
         delta = event.angleDelta().y()
-        scale_factor = 1.03 if delta > 0 else 0.97
+        step = max(0.01, min(0.5, float(DETECTION_BOX_WHEEL_CONFIG.get('scale_step', 0.03))))
+        scale_factor = 1.0 + step if delta > 0 else max(0.1, 1.0 - step)
 
         box = self._editor.detection_boxes[self.selected_box]
         x, y, width, height = box["x"], box["y"], box["width"], box["height"]
@@ -671,6 +688,61 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         box["y"] = new_y
         box["width"] = new_width
         box["height"] = new_height
+
+        self._sync_detection_box_to_dict(self.selected_box)
+
+    def _adjust_selected_box_edge(self, event):
+        if (self.selected_box is None or
+            self.selected_box >= len(self._editor.detection_boxes)):
+            return
+
+        box = self._editor.detection_boxes[self.selected_box]
+        bg = self._editor.current_background
+        min_width = 10
+        min_height = 10
+        edge_step = max(1, min(50, int(DETECTION_BOX_WHEEL_CONFIG.get('edge_step', 5))))
+        step = edge_step if event.angleDelta().y() > 0 else -edge_step
+
+        left = box["x"]
+        top = box["y"]
+        right = left + box["width"]
+        bottom = top + box["height"]
+        mouse_pos = self._get_mouse_pos_in_image_coords()
+        if mouse_pos is None:
+            return
+        mouse_x, mouse_y = mouse_pos
+
+        if mouse_x < left and top <= mouse_y <= bottom:
+            nearest_edge = 'left'
+        elif mouse_x > right and top <= mouse_y <= bottom:
+            nearest_edge = 'right'
+        elif mouse_y < top and left <= mouse_x <= right:
+            nearest_edge = 'top'
+        elif mouse_y > bottom and left <= mouse_x <= right:
+            nearest_edge = 'bottom'
+        else:
+            distances = {
+                'left': abs(mouse_x - left),
+                'right': abs(mouse_x - right),
+                'top': abs(mouse_y - top),
+                'bottom': abs(mouse_y - bottom),
+            }
+            nearest_edge = min(distances, key=distances.get)
+
+        if nearest_edge == 'left':
+            new_left = max(0, min(left - step, right - min_width))
+            box["x"] = new_left
+            box["width"] = right - new_left
+        elif nearest_edge == 'right':
+            new_right = min(bg.width(), max(right + step, left + min_width))
+            box["width"] = new_right - left
+        elif nearest_edge == 'top':
+            new_top = max(0, min(top - step, bottom - min_height))
+            box["y"] = new_top
+            box["height"] = bottom - new_top
+        else:
+            new_bottom = min(bg.height(), max(bottom + step, top + min_height))
+            box["height"] = new_bottom - top
 
         self._sync_detection_box_to_dict(self.selected_box)
 

@@ -6,8 +6,9 @@ import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QGroupBox, QScrollArea, QWidget, QSpinBox, QStackedWidget,
-    QComboBox, QDoubleSpinBox
+    QComboBox, QDoubleSpinBox, QColorDialog
 )
+from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QEvent
 
 from ..core.config import SHORTCUT_CONFIG, LABEL_CACHE_SLOTS
@@ -26,9 +27,10 @@ class SettingsDialog(QDialog):
         from . import i18n
         tr = i18n.t
         self._editor = parent
+        self._crosshair_color = "#00FF80"
         self.setWindowTitle(tr("设置"))
-        self.setMinimumWidth(507)
-        self.setMinimumHeight(500)
+        self.setMinimumWidth(560)
+        self.setMinimumHeight(600)
         self.setObjectName("settingsDialog")
 
         self.shortcut_inputs = {}
@@ -171,7 +173,7 @@ class SettingsDialog(QDialog):
         prefix_row.addStretch()
         opt_layout.addLayout(prefix_row)
 
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG
         nudge_step_row = QHBoxLayout()
         nudge_step_label = QLabel(tr("移动步长") + ":")
         nudge_step_row.addWidget(nudge_step_label, 2)
@@ -254,7 +256,7 @@ class SettingsDialog(QDialog):
         opt_layout.addLayout(label_position_row)
 
         magnifier_zoom_row = QHBoxLayout()
-        magnifier_zoom_label = QLabel(tr("放大倍率") + ":")
+        magnifier_zoom_label = QLabel(tr("窗口放大器倍率") + ":")
         magnifier_zoom_row.addWidget(magnifier_zoom_label, 2)
         self.magnifier_zoom_spin = QDoubleSpinBox()
         self.magnifier_zoom_spin.setObjectName("paramSpin")
@@ -266,6 +268,66 @@ class SettingsDialog(QDialog):
         magnifier_zoom_row.addWidget(self.magnifier_zoom_spin)
         magnifier_zoom_row.addStretch()
         opt_layout.addLayout(magnifier_zoom_row)
+
+        detection_box_wheel_scale_step_row = QHBoxLayout()
+        detection_box_wheel_scale_step_label = QLabel(tr("检测框缩放步长") + ":")
+        detection_box_wheel_scale_step_row.addWidget(detection_box_wheel_scale_step_label, 2)
+        self.detection_box_wheel_scale_step_spin = QDoubleSpinBox()
+        self.detection_box_wheel_scale_step_spin.setObjectName("paramSpin")
+        self.detection_box_wheel_scale_step_spin.setRange(0.01, 0.5)
+        self.detection_box_wheel_scale_step_spin.setSingleStep(0.01)
+        self.detection_box_wheel_scale_step_spin.setDecimals(2)
+        self.detection_box_wheel_scale_step_spin.setMinimumWidth(150)
+        self.detection_box_wheel_scale_step_spin.setValue(max(0.01, min(0.5, float(DETECTION_BOX_WHEEL_CONFIG.get('scale_step', 0.03)))))
+        detection_box_wheel_scale_step_row.addWidget(self.detection_box_wheel_scale_step_spin)
+        detection_box_wheel_scale_step_row.addStretch()
+        opt_layout.addLayout(detection_box_wheel_scale_step_row)
+
+        detection_box_wheel_edge_step_row = QHBoxLayout()
+        detection_box_wheel_edge_step_label = QLabel(tr("单侧位移像素") + ":")
+        detection_box_wheel_edge_step_row.addWidget(detection_box_wheel_edge_step_label, 2)
+        self.detection_box_wheel_edge_step_spin = QSpinBox()
+        self.detection_box_wheel_edge_step_spin.setRange(1, 50)
+        self.detection_box_wheel_edge_step_spin.setMinimumWidth(150)
+        self.detection_box_wheel_edge_step_spin.setValue(max(1, min(50, int(DETECTION_BOX_WHEEL_CONFIG.get('edge_step', 5)))))
+        detection_box_wheel_edge_step_row.addWidget(self.detection_box_wheel_edge_step_spin)
+        detection_box_wheel_edge_step_row.addStretch()
+        opt_layout.addLayout(detection_box_wheel_edge_step_row)
+
+        crosshair_width_row = QHBoxLayout()
+        crosshair_width_label = QLabel(tr("十字线粗细") + ":")
+        crosshair_width_row.addWidget(crosshair_width_label, 2)
+        self.crosshair_width_spin = QDoubleSpinBox()
+        self.crosshair_width_spin.setRange(0.5, 3.0)
+        self.crosshair_width_spin.setSingleStep(0.5)
+        self.crosshair_width_spin.setDecimals(1)
+        self.crosshair_width_spin.setMinimumWidth(150)
+        self.crosshair_width_spin.setValue(max(0.5, min(3.0, float(CROSSHAIR_CONFIG.get('width', 1.0)))))
+        crosshair_width_row.addWidget(self.crosshair_width_spin)
+        crosshair_width_row.addStretch()
+        opt_layout.addLayout(crosshair_width_row)
+
+        crosshair_alpha_row = QHBoxLayout()
+        crosshair_alpha_label = QLabel(tr("十字线透明度") + ":")
+        crosshair_alpha_row.addWidget(crosshair_alpha_label, 2)
+        self.crosshair_alpha_spin = QSpinBox()
+        self.crosshair_alpha_spin.setRange(0, 255)
+        self.crosshair_alpha_spin.setMinimumWidth(150)
+        self.crosshair_alpha_spin.setValue(max(0, min(255, int(CROSSHAIR_CONFIG.get('alpha', 160)))))
+        crosshair_alpha_row.addWidget(self.crosshair_alpha_spin)
+        crosshair_alpha_row.addStretch()
+        opt_layout.addLayout(crosshair_alpha_row)
+
+        crosshair_color_row = QHBoxLayout()
+        crosshair_color_label = QLabel(tr("十字线颜色") + ":")
+        crosshair_color_row.addWidget(crosshair_color_label, 2)
+        self.crosshair_color_btn = QPushButton()
+        self.crosshair_color_btn.setMinimumWidth(150)
+        self.crosshair_color_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
+        self.crosshair_color_btn.clicked.connect(self._choose_crosshair_color)
+        crosshair_color_row.addWidget(self.crosshair_color_btn)
+        crosshair_color_row.addStretch()
+        opt_layout.addLayout(crosshair_color_row)
 
         opt_layout.addStretch()
         self.stack.addWidget(opt_group)
@@ -366,7 +428,7 @@ class SettingsDialog(QDialog):
         """加载选项状态"""
         if self._editor:
             self.prefix_input.setText(self._editor.prefix_input.text())
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG
         self.grid_width_spin.setValue(GRID_CONFIG.get('line_width', 1))
         self.grid_alpha_spin.setValue(GRID_CONFIG.get('alpha', 120))
         self.handle_size_spin.setValue(max(3, min(15, DETECTION_BOX_CONFIG.get('resize_handle_size', 8))))
@@ -376,6 +438,58 @@ class SettingsDialog(QDialog):
         self.label_position_combo.setCurrentIndex(index if index >= 0 else 0)
         self.magnifier_zoom_spin.setValue(max(0.8, min(3.0, float(MAGNIFIER_CONFIG.get('zoom', 2.0)))))
         self.nudge_step_spin.setValue(NUDGE_CONFIG.get('step', 1))
+        self.detection_box_wheel_scale_step_spin.setValue(max(0.01, min(0.5, float(DETECTION_BOX_WHEEL_CONFIG.get('scale_step', 0.03)))))
+        self.detection_box_wheel_edge_step_spin.setValue(max(1, min(50, int(DETECTION_BOX_WHEEL_CONFIG.get('edge_step', 5)))))
+        self.crosshair_width_spin.setValue(max(0.5, min(3.0, float(CROSSHAIR_CONFIG.get('width', 1.0)))))
+        color = str(CROSSHAIR_CONFIG.get('color', '#00FF80'))
+        self._crosshair_color = color if len(color) == 7 and color.startswith('#') else '#00FF80'
+        self.crosshair_alpha_spin.setValue(max(0, min(255, int(CROSSHAIR_CONFIG.get('alpha', 160)))))
+        self._update_crosshair_color_button()
+
+    def _update_crosshair_color_button(self):
+        self.crosshair_color_btn.setText(self._crosshair_color)
+        self.crosshair_color_btn.setStyleSheet(
+            ThemeManager.get_dialog_button_style() +
+            f"QPushButton {{ background-color: {self._crosshair_color}; color: white; }}"
+        )
+
+    def _choose_crosshair_color(self):
+        class _ColorDialog(QColorDialog):
+            def showEvent(color_dialog, event):
+                super().showEvent(event)
+                from .dialog_helpers import sync_titlebar
+                sync_titlebar(color_dialog)
+                translations = {
+                    '&Basic colors': '基本颜色：',
+                    '&Custom colors': '自定义颜色：',
+                    '&Pick Screen Color': '拾取屏幕颜色',
+                    '&Add to Custom Colors': '添加到自定义颜色',
+                    'Hu&e:': '色调：',
+                    '&Sat:': '饱和度：',
+                    '&Val:': '亮度：',
+                    '&Red:': '红：',
+                    '&Green:': '绿：',
+                    'Bl&ue:': '蓝：',
+                    'A&lpha channel:': '透明度：',
+                    '&HTML:': 'HTML：',
+                    'OK': '确定',
+                    'Cancel': '取消',
+                }
+                for widget in color_dialog.findChildren(QLabel) + color_dialog.findChildren(QPushButton):
+                    text = widget.text()
+                    if text in translations:
+                        widget.setText(i18n.t(translations[text]))
+
+        dialog = _ColorDialog(self)
+        dialog.setOption(QColorDialog.DontUseNativeDialog, True)
+        dialog.setWindowTitle(i18n.t("十字线颜色"))
+        dialog.setCurrentColor(QColor(self._crosshair_color))
+        dialog.setStyleSheet(ThemeManager.get_dialog_button_style())
+        if dialog.exec_() != QDialog.Accepted:
+            return
+        color = dialog.currentColor()
+        self._crosshair_color = color.name().upper()
+        self._update_crosshair_color_button()
 
     def _save_shortcuts(self):
         """保存快捷键到文件并立即生效"""
@@ -405,7 +519,7 @@ class SettingsDialog(QDialog):
             if hasattr(self._editor, '_rebuild_label_cache_menu'):
                 self._editor._rebuild_label_cache_menu()
 
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG
         GRID_CONFIG['line_width'] = self.grid_width_spin.value()
         GRID_CONFIG['alpha'] = self.grid_alpha_spin.value()
         handle_size = max(3, min(15, self.handle_size_spin.value()))
@@ -421,6 +535,15 @@ class SettingsDialog(QDialog):
         MAGNIFIER_CONFIG['zoom'] = magnifier_zoom
         nudge_step = max(1, min(5, self.nudge_step_spin.value()))
         NUDGE_CONFIG['step'] = nudge_step
+        detection_box_wheel_scale_step = max(0.01, min(0.5, float(self.detection_box_wheel_scale_step_spin.value())))
+        detection_box_wheel_edge_step = max(1, min(50, self.detection_box_wheel_edge_step_spin.value()))
+        crosshair_width = max(0.5, min(3.0, float(self.crosshair_width_spin.value())))
+        crosshair_alpha = max(0, min(255, self.crosshair_alpha_spin.value()))
+        DETECTION_BOX_WHEEL_CONFIG['scale_step'] = detection_box_wheel_scale_step
+        DETECTION_BOX_WHEEL_CONFIG['edge_step'] = detection_box_wheel_edge_step
+        CROSSHAIR_CONFIG['width'] = crosshair_width
+        CROSSHAIR_CONFIG['color'] = self._crosshair_color
+        CROSSHAIR_CONFIG['alpha'] = crosshair_alpha
 
         from ..core import config_manager as cm
         max_labels = self.max_labels_spin.value()
@@ -435,6 +558,11 @@ class SettingsDialog(QDialog):
             magnifier_zoom=magnifier_zoom,
             label_cache_slots=label_cache_slots,
             nudge_step=nudge_step,
+            detection_box_wheel_scale_step=detection_box_wheel_scale_step,
+            detection_box_wheel_edge_step=detection_box_wheel_edge_step,
+            crosshair_width=crosshair_width,
+            crosshair_color=self._crosshair_color,
+            crosshair_alpha=crosshair_alpha,
         )
         if self._editor:
             self._editor._max_labels = max_labels

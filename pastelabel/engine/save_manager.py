@@ -5,11 +5,11 @@
 import os
 import json
 from typing import TYPE_CHECKING
-from PyQt5.QtCore import pyqtSignal, QObject, Qt
+from PyQt5.QtCore import pyqtSignal, QObject, Qt, QRectF
 from PyQt5.QtGui import QPixmap, QPainter, QColor
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QApplication
 from ..core.config import LABELME_VERSION, DEFAULT_PREFIX
-from ..core.utils import PathUtils
+from ..core.utils import PathUtils, calculate_iou
 from ..ui.i18n import t as tr
 
 if TYPE_CHECKING:
@@ -169,6 +169,13 @@ class SaveManager(QObject):
             self.save_json(file_path, base_name, prefix)
         
         SaveTipDialog.show_save_tip(self.editor, file_path, save_success and os.path.exists(file_path))
+
+    def save_current_json(self):
+        """仅保存当前图的标注 JSON，供切图和关闭窗口时兜底。"""
+        save_info = self.get_save_info()
+        if not save_info:
+            return
+        self.save_json(*save_info)
     
     def save_all_canvas(self):
         """保存所有画布"""
@@ -279,6 +286,21 @@ class SaveManager(QObject):
             "flags": {}
         }
 
+    @staticmethod
+    def _deduplicate_rectangles(items, get_rect):
+        """按列表顺序保留同类矩形中首个 IoU 达 98% 的对象。"""
+        kept = []
+        for item in items:
+            rect = get_rect(item)
+            box = (rect.x(), rect.y(), rect.x() + rect.width(), rect.y() + rect.height())
+            if any(calculate_iou(box, (
+                saved_rect.x(), saved_rect.y(),
+                saved_rect.x() + saved_rect.width(), saved_rect.y() + saved_rect.height(),
+            )) >= 0.98 for saved_rect in (get_rect(saved) for saved in kept)):
+                continue
+            kept.append(item)
+        return kept
+
     def save_json(self, image_path, image_name, label_prefix, canvas_items=None,
                  image_width=None, image_height=None, current_index=None):
         """生成并保存 JSON 文件"""
@@ -292,6 +314,24 @@ class SaveManager(QObject):
             self.editor.current_background.height() if self.editor.current_background else 0
         )
         index_to_use = current_index if current_index is not None else self.editor.current_background_index
+        items_to_use = self._deduplicate_rectangles(
+            items_to_use,
+            lambda item: item[1],
+        )
+        if canvas_items is None:
+            self.editor.canvas_items = items_to_use
+        elif isinstance(canvas_items, list):
+            canvas_items[:] = items_to_use
+
+        boxes_to_use = []
+        if index_to_use >= 0 and index_to_use in self.editor.detection_boxes_dict:
+            boxes_to_use = self._deduplicate_rectangles(
+                self.editor.detection_boxes_dict[index_to_use],
+                lambda box: QRectF(box['x'], box['y'], box['width'], box['height']),
+            )
+            self.editor.detection_boxes_dict[index_to_use] = boxes_to_use
+            if index_to_use == self.editor.current_background_index:
+                self.editor.detection_boxes = boxes_to_use.copy()
         
         json_data = {
             "version": LABELME_VERSION,
@@ -311,8 +351,8 @@ class SaveManager(QObject):
             json_data["shapes"].append(shape)
         
         # 添加检测框
-        if index_to_use >= 0 and index_to_use in self.editor.detection_boxes_dict:
-            for box in self.editor.detection_boxes_dict[index_to_use]:
+        if index_to_use >= 0:
+            for box in boxes_to_use:
                 shape = self._build_labelme_shape(
                     box['label'], box['x'], box['y'], box['width'], box['height']
                 )

@@ -124,6 +124,13 @@ class CanvasRendererMixin:
                 painter, pixmap, item_rect, label, is_selected, i
             )
 
+    def _get_box_border_pen(self, border_color, is_selected):
+        from ..core.config import BOX_BORDER_CONFIG
+        w = max(0.5, min(3.5, float(BOX_BORDER_CONFIG['width'])))
+        pen_width = w * 1.5 if is_selected else w
+        pen_width = max(0.5, min(3.5, pen_width))
+        return QPen(border_color, pen_width)
+
     def _draw_single_paste_item(self, painter, pixmap, item_rect, label, is_selected, item_index=0):
         """绘制单个贴图"""
         item_x = item_rect.left()
@@ -148,8 +155,7 @@ class CanvasRendererMixin:
         lb = int(label_color_hex[5:7], 16)
 
         border_color = QColor(lr, lg, lb)
-        pen_width = 3 if is_selected else 2
-        pen = QPen(border_color, pen_width)
+        pen = self._get_box_border_pen(border_color, is_selected)
         painter.setPen(pen)
         painter.drawRect(int(item_x), int(item_y), int(item_width), int(item_height))
 
@@ -272,20 +278,17 @@ class CanvasRendererMixin:
         if is_selected:
             fill_color = QColor(lr, lg, lb, 50)
             border_color = QColor(lr, lg, lb)
-            pen_width = 3
         elif is_pressed_label:
             fill_color = QColor(lr, lg, lb, 50)
             border_color = QColor(lr, lg, lb)
-            pen_width = 2
         else:
             fill_color = None
             border_color = QColor(lr, lg, lb)
-            pen_width = 2
 
         if fill_color:
             painter.fillRect(int(x), int(y), int(width), int(height), fill_color)
 
-        pen = QPen(border_color, pen_width)
+        pen = self._get_box_border_pen(border_color, is_selected or is_pressed_label)
         painter.setPen(pen)
         painter.drawRect(int(x), int(y), int(width), int(height))
 
@@ -386,9 +389,50 @@ class CanvasRendererMixin:
         painter.save()
         painter.fillRect(dst, QColor(255, 255, 255, 210))
         painter.drawPixmap(dst, pixmap, QRectF(src_x, src_y, src_size, src_size))
+        m_scale = size / src_size
+        painter.setClipRect(dst)
+        from ..core.config import BOX_BORDER_CONFIG
+        m_bw = max(0.5, min(3.5, float(BOX_BORDER_CONFIG['width']))) * m_scale
+        m_bw = max(0.5, m_bw)
+        for box in getattr(self._editor, 'detection_boxes', []):
+            if box["width"] <= 0 or box["height"] <= 0:
+                continue
+            if (box["x"] + box["width"] < src_x or box["x"] > src_x + src_size or
+                box["y"] + box["height"] < src_y or box["y"] > src_y + src_size):
+                continue
+            from ..core.config import LABEL_COLORS
+            ci = _get_label_color_index(box.get("label", ""))
+            lh = LABEL_COLORS[ci]
+            mc = QColor(int(lh[1:3], 16), int(lh[3:5], 16), int(lh[5:7], 16))
+            mx = dst.left() + (box["x"] - src_x) * m_scale
+            my = dst.top() + (box["y"] - src_y) * m_scale
+            mw = box["width"] * m_scale
+            mh = box["height"] * m_scale
+            painter.setPen(QPen(mc, m_bw))
+            painter.drawRect(QRectF(mx, my, mw, mh))
+        for pix, item_rect, label in getattr(self._editor, 'canvas_items', []):
+            if item_rect.width() <= 0 or item_rect.height() <= 0:
+                continue
+            ir = item_rect
+            if (ir.x() + ir.width() < src_x or ir.x() > src_x + src_size or
+                ir.y() + ir.height() < src_y or ir.y() > src_y + src_size):
+                continue
+            from ..core.config import LABEL_COLORS
+            ci = _get_label_color_index(label)
+            lh = LABEL_COLORS[ci]
+            mc = QColor(int(lh[1:3], 16), int(lh[3:5], 16), int(lh[5:7], 16))
+            mx = dst.left() + (ir.x() - src_x) * m_scale
+            my = dst.top() + (ir.y() - src_y) * m_scale
+            mw = ir.width() * m_scale
+            mh = ir.height() * m_scale
+            painter.setPen(QPen(mc, m_bw))
+            painter.drawRect(QRectF(mx, my, mw, mh))
+        painter.setClipping(False)
         painter.setPen(QPen(QColor(60, 60, 60, 180), 1))
         painter.drawRect(dst)
-        painter.setPen(QPen(QColor(255, 80, 80, 190), 1, Qt.DashLine))
+        cross_color = QColor(CROSSHAIR_CONFIG.get('color', '#00FF80'))
+        cross_color.setAlpha(CROSSHAIR_CONFIG.get('alpha', 160))
+        painter.setPen(QPen(cross_color, 1, Qt.DashLine))
         center_x = dst.left() + size / 2
         center_y = dst.top() + size / 2
         painter.drawLine(QPointF(center_x, dst.top()), QPointF(center_x, dst.bottom()))

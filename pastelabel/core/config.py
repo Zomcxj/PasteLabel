@@ -160,8 +160,11 @@ LOCK_CONFIG = {
 
 # 方向键步进移动配置
 NUDGE_CONFIG = {
-    'step': 1,  # 每次方向键移动步长（像素）
+    'step': 1,
 }
+
+# 检测框与贴图框统一边框粗细（0.2-2.0）
+BOX_BORDER_CONFIG = {'width': 1.0}
 
 # 检测框滚轮编辑配置
 DETECTION_BOX_WHEEL_CONFIG = {

@@ -173,12 +173,14 @@ class EventHandlerMixin:
             self.canvas.update()
 
     def _delete_selected_box(self):
+        saved = False
         selected_boxes = sorted({
             index for index in getattr(self.canvas, 'selected_boxes', [])
             if 0 <= index < len(self.detection_boxes)
         }, reverse=True)
         if selected_boxes:
             self.save_undo_state()
+            saved = True
             for index in selected_boxes:
                 del self.detection_boxes[index]
             self.canvas.selected_box = None
@@ -192,11 +194,12 @@ class EventHandlerMixin:
                 background_path = self.background_images[self.current_background_index]
                 background_name = os.path.basename(background_path)
                 self.save_json(background_path, background_name, "", canvas_items=[])
-            return
 
         if (self.canvas.selected_box is not None and
                 0 <= self.canvas.selected_box < len(self.detection_boxes)):
-            self.save_undo_state()
+            if not saved:
+                self.save_undo_state()
+                saved = True
             del self.detection_boxes[self.canvas.selected_box]
             self.canvas.selected_box = None
             self.canvas.selected_boxes = []
@@ -209,6 +212,14 @@ class EventHandlerMixin:
                 background_path = self.background_images[self.current_background_index]
                 background_name = os.path.basename(background_path)
                 self.save_json(background_path, background_name, "", canvas_items=[])
+
+        if (self.selected_item is not None and
+                0 <= self.selected_item < len(self.canvas_items)):
+            if not saved:
+                self.save_undo_state()
+            del self.canvas_items[self.selected_item]
+            self.selected_item = None
+            self.canvas.update()
 
     def keyPressEvent(self, event):
         """键盘按下事件"""

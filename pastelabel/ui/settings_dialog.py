@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QEvent
 
-from ..core.config import SHORTCUT_CONFIG, LABEL_CACHE_SLOTS
+from ..core.config import SHORTCUT_CONFIG, LABEL_CACHE_SLOTS, BOX_BORDER_CONFIG
 from .theme import ThemeManager
 from .dwm import set_titlebar_dark
 from .dialog_helpers import center_on_parent
@@ -174,16 +174,19 @@ class SettingsDialog(QDialog):
         opt_layout.addLayout(prefix_row)
 
         from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG
-        nudge_step_row = QHBoxLayout()
-        nudge_step_label = QLabel(tr("移动步长") + ":")
-        nudge_step_row.addWidget(nudge_step_label, 2)
-        self.nudge_step_spin = QSpinBox()
-        self.nudge_step_spin.setRange(1, 5)
-        self.nudge_step_spin.setValue(NUDGE_CONFIG.get('step', 1))
-        self.nudge_step_spin.setMinimumWidth(150)
-        nudge_step_row.addWidget(self.nudge_step_spin)
-        nudge_step_row.addStretch()
-        opt_layout.addLayout(nudge_step_row)
+        magnifier_zoom_row = QHBoxLayout()
+        magnifier_zoom_label = QLabel(tr("窗口放大器倍率") + ":")
+        magnifier_zoom_row.addWidget(magnifier_zoom_label, 2)
+        self.magnifier_zoom_spin = QDoubleSpinBox()
+        self.magnifier_zoom_spin.setObjectName("paramSpin")
+        self.magnifier_zoom_spin.setRange(0.8, 3.0)
+        self.magnifier_zoom_spin.setSingleStep(0.1)
+        self.magnifier_zoom_spin.setDecimals(1)
+        self.magnifier_zoom_spin.setMinimumWidth(150)
+        self.magnifier_zoom_spin.setValue(max(0.8, min(3.0, float(MAGNIFIER_CONFIG.get('zoom', 2.0)))))
+        magnifier_zoom_row.addWidget(self.magnifier_zoom_spin)
+        magnifier_zoom_row.addStretch()
+        opt_layout.addLayout(magnifier_zoom_row)
 
         grid_width_row = QHBoxLayout()
         grid_width_label = QLabel(tr("网格线粗细") + ":")
@@ -230,6 +233,20 @@ class SettingsDialog(QDialog):
         handle_size_row.addStretch()
         opt_layout.addLayout(handle_size_row)
 
+        box_border_width_row = QHBoxLayout()
+        box_border_width_label = QLabel(tr("框线粗细") + ":")
+        box_border_width_row.addWidget(box_border_width_label, 2)
+        self.box_border_width_spin = QDoubleSpinBox()
+        self.box_border_width_spin.setObjectName("paramSpin")
+        self.box_border_width_spin.setRange(0.5, 3.5)
+        self.box_border_width_spin.setSingleStep(0.5)
+        self.box_border_width_spin.setDecimals(1)
+        self.box_border_width_spin.setMinimumWidth(150)
+        self.box_border_width_spin.setValue(max(0.5, min(3.5, float(BOX_BORDER_CONFIG['width']))))
+        box_border_width_row.addWidget(self.box_border_width_spin)
+        box_border_width_row.addStretch()
+        opt_layout.addLayout(box_border_width_row)
+
         label_font_size_row = QHBoxLayout()
         label_font_size_label = QLabel(tr("类别名字号") + ":")
         label_font_size_row.addWidget(label_font_size_label, 2)
@@ -255,30 +272,27 @@ class SettingsDialog(QDialog):
         label_position_row.addStretch()
         opt_layout.addLayout(label_position_row)
 
-        magnifier_zoom_row = QHBoxLayout()
-        magnifier_zoom_label = QLabel(tr("窗口放大器倍率") + ":")
-        magnifier_zoom_row.addWidget(magnifier_zoom_label, 2)
-        self.magnifier_zoom_spin = QDoubleSpinBox()
-        self.magnifier_zoom_spin.setObjectName("paramSpin")
-        self.magnifier_zoom_spin.setRange(0.8, 3.0)
-        self.magnifier_zoom_spin.setSingleStep(0.1)
-        self.magnifier_zoom_spin.setDecimals(1)
-        self.magnifier_zoom_spin.setMinimumWidth(150)
-        self.magnifier_zoom_spin.setValue(max(0.8, min(3.0, float(MAGNIFIER_CONFIG.get('zoom', 2.0)))))
-        magnifier_zoom_row.addWidget(self.magnifier_zoom_spin)
-        magnifier_zoom_row.addStretch()
-        opt_layout.addLayout(magnifier_zoom_row)
+        nudge_step_row = QHBoxLayout()
+        nudge_step_label = QLabel(tr("移动步长") + ":")
+        nudge_step_row.addWidget(nudge_step_label, 2)
+        self.nudge_step_spin = QSpinBox()
+        self.nudge_step_spin.setRange(1, 5)
+        self.nudge_step_spin.setValue(NUDGE_CONFIG.get('step', 1))
+        self.nudge_step_spin.setMinimumWidth(150)
+        nudge_step_row.addWidget(self.nudge_step_spin)
+        nudge_step_row.addStretch()
+        opt_layout.addLayout(nudge_step_row)
 
         detection_box_wheel_scale_step_row = QHBoxLayout()
         detection_box_wheel_scale_step_label = QLabel(tr("检测框缩放步长") + ":")
         detection_box_wheel_scale_step_row.addWidget(detection_box_wheel_scale_step_label, 2)
         self.detection_box_wheel_scale_step_spin = QDoubleSpinBox()
         self.detection_box_wheel_scale_step_spin.setObjectName("paramSpin")
-        self.detection_box_wheel_scale_step_spin.setRange(0.01, 0.5)
+        self.detection_box_wheel_scale_step_spin.setRange(0.01, 0.2)
         self.detection_box_wheel_scale_step_spin.setSingleStep(0.01)
         self.detection_box_wheel_scale_step_spin.setDecimals(2)
         self.detection_box_wheel_scale_step_spin.setMinimumWidth(150)
-        self.detection_box_wheel_scale_step_spin.setValue(max(0.01, min(0.5, float(DETECTION_BOX_WHEEL_CONFIG.get('scale_step', 0.03)))))
+        self.detection_box_wheel_scale_step_spin.setValue(max(0.01, min(0.2, float(DETECTION_BOX_WHEEL_CONFIG.get('scale_step', 0.03)))))
         detection_box_wheel_scale_step_row.addWidget(self.detection_box_wheel_scale_step_spin)
         detection_box_wheel_scale_step_row.addStretch()
         opt_layout.addLayout(detection_box_wheel_scale_step_row)
@@ -428,17 +442,18 @@ class SettingsDialog(QDialog):
         """加载选项状态"""
         if self._editor:
             self.prefix_input.setText(self._editor.prefix_input.text())
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG
         self.grid_width_spin.setValue(GRID_CONFIG.get('line_width', 1))
         self.grid_alpha_spin.setValue(GRID_CONFIG.get('alpha', 120))
         self.handle_size_spin.setValue(max(3, min(15, DETECTION_BOX_CONFIG.get('resize_handle_size', 8))))
+        self.box_border_width_spin.setValue(max(0.5, min(3.5, float(BOX_BORDER_CONFIG['width']))))
         self.label_font_size_spin.setValue(max(5, min(15, DETECTION_BOX_CONFIG.get('label_font_size', 9))))
         label_position = DETECTION_BOX_CONFIG.get('label_position', 'outside')
         index = self.label_position_combo.findData(label_position)
         self.label_position_combo.setCurrentIndex(index if index >= 0 else 0)
         self.magnifier_zoom_spin.setValue(max(0.8, min(3.0, float(MAGNIFIER_CONFIG.get('zoom', 2.0)))))
         self.nudge_step_spin.setValue(NUDGE_CONFIG.get('step', 1))
-        self.detection_box_wheel_scale_step_spin.setValue(max(0.01, min(0.5, float(DETECTION_BOX_WHEEL_CONFIG.get('scale_step', 0.03)))))
+        self.detection_box_wheel_scale_step_spin.setValue(max(0.01, min(0.2, float(DETECTION_BOX_WHEEL_CONFIG.get('scale_step', 0.03)))))
         self.detection_box_wheel_edge_step_spin.setValue(max(1, min(50, int(DETECTION_BOX_WHEEL_CONFIG.get('edge_step', 5)))))
         self.crosshair_width_spin.setValue(max(0.5, min(3.0, float(CROSSHAIR_CONFIG.get('width', 1.0)))))
         color = str(CROSSHAIR_CONFIG.get('color', '#00FF80'))
@@ -519,12 +534,14 @@ class SettingsDialog(QDialog):
             if hasattr(self._editor, '_rebuild_label_cache_menu'):
                 self._editor._rebuild_label_cache_menu()
 
-        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG
+        from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG
         GRID_CONFIG['line_width'] = self.grid_width_spin.value()
         GRID_CONFIG['alpha'] = self.grid_alpha_spin.value()
         handle_size = max(3, min(15, self.handle_size_spin.value()))
         DETECTION_BOX_CONFIG['resize_handle_size'] = handle_size
         PASTE_ITEM_CONFIG['handle_size'] = handle_size
+        box_border_width = max(0.5, min(3.5, float(self.box_border_width_spin.value())))
+        BOX_BORDER_CONFIG['width'] = box_border_width
         label_font_size = max(5, min(15, self.label_font_size_spin.value()))
         label_position = self.label_position_combo.currentData() or 'outside'
         if label_position not in ('outside', 'inside'):
@@ -535,7 +552,7 @@ class SettingsDialog(QDialog):
         MAGNIFIER_CONFIG['zoom'] = magnifier_zoom
         nudge_step = max(1, min(5, self.nudge_step_spin.value()))
         NUDGE_CONFIG['step'] = nudge_step
-        detection_box_wheel_scale_step = max(0.01, min(0.5, float(self.detection_box_wheel_scale_step_spin.value())))
+        detection_box_wheel_scale_step = max(0.01, min(0.2, float(self.detection_box_wheel_scale_step_spin.value())))
         detection_box_wheel_edge_step = max(1, min(50, self.detection_box_wheel_edge_step_spin.value()))
         crosshair_width = max(0.5, min(3.0, float(self.crosshair_width_spin.value())))
         crosshair_alpha = max(0, min(255, self.crosshair_alpha_spin.value()))
@@ -563,6 +580,7 @@ class SettingsDialog(QDialog):
             crosshair_width=crosshair_width,
             crosshair_color=self._crosshair_color,
             crosshair_alpha=crosshair_alpha,
+            box_border_width=box_border_width,
         )
         if self._editor:
             self._editor._max_labels = max_labels

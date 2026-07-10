@@ -69,7 +69,7 @@ def test_settings_dialog_exposes_detection_box_wheel_scale_and_edge_step_control
     assert 'self.detection_box_wheel_edge_step_spin = QSpinBox()' in source
     assert 'tr("检测框缩放步长")' in source
     assert 'tr("单侧位移像素")' in source
-    assert '"检测框缩放步长": "检测框缩放步长"' in i18n_source
+    assert '"检测框缩放步长": "框缩放步长"' in i18n_source
     assert '"单侧位移像素": "单侧位移像素"' in i18n_source
 
 

@@ -3,7 +3,7 @@
 """
 import os
 import json
-from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG
+from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG
 
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), '.pastelabel.json')
@@ -204,6 +204,7 @@ def load_all():
         'crosshair_width': float(config.get('crosshair_width', CROSSHAIR_CONFIG['width'])),
         'crosshair_color': str(config.get('crosshair_color', CROSSHAIR_CONFIG['color'])),
         'crosshair_alpha': int(config.get('crosshair_alpha', CROSSHAIR_CONFIG['alpha'])),
+        'box_border_width': float(config.get('box_border_width', BOX_BORDER_CONFIG['width'])),
         'memory': load_memory_records(),
     }
 
@@ -214,7 +215,8 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
              canvas_image_copy_enabled=None, magnifier_enabled=None,
              magnifier_zoom=None, label_cache_slots=None, nudge_step=None,
               detection_box_wheel_scale_step=None, detection_box_wheel_edge_step=None,
-              crosshair_width=None, crosshair_color=None, crosshair_alpha=None):
+             crosshair_width=None, crosshair_color=None, crosshair_alpha=None,
+             box_border_width=None):
     """保存所有配置"""
     config = load_config()
     if shortcuts is not None:
@@ -246,7 +248,7 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
     if nudge_step is not None:
         config['nudge_step'] = max(1, min(5, int(nudge_step)))
     if detection_box_wheel_scale_step is not None:
-        config['detection_box_wheel_scale_step'] = max(0.01, min(0.5, float(detection_box_wheel_scale_step)))
+        config['detection_box_wheel_scale_step'] = max(0.01, min(0.2, float(detection_box_wheel_scale_step)))
     if detection_box_wheel_edge_step is not None:
         config['detection_box_wheel_edge_step'] = max(1, min(50, int(detection_box_wheel_edge_step)))
     if crosshair_width is not None:
@@ -256,4 +258,6 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['crosshair_color'] = color if len(color) == 7 and color.startswith('#') else CROSSHAIR_CONFIG['color']
     if crosshair_alpha is not None:
         config['crosshair_alpha'] = max(0, min(255, int(crosshair_alpha)))
+    if box_border_width is not None:
+        config['box_border_width'] = max(0.5, min(3.5, float(box_border_width)))
     return save_config(config)

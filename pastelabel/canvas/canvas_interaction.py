@@ -625,7 +625,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             return
 
         delta = event.angleDelta().y()
-        scale_factor = 1.1 if delta > 0 else 0.9
+        step = max(0.01, min(0.2, float(DETECTION_BOX_WHEEL_CONFIG.get('scale_step', 0.03))))
+        scale_factor = 1.0 + step if delta > 0 else max(0.1, 1.0 - step)
 
         pixmap, rect, label = self._editor.canvas_items[self._editor.selected_item]
 

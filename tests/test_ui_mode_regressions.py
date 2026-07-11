@@ -61,15 +61,19 @@ def test_settings_dialog_magnifier_zoom_supports_wheel_adjustment():
     assert 'self.magnifier_zoom_spin.setSingleStep(0.1)' in source
 
 
-def test_settings_dialog_exposes_detection_box_wheel_scale_and_edge_step_controls():
+def test_settings_dialog_exposes_separate_wheel_scale_and_edge_step_controls():
     source = (ROOT / "pastelabel" / "ui" / "settings_dialog.py").read_text(encoding="utf-8")
     i18n_source = (ROOT / "pastelabel" / "ui" / "i18n.py").read_text(encoding="utf-8")
 
-    assert 'self.detection_box_wheel_scale_step_spin = QDoubleSpinBox()' in source
+    assert '"detection_box_scale_step_spin", "detection_box_scale_step"' in source
+    assert '"paste_item_scale_step_spin", "paste_item_scale_step"' in source
+    assert 'scale_step_spin.setRange(0.01, 0.30)' in source
     assert 'self.detection_box_wheel_edge_step_spin = QSpinBox()' in source
-    assert 'tr("检测框缩放步长")' in source
+    assert '"检测框缩放步长", "detection_box_scale_step_spin"' in source
+    assert '"贴图缩放步长", "paste_item_scale_step_spin"' in source
     assert 'tr("单侧位移像素")' in source
     assert '"检测框缩放步长": "框缩放步长"' in i18n_source
+    assert '"贴图缩放步长": "贴图缩放步长"' in i18n_source
     assert '"单侧位移像素": "单侧位移像素"' in i18n_source
 
 
@@ -90,9 +94,7 @@ def test_settings_dialog_exposes_crosshair_width_and_color_controls():
 
     assert 'self.crosshair_width_spin = QDoubleSpinBox()' in source
     assert 'self.crosshair_color_btn = QPushButton()' in source
-    assert 'class _ColorDialog(QColorDialog):' in source
-    assert 'dialog = _ColorDialog(self)' in source
-    assert 'dialog.setOption(QColorDialog.DontUseNativeDialog, True)' in source
+    assert 'dialog = ThemedColorDialog(self)' in source
     assert 'tr("十字线粗细")' in source
     assert 'tr("十字线颜色")' in source
 
@@ -111,10 +113,52 @@ def test_crosshair_color_button_uses_white_text_on_its_color_background():
     assert 'color: white;' in source
 
 
-def test_crosshair_color_dialog_localizes_its_builtin_labels_and_buttons():
+def test_paste_label_press_highlights_paste_items_and_stats_offer_color_action():
+    ui_builder_source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+    renderer_source = (ROOT / "pastelabel" / "canvas" / "canvas_renderer.py").read_text(encoding="utf-8")
+    main_window_source = (ROOT / "pastelabel" / "ui" / "main_window.py").read_text(encoding="utf-8")
+
+    assert 'self.paste_label_list.itemPressed.connect(self.label_list_item_pressed)' in ui_builder_source
+    assert 'self.paste_label_list.itemClicked.connect(self.label_list_item_clicked)' in ui_builder_source
+    assert 'is_pressed_label = self._is_pressed_label({"label": label})' in renderer_source
+    assert 'overlay_color = QColor(color.red(), color.green(), color.blue(), 80)' in renderer_source
+    assert 'ThemedColorDialog' in main_window_source
+    assert 'def _set_label_color_button(self, button, color):' in main_window_source
+    assert 'self._set_label_color_button(color_button, color.name())' in main_window_source
+    assert 'label_item.setBackground' not in main_window_source
+
+
+def test_stats_color_buttons_show_and_refresh_html_color_values():
+    source = (ROOT / "pastelabel" / "ui" / "main_window.py").read_text(encoding="utf-8")
+
+    assert source.count('color_button = QPushButton()') == 2
+    assert 'button.setText(color)' in source
+    assert 'self._set_label_color_button(color_button, color.name())' in source
+
+
+def test_settings_dialog_places_handle_and_border_after_label_position():
     source = (ROOT / "pastelabel" / "ui" / "settings_dialog.py").read_text(encoding="utf-8")
 
-    assert 'def showEvent(color_dialog, event):' in source
+    font_size_position = source.index('opt_layout.addLayout(label_font_size_row)')
+    label_position = source.index('opt_layout.addLayout(label_position_row)')
+    handle_size_position = source.index('opt_layout.addLayout(handle_size_row)')
+    border_width_position = source.index('opt_layout.addLayout(box_border_width_row)')
+    assert font_size_position < label_position < handle_size_position < border_width_position
+
+
+def test_label_color_dialog_reuses_non_native_themed_qt_text_translation():
+    source = (ROOT / "pastelabel" / "ui" / "dialog_helpers.py").read_text(encoding="utf-8")
+
+    assert 'class ThemedColorDialog(QColorDialog):' in source
+    assert 'self.setOption(QColorDialog.DontUseNativeDialog, True)' in source
+    assert "'&Basic colors': '基本颜色：'" in source
+    assert 'sync_titlebar(self)' in source
+
+
+def test_crosshair_color_dialog_localizes_its_builtin_labels_and_buttons():
+    source = (ROOT / "pastelabel" / "ui" / "dialog_helpers.py").read_text(encoding="utf-8")
+
+    assert 'def showEvent(self, event):' in source
     assert "'&Basic colors': '基本颜色：'" in source
     assert "'&Custom colors': '自定义颜色：'" in source
     assert "'&Pick Screen Color': '拾取屏幕颜色'" in source

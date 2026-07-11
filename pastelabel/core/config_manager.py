@@ -3,7 +3,7 @@
 """
 import os
 import json
-from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG
+from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG, LABEL_COLORS
 
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), '.pastelabel.json')
@@ -34,6 +34,25 @@ def _filter_shortcuts(shortcuts):
     if not isinstance(shortcuts, dict):
         return {}
     return {k: v for k, v in shortcuts.items() if k not in DISABLED_SHORTCUT_ACTIONS}
+
+
+def _normalize_label_colors(colors):
+    if not isinstance(colors, list) or not colors:
+        return list(LABEL_COLORS)
+    normalized = [str(color) for color in colors]
+    try:
+        if all(len(color) == 7 and color.startswith('#') and int(color[1:], 16) >= 0 for color in normalized):
+            return normalized
+    except ValueError:
+        pass
+    return list(LABEL_COLORS)
+
+
+def get_label_color(labels, label, palette=None):
+    """按当前类别名升序确定色板槽位，不保留类别到颜色的映射。"""
+    colors = _normalize_label_colors(palette if palette is not None else LABEL_COLORS)
+    ordered_labels = sorted({str(value) for value in labels if value})
+    return colors[ordered_labels.index(label) % len(colors)] if label in ordered_labels else colors[0]
 
 
 def get_config_path():
@@ -182,6 +201,7 @@ def delete_memory_record(index):
 def load_all():
     """加载所有配置"""
     config = load_config()
+    legacy_wheel_scale_step = config.get('detection_box_wheel_scale_step')
     saved_sc = _filter_shortcuts(config.get('shortcuts', {}))
     merged_sc = {**SHORTCUT_CONFIG, **saved_sc}
     return {
@@ -199,12 +219,20 @@ def load_all():
         'magnifier_zoom': float(config.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom'])),
         'label_cache_slots': _normalize_label_cache_slots(config.get('label_cache_slots')),
         'nudge_step': int(config.get('nudge_step', NUDGE_CONFIG['step'])),
-        'detection_box_wheel_scale_step': float(config.get('detection_box_wheel_scale_step', DETECTION_BOX_WHEEL_CONFIG['scale_step'])),
+        'detection_box_scale_step': float(config.get(
+            'detection_box_scale_step',
+            legacy_wheel_scale_step if legacy_wheel_scale_step is not None else DETECTION_BOX_WHEEL_CONFIG['detection_box_scale_step'],
+        )),
+        'paste_item_scale_step': float(config.get(
+            'paste_item_scale_step',
+            legacy_wheel_scale_step if legacy_wheel_scale_step is not None else DETECTION_BOX_WHEEL_CONFIG['paste_item_scale_step'],
+        )),
         'detection_box_wheel_edge_step': int(config.get('detection_box_wheel_edge_step', DETECTION_BOX_WHEEL_CONFIG['edge_step'])),
         'crosshair_width': float(config.get('crosshair_width', CROSSHAIR_CONFIG['width'])),
         'crosshair_color': str(config.get('crosshair_color', CROSSHAIR_CONFIG['color'])),
         'crosshair_alpha': int(config.get('crosshair_alpha', CROSSHAIR_CONFIG['alpha'])),
         'box_border_width': float(config.get('box_border_width', BOX_BORDER_CONFIG['width'])),
+        'label_colors': _normalize_label_colors(config.get('label_colors')),
         'memory': load_memory_records(),
     }
 
@@ -214,9 +242,10 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
              label_font_size=None, label_position=None,
              canvas_image_copy_enabled=None, magnifier_enabled=None,
              magnifier_zoom=None, label_cache_slots=None, nudge_step=None,
-              detection_box_wheel_scale_step=None, detection_box_wheel_edge_step=None,
-             crosshair_width=None, crosshair_color=None, crosshair_alpha=None,
-             box_border_width=None):
+               detection_box_scale_step=None, paste_item_scale_step=None,
+               detection_box_wheel_edge_step=None,
+              crosshair_width=None, crosshair_color=None, crosshair_alpha=None,
+              box_border_width=None, label_colors=None):
     """保存所有配置"""
     config = load_config()
     if shortcuts is not None:
@@ -247,8 +276,12 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['label_cache_slots'] = _normalize_label_cache_slots(label_cache_slots)
     if nudge_step is not None:
         config['nudge_step'] = max(1, min(5, int(nudge_step)))
-    if detection_box_wheel_scale_step is not None:
-        config['detection_box_wheel_scale_step'] = max(0.01, min(0.2, float(detection_box_wheel_scale_step)))
+    if detection_box_scale_step is not None:
+        config['detection_box_scale_step'] = max(0.01, min(0.30, float(detection_box_scale_step)))
+    if paste_item_scale_step is not None:
+        config['paste_item_scale_step'] = max(0.01, min(0.30, float(paste_item_scale_step)))
+    if detection_box_scale_step is not None or paste_item_scale_step is not None:
+        config.pop('detection_box_wheel_scale_step', None)
     if detection_box_wheel_edge_step is not None:
         config['detection_box_wheel_edge_step'] = max(1, min(50, int(detection_box_wheel_edge_step)))
     if crosshair_width is not None:
@@ -260,4 +293,6 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['crosshair_alpha'] = max(0, min(255, int(crosshair_alpha)))
     if box_border_width is not None:
         config['box_border_width'] = max(0.5, min(3.5, float(box_border_width)))
+    if label_colors is not None:
+        config['label_colors'] = _normalize_label_colors(label_colors)
     return save_config(config)

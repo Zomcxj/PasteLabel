@@ -4,20 +4,8 @@ Canvas 绘制混入 - 负责所有绘制逻辑（背景、贴图、检测框、�
 from PyQt5.QtGui import QPainter, QPixmap, QColor, QPen, QFontMetrics
 from PyQt5.QtCore import Qt, QPointF, QRectF
 
-from ..core.config import DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, GRID_CONFIG, LABEL_COLORS, MAGNIFIER_CONFIG, CROSSHAIR_CONFIG
+from ..core.config import DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, GRID_CONFIG, MAGNIFIER_CONFIG, CROSSHAIR_CONFIG
 from ..ui.theme import ThemeManager
-
-_label_color_map = {}
-_next_color_index = 0
-
-
-def _get_label_color_index(label):
-    global _next_color_index
-    if label not in _label_color_map:
-        _label_color_map[label] = _next_color_index % len(LABEL_COLORS)
-        _next_color_index += 1
-    return _label_color_map[label]
-
 
 class CanvasRendererMixin:
     """Canvas 绘制混入类 - paintEvent 及所有 _draw_* 方法"""
@@ -120,8 +108,9 @@ class CanvasRendererMixin:
             item_rect = QRectF(item_x, item_y, item_width, item_height)
             is_selected = (i == self._editor.selected_item)
 
+            is_pressed_label = self._is_pressed_label({"label": label})
             self._draw_single_paste_item(
-                painter, pixmap, item_rect, label, is_selected, i
+                painter, pixmap, item_rect, label, is_selected, is_pressed_label, i
             )
 
     def _get_box_border_pen(self, border_color, is_selected):
@@ -131,14 +120,14 @@ class CanvasRendererMixin:
         pen_width = max(0.5, min(3.5, pen_width))
         return QPen(border_color, pen_width)
 
-    def _draw_single_paste_item(self, painter, pixmap, item_rect, label, is_selected, item_index=0):
+    def _draw_single_paste_item(self, painter, pixmap, item_rect, label, is_selected, is_pressed_label, item_index=0):
         """绘制单个贴图"""
         item_x = item_rect.left()
         item_y = item_rect.top()
         item_width = item_rect.width()
         item_height = item_rect.height()
 
-        if is_selected:
+        if is_selected or is_pressed_label:
             self._draw_selected_paste(painter, pixmap, item_rect, label)
         else:
             painter.drawPixmap(
@@ -147,15 +136,13 @@ class CanvasRendererMixin:
                 pixmap
             )
 
-        from ..core.config import LABEL_COLORS
-        label_color_index = _get_label_color_index(label)
-        label_color_hex = LABEL_COLORS[label_color_index]
+        label_color_hex = self._editor.get_label_color(label)
         lr = int(label_color_hex[1:3], 16)
         lg = int(label_color_hex[3:5], 16)
         lb = int(label_color_hex[5:7], 16)
 
         border_color = QColor(lr, lg, lb)
-        pen = self._get_box_border_pen(border_color, is_selected)
+        pen = self._get_box_border_pen(border_color, is_selected or is_pressed_label)
         painter.setPen(pen)
         painter.drawRect(int(item_x), int(item_y), int(item_width), int(item_height))
 
@@ -178,7 +165,8 @@ class CanvasRendererMixin:
             0, 0, int(item_rect.width()), int(item_rect.height()), pixmap
         )
 
-        overlay_color = QColor(135, 206, 250, 80)
+        color = QColor(self._editor.get_label_color(label))
+        overlay_color = QColor(color.red(), color.green(), color.blue(), 80)
         temp_painter.fillRect(
             0, 0, int(item_rect.width()), int(item_rect.height()), overlay_color
         )
@@ -231,9 +219,7 @@ class CanvasRendererMixin:
         """绘制贴图标签"""
         if not self._editor.show_paste_names_checkbox.isChecked():
             return
-        from ..core.config import LABEL_COLORS
-        label_color_index = _get_label_color_index(label)
-        label_color_hex = LABEL_COLORS[label_color_index]
+        label_color_hex = self._editor.get_label_color(label)
         lr = int(label_color_hex[1:3], 16)
         lg = int(label_color_hex[3:5], 16)
         lb = int(label_color_hex[5:7], 16)
@@ -268,9 +254,7 @@ class CanvasRendererMixin:
     def _draw_single_detection_box(self, painter, x, y, width, height, label,
                                     is_selected, is_pressed_label):
         """绘制单个检测框"""
-        from ..core.config import LABEL_COLORS
-        label_color_index = _get_label_color_index(label)
-        label_color_hex = LABEL_COLORS[label_color_index]
+        label_color_hex = self._editor.get_label_color(label)
         lr = int(label_color_hex[1:3], 16)
         lg = int(label_color_hex[3:5], 16)
         lb = int(label_color_hex[5:7], 16)
@@ -400,9 +384,7 @@ class CanvasRendererMixin:
             if (box["x"] + box["width"] < src_x or box["x"] > src_x + src_size or
                 box["y"] + box["height"] < src_y or box["y"] > src_y + src_size):
                 continue
-            from ..core.config import LABEL_COLORS
-            ci = _get_label_color_index(box.get("label", ""))
-            lh = LABEL_COLORS[ci]
+            lh = self._editor.get_label_color(box.get("label", ""))
             mc = QColor(int(lh[1:3], 16), int(lh[3:5], 16), int(lh[5:7], 16))
             mx = dst.left() + (box["x"] - src_x) * m_scale
             my = dst.top() + (box["y"] - src_y) * m_scale
@@ -417,9 +399,7 @@ class CanvasRendererMixin:
             if (ir.x() + ir.width() < src_x or ir.x() > src_x + src_size or
                 ir.y() + ir.height() < src_y or ir.y() > src_y + src_size):
                 continue
-            from ..core.config import LABEL_COLORS
-            ci = _get_label_color_index(label)
-            lh = LABEL_COLORS[ci]
+            lh = self._editor.get_label_color(label)
             mc = QColor(int(lh[1:3], 16), int(lh[3:5], 16), int(lh[5:7], 16))
             mx = dst.left() + (ir.x() - src_x) * m_scale
             my = dst.top() + (ir.y() - src_y) * m_scale

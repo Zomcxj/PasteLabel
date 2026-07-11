@@ -2,7 +2,10 @@
 from PyQt5.QtCore import Qt
 
 from pastelabel.canvas import canvas_interaction
+from pastelabel.canvas import canvas as canvas_module
+from pastelabel.canvas.canvas import Canvas as RealCanvas
 from pastelabel.canvas.canvas_interaction import CanvasInteractionMixin
+from pastelabel.ui.main_window import ImageEditor
 
 
 class Point:
@@ -27,6 +30,7 @@ class Rect:
     def height(self): return self._h
     def left(self): return self._x
     def top(self): return self._y
+    def center(self): return Point(self._x + self._w / 2, self._y + self._h / 2)
     def contains(self, point):
         return self._x <= point.x() <= self._x + self._w and self._y <= point.y() <= self._y + self._h
 
@@ -97,19 +101,46 @@ class Canvas(CanvasInteractionMixin):
         self.synced_indexes.append(index)
 
     def _current_modifiers(self):
-        return Qt.NoModifier
+        return 0
+
+    def save_undo_state(self):
+        pass
+
+    def find_item_at_position(self, point):
+        for index, (_, rect, _) in enumerate(self._editor.canvas_items):
+            if rect.contains(point):
+                return index
+        return None
 
 
-def test_paste_hover_detects_box_handle(monkeypatch):
+def test_reset_view_keeps_background_adaptive_to_canvas_resize(monkeypatch):
+    monkeypatch.setattr(canvas_module, "QPoint", Point)
+    canvas = RealCanvas.__new__(RealCanvas)
+    canvas._editor = type("Editor", (), {"current_background": Background(100, 50)})()
+    canvas.background_scale = 1.0
+    canvas.background_offset = Point(0, 0)
+    canvas.is_manual_scale = False
+    canvas.width = lambda: 200
+    canvas.height = lambda: 100
+
+    canvas.reset_view()
+    canvas.width = lambda: 100
+    canvas.height = lambda: 200
+
+    canvas.get_background_rect()
+
+    assert canvas.background_scale == 1.0
+
+
+def test_paste_hover_selects_paste_without_selecting_detection_box(monkeypatch):
     monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
     canvas = Canvas("paste")
-    canvas.selected_box = 0
-    canvas._editor.pressed_label = "cat"
 
     canvas._check_hover()
 
-    # paste mode 下 hover 到选中框手柄，不修改编辑状态
-    assert canvas.hover_resize_target == 'box'
+    assert canvas._editor.selected_item == 0
+    assert canvas.selected_box is None
+    assert canvas.selected_boxes == []
 
 
 def test_annotate_hover_clears_paste_item_edit_state(monkeypatch):
@@ -126,14 +157,54 @@ def test_annotate_hover_clears_paste_item_edit_state(monkeypatch):
     assert canvas.selected_item_size is None
 
 
-def test_paste_hover_selects_detection_box_without_click(monkeypatch):
+def test_paste_hover_does_not_select_detection_box_without_click(monkeypatch):
     monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
     canvas = Canvas("paste")
+    canvas._editor.canvas_items = []
 
     canvas._check_hover()
 
+    assert canvas.selected_box is None
+    assert canvas.selected_boxes == []
+
+
+def test_paste_click_still_selects_detection_box(monkeypatch):
+    monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
+    canvas = Canvas("paste")
+    canvas._editor.canvas_items = []
+
+    canvas._handle_left_click(Point(5, 5))
+
     assert canvas.selected_box == 0
     assert canvas.selected_boxes == [0]
+
+
+def test_mode_switch_clears_paste_and_detection_box_selection():
+    class StatusLabel:
+        def setText(self, text):
+            self.text = text
+
+    editor = type("Editor", (), {})()
+    editor.edit_mode = "annotate"
+    editor.selected_item = 0
+    editor.status_label = StatusLabel()
+    editor.canvas = type("Canvas", (), {
+        "selected_item_size": (10, 10),
+        "selected_box": 0,
+        "selected_boxes": [0],
+        "hover_resize_target": "item",
+        "hover_resize_handle": "br",
+        "update": lambda self: None,
+    })()
+    editor._apply_mode_visibility_defaults = lambda: None
+    editor._update_mode_seg_style = lambda animated=False: None
+
+    ImageEditor._set_edit_mode(editor, "paste")
+
+    assert editor.selected_item is None
+    assert editor.canvas.selected_item_size is None
+    assert editor.canvas.selected_box is None
+    assert editor.canvas.selected_boxes == []
 
 
 def test_ctrl_hover_adds_detection_box_to_selected_boxes_without_click(monkeypatch):
@@ -151,9 +222,10 @@ def test_ctrl_hover_adds_detection_box_to_selected_boxes_without_click(monkeypat
     assert canvas.selected_boxes == [0, 1]
 
 
-def test_scale_selected_box_uses_configured_scale_step(monkeypatch):
+def test_scale_selected_box_uses_detection_box_scale_step(monkeypatch):
     monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
-    monkeypatch.setitem(canvas_interaction.DETECTION_BOX_WHEEL_CONFIG, 'scale_step', 0.1)
+    monkeypatch.setitem(canvas_interaction.DETECTION_BOX_WHEEL_CONFIG, 'detection_box_scale_step', 0.1)
+    monkeypatch.setitem(canvas_interaction.DETECTION_BOX_WHEEL_CONFIG, 'paste_item_scale_step', 0.2)
     canvas = Canvas("annotate")
     canvas.selected_box = 0
 
@@ -165,6 +237,20 @@ def test_scale_selected_box_uses_configured_scale_step(monkeypatch):
     assert round(box['width'], 2) == 11.0
     assert round(box['height'], 2) == 11.0
     assert canvas.synced_indexes == [0]
+
+
+def test_scale_selected_item_uses_paste_item_scale_step(monkeypatch):
+    monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
+    monkeypatch.setitem(canvas_interaction.DETECTION_BOX_WHEEL_CONFIG, 'detection_box_scale_step', 0.1)
+    monkeypatch.setitem(canvas_interaction.DETECTION_BOX_WHEEL_CONFIG, 'paste_item_scale_step', 0.2)
+    canvas = Canvas("paste")
+    canvas._editor.selected_item = 0
+
+    canvas._scale_selected_item(WheelEvent(120))
+
+    _, rect, _ = canvas._editor.canvas_items[0]
+    assert round(rect.width(), 2) == 12.0
+    assert round(rect.height(), 2) == 12.0
 
 
 def test_adjust_selected_box_edge_moves_only_nearest_edge(monkeypatch):

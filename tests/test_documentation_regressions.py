@@ -25,3 +25,16 @@ def test_build_script_does_not_list_removed_hidden_imports():
     assert "pastelabel.ui.widgets" not in source
     assert "pastelabel.ui.styles" not in source
     assert "pastelabel.core.models" not in source
+
+
+def test_documentation_describes_stats_color_replacement_and_separate_wheel_steps():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    guide = (ROOT / "user_guide.md").read_text(encoding="utf-8")
+
+    for source in (readme, guide):
+        assert "颜色替换" in source
+        assert "HTML色值" in source
+        assert "检测框缩放步长" in source
+        assert "贴图缩放步长" in source
+        assert "检测框滚轮缩放" in source
+        assert "贴图滚轮缩放" in source

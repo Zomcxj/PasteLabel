@@ -1,5 +1,5 @@
 """对话框辅助函数：统一标题栏主题和按钮文字。"""
-from PyQt5.QtWidgets import QDialog, QInputDialog, QMessageBox
+from PyQt5.QtWidgets import QDialog, QInputDialog, QMessageBox, QColorDialog, QLabel, QPushButton
 
 from . import i18n
 from .dwm import set_titlebar_dark
@@ -34,6 +34,39 @@ class ThemedMessageBox(QMessageBox):
         super().showEvent(event)
         center_on_parent(self)
         sync_titlebar(self)
+        details_button = self.findChild(QPushButton, "qt_msgbox_details")
+        if details_button:
+            details_button.setText(i18n.t("显示详情"))
+
+
+class ThemedColorDialog(QColorDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setOption(QColorDialog.DontUseNativeDialog, True)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        sync_titlebar(self)
+        translations = {
+            '&Basic colors': '基本颜色：',
+            '&Custom colors': '自定义颜色：',
+            '&Pick Screen Color': '拾取屏幕颜色',
+            '&Add to Custom Colors': '添加到自定义颜色',
+            'Hu&e:': '色调：',
+            '&Sat:': '饱和度：',
+            '&Val:': '亮度：',
+            '&Red:': '红：',
+            '&Green:': '绿：',
+            'Bl&ue:': '蓝：',
+            'A&lpha channel:': '透明度：',
+            '&HTML:': 'HTML：',
+            'OK': '确定',
+            'Cancel': '取消',
+        }
+        for widget in self.findChildren(QLabel) + self.findChildren(QPushButton):
+            text = widget.text()
+            if text in translations:
+                widget.setText(i18n.t(translations[text]))
 
 
 def get_text(parent, title, label, text=""):

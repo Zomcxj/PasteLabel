@@ -96,7 +96,7 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         else:
             self.background_scale = 1.0
         self.background_offset = QPoint(0, 0)
-        self.is_manual_scale = True
+        self.is_manual_scale = False
 
     def find_item_at_position(self, pos):
         """查找指定位置的贴图索引"""

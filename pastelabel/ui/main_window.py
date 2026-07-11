@@ -63,6 +63,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         i18n.set_lang(language)
 
         self.shortcut_config = settings.get('shortcuts', {})
+        self.label_colors = settings.get('label_colors', [])
         self._max_labels = settings.get('max_labels', 3)
         self.label_cache_slots = settings.get('label_cache_slots', [])
         self.active_label_cache_slot = 0
@@ -87,7 +88,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._magnifier_enabled = bool(settings.get('magnifier_enabled', False))
         MAGNIFIER_CONFIG['zoom'] = max(0.8, min(3.0, float(settings.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom']))))
         NUDGE_CONFIG['step'] = max(1, min(5, int(settings.get('nudge_step', NUDGE_CONFIG['step']))))
-        DETECTION_BOX_WHEEL_CONFIG['scale_step'] = max(0.01, min(0.2, float(settings.get('detection_box_wheel_scale_step', DETECTION_BOX_WHEEL_CONFIG['scale_step']))))
+        DETECTION_BOX_WHEEL_CONFIG['detection_box_scale_step'] = max(0.01, min(0.30, float(settings.get('detection_box_scale_step', DETECTION_BOX_WHEEL_CONFIG['detection_box_scale_step']))))
+        DETECTION_BOX_WHEEL_CONFIG['paste_item_scale_step'] = max(0.01, min(0.30, float(settings.get('paste_item_scale_step', DETECTION_BOX_WHEEL_CONFIG['paste_item_scale_step']))))
         DETECTION_BOX_WHEEL_CONFIG['edge_step'] = max(1, min(50, int(settings.get('detection_box_wheel_edge_step', DETECTION_BOX_WHEEL_CONFIG['edge_step']))))
         CROSSHAIR_CONFIG['width'] = max(0.5, min(3.0, float(settings.get('crosshair_width', CROSSHAIR_CONFIG['width']))))
         color = str(settings.get('crosshair_color', CROSSHAIR_CONFIG['color']))
@@ -140,6 +142,14 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
         from ..engine.undo_manager import UndoManager
         self.undo_manager = UndoManager()
+
+    def get_label_color(self, label):
+        """使用本窗口当前标签集合按名称排序后的色板槽位。"""
+        from ..core import config_manager
+        labels = [box.get('label', '') for boxes in self.detection_boxes_dict.values() for box in boxes]
+        labels.extend(box.get('label', '') for box in self.detection_boxes)
+        labels.extend(item[2] for item in self.canvas_items)
+        return config_manager.get_label_color(labels, label, self.label_colors)
 
     def _save_label_cache_slots(self):
         from ..core import config_manager
@@ -476,6 +486,14 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def _set_edit_mode(self, mode, animated=False):
         self.edit_mode = 'annotate' if mode == 'annotate' else 'paste'
+        self.selected_item = None
+        if hasattr(self, 'canvas'):
+            self.canvas.selected_item_size = None
+            self.canvas.selected_box = None
+            self.canvas.selected_boxes = []
+            self.canvas.hover_resize_target = None
+            self.canvas.hover_resize_handle = None
+            self.canvas.update()
         self._apply_mode_visibility_defaults()
         self._update_mode_seg_style(animated=animated)
         from PyQt5.QtCore import QTimer
@@ -681,7 +699,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def _show_label_stats(self):
         """显示标签统计弹窗"""
-        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView, QPushButton
         from .dialog_helpers import center_on_parent
         from .theme import ThemeManager
         from . import i18n
@@ -695,7 +713,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         t = ThemeManager.get_theme()
         dialog = _StatsDialog(self)
         dialog.setWindowTitle(tr("标签统计"))
-        dialog.setMinimumSize(400, 300)
+        dialog.setMinimumSize(540, 600)
         from PyQt5.QtCore import QTimer
         def _sync():
             hwnd = int(dialog.winId())
@@ -729,12 +747,17 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 if lbl:
                     bg_stats[lbl] = bg_stats.get(lbl, 0) + 1
 
-        bg_table = QTableWidget(len(bg_stats), 2)
-        bg_table.setHorizontalHeaderLabels([tr("类别"), tr("数量")])
+        bg_table = QTableWidget(len(bg_stats), 3)
+        bg_table.setHorizontalHeaderLabels([tr("类别"), tr("数量"), tr("颜色")])
         bg_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         for row, (label, count) in enumerate(sorted(bg_stats.items(), key=lambda x: -x[1])):
-            bg_table.setItem(row, 0, QTableWidgetItem(label))
+            label_item = QTableWidgetItem(label)
+            bg_table.setItem(row, 0, label_item)
             bg_table.setItem(row, 1, QTableWidgetItem(str(count)))
+            color_button = QPushButton()
+            self._set_label_color_button(color_button, self.get_label_color(label))
+            color_button.clicked.connect(lambda _, value=label, button=color_button: self._change_label_color(value, dialog, button))
+            bg_table.setCellWidget(row, 2, color_button)
         layout.addWidget(bg_table)
 
         paste_label = QLabel(tr("贴图标签_list"))
@@ -746,12 +769,17 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             if lbl:
                 paste_stats[lbl] = paste_stats.get(lbl, 0) + 1
 
-        paste_table = QTableWidget(len(paste_stats), 2)
-        paste_table.setHorizontalHeaderLabels([tr("类别"), tr("数量")])
+        paste_table = QTableWidget(len(paste_stats), 3)
+        paste_table.setHorizontalHeaderLabels([tr("类别"), tr("数量"), tr("颜色")])
         paste_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         for row, (label, count) in enumerate(sorted(paste_stats.items(), key=lambda x: -x[1])):
-            paste_table.setItem(row, 0, QTableWidgetItem(label))
+            label_item = QTableWidgetItem(label)
+            paste_table.setItem(row, 0, label_item)
             paste_table.setItem(row, 1, QTableWidgetItem(str(count)))
+            color_button = QPushButton()
+            self._set_label_color_button(color_button, self.get_label_color(label))
+            color_button.clicked.connect(lambda _, value=label, button=color_button: self._change_label_color(value, dialog, button))
+            paste_table.setCellWidget(row, 2, color_button)
         layout.addWidget(paste_table)
 
         total = QLabel(
@@ -762,6 +790,35 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         layout.addWidget(total)
 
         dialog.exec_()
+
+    def _set_label_color_button(self, button, color):
+        button.setText(color)
+        button.setStyleSheet(f"QPushButton {{ background-color: {color}; color: white; }}")
+
+    def _change_label_color(self, label, parent, color_button=None):
+        """修改当前排序类别对应的全局色板槽位。"""
+        from ..core import config_manager
+        from PyQt5.QtGui import QColor
+        from .dialog_helpers import ThemedColorDialog
+        labels = [box.get('label', '') for boxes in self.detection_boxes_dict.values() for box in boxes]
+        labels.extend(box.get('label', '') for box in self.detection_boxes)
+        labels.extend(item[2] for item in self.canvas_items)
+        ordered_labels = sorted({value for value in labels if value})
+        if label not in ordered_labels or not self.label_colors:
+            return
+        dialog = ThemedColorDialog(parent)
+        dialog.setWindowTitle(tr("颜色"))
+        dialog.setCurrentColor(QColor(self.get_label_color(label)))
+        if dialog.exec_() != 1:
+            return
+        color = dialog.currentColor()
+        if not color.isValid():
+            return
+        self.label_colors[ordered_labels.index(label) % len(self.label_colors)] = color.name()
+        config_manager.save_all(label_colors=self.label_colors)
+        if color_button is not None:
+            self._set_label_color_button(color_button, color.name())
+        self.canvas.update()
 
     def showEvent(self, event):
         """窗口显示后设置标题栏颜色（winId 必须在 show 之后获取）"""

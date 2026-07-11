@@ -141,36 +141,40 @@ class ThemeManager:
                 width: 2px;
             }}
             QScrollBar:vertical {{
-                background: {t['scrollbar_bg']};
-                width: 8px;
-                border-radius: 4px;
+                background: transparent;
+                width: 10px;
             }}
             QScrollBar::handle:vertical {{
-                background: {t['scrollbar_handle']};
-                border-radius: 4px;
+                background: rgba(128, 128, 128, 150);
+                border-radius: 5px;
                 min-height: 20px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background: {t['scrollbar_handle_hover']};
+                background: rgba(96, 96, 96, 220);
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
             }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: transparent;
+            }}
             QScrollBar:horizontal {{
-                background: {t['scrollbar_bg']};
-                height: 8px;
-                border-radius: 4px;
+                background: transparent;
+                height: 10px;
             }}
             QScrollBar::handle:horizontal {{
-                background: {t['scrollbar_handle']};
-                border-radius: 4px;
+                background: rgba(128, 128, 128, 150);
+                border-radius: 5px;
                 min-width: 20px;
             }}
             QScrollBar::handle:horizontal:hover {{
-                background: {t['scrollbar_handle_hover']};
+                background: rgba(96, 96, 96, 220);
             }}
             QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
                 width: 0px;
+            }}
+            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+                background: transparent;
             }}
             QStatusBar {{
                 background-color: {t['statusbar_bg']};

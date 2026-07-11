@@ -194,6 +194,25 @@ def test_theme_styles_do_not_include_unsupported_box_shadow_property():
     assert 'box-shadow:' not in source
 
 
+def test_theme_defines_global_translucent_scrollbars_for_both_orientations():
+    source = (ROOT / "pastelabel" / "ui" / "theme.py").read_text(encoding="utf-8")
+
+    assert 'QScrollBar:vertical {' in source
+    assert 'QScrollBar:horizontal {' in source
+    assert source.count('background: transparent;') >= 4
+    assert 'width: 10px;' in source
+    assert 'height: 10px;' in source
+    assert 'border-radius: 5px;' in source
+    assert 'rgba(128, 128, 128, 150)' in source
+    assert 'rgba(96, 96, 96, 220)' in source
+    assert 'QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {' in source
+    assert 'QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {' in source
+    assert 'height: 0px;' in source
+    assert 'width: 0px;' in source
+    assert 'QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {' in source
+    assert 'QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {' in source
+
+
 def test_options_button_keeps_qmenu_layout():
     source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
 

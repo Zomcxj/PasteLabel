@@ -168,7 +168,8 @@ BOX_BORDER_CONFIG = {'width': 1.0}
 
 # 检测框滚轮编辑配置
 DETECTION_BOX_WHEEL_CONFIG = {
-    'scale_step': 0.03,  # 框内滚轮整体缩放步长
+    'detection_box_scale_step': 0.05,  # 检测框内滚轮整体缩放步长
+    'paste_item_scale_step': 0.15,  # 贴图内滚轮整体缩放步长
     'edge_step': 5,      # 框外滚轮单边位移像素
 }
 

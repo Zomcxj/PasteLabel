@@ -137,15 +137,83 @@ class TestSaveLoadRoundtrip:
         finally:
             config_manager.CONFIG_PATH = original
 
-    def test_detection_box_wheel_settings_roundtrip_through_save_all(self, tmp_path):
+    def test_wheel_scale_settings_roundtrip_through_save_all(self, tmp_path):
         original = _with_temp_config(tmp_path)
         try:
-            config_manager.save_all(detection_box_wheel_scale_step=0.08, detection_box_wheel_edge_step=9)
+            config_manager.save_all(
+                detection_box_scale_step=0.08,
+                paste_item_scale_step=0.18,
+                detection_box_wheel_edge_step=9,
+            )
             result = config_manager.load_all()
-            assert result['detection_box_wheel_scale_step'] == 0.08
+            assert result['detection_box_scale_step'] == 0.08
+            assert result['paste_item_scale_step'] == 0.18
             assert result['detection_box_wheel_edge_step'] == 9
         finally:
             config_manager.CONFIG_PATH = original
+
+    def test_label_colors_fall_back_to_defaults_for_legacy_or_invalid_config(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            config_manager.save_config({'label_colors': ['bad', 42]})
+            assert config_manager.load_all()['label_colors'] == config.LABEL_COLORS
+        finally:
+            config_manager.CONFIG_PATH = original
+
+    def test_wheel_scale_settings_use_legacy_value_only_when_new_keys_are_missing(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            config_manager.save_config({'detection_box_wheel_scale_step': 0.12})
+            result = config_manager.load_all()
+
+            assert result['detection_box_scale_step'] == 0.12
+            assert result['paste_item_scale_step'] == 0.12
+
+            config_manager.save_config({
+                'detection_box_wheel_scale_step': 0.12,
+                'detection_box_scale_step': 0.08,
+                'paste_item_scale_step': 0.18,
+            })
+            result = config_manager.load_all()
+
+            assert result['detection_box_scale_step'] == 0.08
+            assert result['paste_item_scale_step'] == 0.18
+        finally:
+            config_manager.CONFIG_PATH = original
+
+    def test_wheel_scale_settings_have_distinct_defaults_and_save_only_new_keys(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            assert config_manager.load_all()['detection_box_scale_step'] == 0.05
+            assert config_manager.load_all()['paste_item_scale_step'] == 0.15
+
+            config_manager.save_all(detection_box_scale_step=0.06, paste_item_scale_step=0.16)
+            saved = config_manager.load_config()
+
+            assert saved['detection_box_scale_step'] == 0.06
+            assert saved['paste_item_scale_step'] == 0.16
+            assert 'detection_box_wheel_scale_step' not in saved
+        finally:
+            config_manager.CONFIG_PATH = original
+
+    def test_label_colors_roundtrip_through_save_all(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            palette = ['#123456', '#abcdef']
+            config_manager.save_all(label_colors=palette)
+            assert config_manager.load_all()['label_colors'] == palette
+            assert config_manager.load_config()['label_colors'] == palette
+        finally:
+            config_manager.CONFIG_PATH = original
+
+
+def test_label_color_uses_alphabetical_category_slot_and_cycles_palette():
+    palette = ['#111111', '#222222']
+    labels = ['zebra', 'apple', 'mango']
+
+    assert config_manager.get_label_color(labels, 'apple', palette) == '#111111'
+    assert config_manager.get_label_color(labels, 'mango', palette) == '#222222'
+    assert config_manager.get_label_color(labels, 'zebra', palette) == '#111111'
 
     def test_crosshair_settings_roundtrip_through_save_all(self, tmp_path):
         original = _with_temp_config(tmp_path)

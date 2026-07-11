@@ -47,21 +47,18 @@ def exception_hook(exctype, value, tb):
     
     # 尝试使用 QMessageBox 显示错误
     try:
-        from PyQt5.QtWidgets import QMessageBox, QApplication, QPushButton
+        from PyQt5.QtWidgets import QMessageBox, QApplication
         from ..ui import i18n
+        from ..ui.dialog_helpers import ThemedMessageBox
         app = QApplication.instance()
         if app:
-            msg_box = QMessageBox()
+            msg_box = ThemedMessageBox()
             msg_box.setIcon(QMessageBox.Critical)
-            msg_box.setWindowTitle("程序错误")
-            msg_box.setText("程序遇到意外错误，错误信息已保存到 pastelabel.log")
+            msg_box.setWindowTitle(i18n.t("程序错误"))
+            msg_box.setText(i18n.t("程序遇到意外错误，错误信息已保存到 pastelabel.log"))
+            msg_box.setStandardButtons(QMessageBox.Ok)
+            msg_box.button(QMessageBox.Ok).setText(i18n.t("确定"))
             msg_box.setDetailedText(error_msg)
-            ok_button = msg_box.button(QMessageBox.Ok)
-            if ok_button:
-                ok_button.setText(i18n.t("确定"))
-            details_button = msg_box.findChild(QPushButton, "qt_msgbox_details")
-            if details_button:
-                details_button.setText(i18n.t("显示详情"))
             msg_box.exec_()
     except Exception:
         pass

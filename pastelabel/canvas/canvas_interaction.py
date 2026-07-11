@@ -365,9 +365,17 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 self.update()
             return
 
-        if (self._editor.show_labels_checkbox.isChecked() and
+        is_annotate = getattr(self._editor, 'edit_mode', 'paste') == 'annotate'
+        if (is_annotate and self._editor.show_labels_checkbox.isChecked() and
                 self._select_hovered_detection_box(bg_rect)):
             pass
+        elif not is_annotate and (item_index := self.find_item_at_position(self.mouse_pos)) is not None:
+            _, rect, _ = self._editor.canvas_items[item_index]
+            self._editor.selected_item = item_index
+            self.selected_item_size = (rect.width(), rect.height())
+            self.selected_box = None
+            self.selected_boxes = []
+            self.setCursor(Qt.OpenHandCursor)
         elif (self._editor.selected_item is not None and
             0 <= self._editor.selected_item < len(self._editor.canvas_items)):
             _, rect, _ = self._editor.canvas_items[self._editor.selected_item]
@@ -625,7 +633,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             return
 
         delta = event.angleDelta().y()
-        step = max(0.01, min(0.2, float(DETECTION_BOX_WHEEL_CONFIG.get('scale_step', 0.03))))
+        step = max(0.01, min(0.30, float(DETECTION_BOX_WHEEL_CONFIG.get('paste_item_scale_step', 0.15))))
         scale_factor = 1.0 + step if delta > 0 else max(0.1, 1.0 - step)
 
         pixmap, rect, label = self._editor.canvas_items[self._editor.selected_item]
@@ -659,7 +667,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             return
 
         delta = event.angleDelta().y()
-        step = max(0.01, min(0.5, float(DETECTION_BOX_WHEEL_CONFIG.get('scale_step', 0.03))))
+        step = max(0.01, min(0.30, float(DETECTION_BOX_WHEEL_CONFIG.get('detection_box_scale_step', 0.05))))
         scale_factor = 1.0 + step if delta > 0 else max(0.1, 1.0 - step)
 
         box = self._editor.detection_boxes[self.selected_box]

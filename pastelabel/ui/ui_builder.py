@@ -742,6 +742,8 @@ class UIBuilderMixin:
         )
         default_item = QListWidgetItem("paste")
         self.paste_label_list.addItem(default_item)
+        self.paste_label_list.itemPressed.connect(self.label_list_item_pressed)
+        self.paste_label_list.itemClicked.connect(self.label_list_item_clicked)
         paste_label_layout.addWidget(self.paste_label_list)
 
         label_layout.addLayout(original_label_layout)

@@ -6,7 +6,7 @@ import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QGroupBox, QScrollArea, QWidget, QSpinBox, QStackedWidget,
-    QComboBox, QDoubleSpinBox, QColorDialog
+    QComboBox, QDoubleSpinBox
 )
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QEvent
@@ -14,7 +14,7 @@ from PyQt5.QtCore import Qt, QEvent
 from ..core.config import SHORTCUT_CONFIG, LABEL_CACHE_SLOTS, BOX_BORDER_CONFIG
 from .theme import ThemeManager
 from .dwm import set_titlebar_dark
-from .dialog_helpers import center_on_parent
+from .dialog_helpers import center_on_parent, ThemedColorDialog
 from ..core import config_manager
 from . import i18n
 
@@ -222,31 +222,6 @@ class SettingsDialog(QDialog):
         max_labels_row.addStretch()
         opt_layout.addLayout(max_labels_row)
 
-        handle_size_row = QHBoxLayout()
-        handle_size_label = QLabel(tr("缩放句柄大小") + ":")
-        handle_size_row.addWidget(handle_size_label, 2)
-        self.handle_size_spin = QSpinBox()
-        self.handle_size_spin.setRange(3, 15)
-        self.handle_size_spin.setValue(DETECTION_BOX_CONFIG.get('resize_handle_size', 8))
-        self.handle_size_spin.setMinimumWidth(150)
-        handle_size_row.addWidget(self.handle_size_spin)
-        handle_size_row.addStretch()
-        opt_layout.addLayout(handle_size_row)
-
-        box_border_width_row = QHBoxLayout()
-        box_border_width_label = QLabel(tr("框线粗细") + ":")
-        box_border_width_row.addWidget(box_border_width_label, 2)
-        self.box_border_width_spin = QDoubleSpinBox()
-        self.box_border_width_spin.setObjectName("paramSpin")
-        self.box_border_width_spin.setRange(0.5, 3.5)
-        self.box_border_width_spin.setSingleStep(0.5)
-        self.box_border_width_spin.setDecimals(1)
-        self.box_border_width_spin.setMinimumWidth(150)
-        self.box_border_width_spin.setValue(max(0.5, min(3.5, float(BOX_BORDER_CONFIG['width']))))
-        box_border_width_row.addWidget(self.box_border_width_spin)
-        box_border_width_row.addStretch()
-        opt_layout.addLayout(box_border_width_row)
-
         label_font_size_row = QHBoxLayout()
         label_font_size_label = QLabel(tr("类别名字号") + ":")
         label_font_size_row.addWidget(label_font_size_label, 2)
@@ -272,6 +247,31 @@ class SettingsDialog(QDialog):
         label_position_row.addStretch()
         opt_layout.addLayout(label_position_row)
 
+        handle_size_row = QHBoxLayout()
+        handle_size_label = QLabel(tr("缩放句柄大小") + ":")
+        handle_size_row.addWidget(handle_size_label, 2)
+        self.handle_size_spin = QSpinBox()
+        self.handle_size_spin.setRange(3, 15)
+        self.handle_size_spin.setValue(DETECTION_BOX_CONFIG.get('resize_handle_size', 8))
+        self.handle_size_spin.setMinimumWidth(150)
+        handle_size_row.addWidget(self.handle_size_spin)
+        handle_size_row.addStretch()
+        opt_layout.addLayout(handle_size_row)
+
+        box_border_width_row = QHBoxLayout()
+        box_border_width_label = QLabel(tr("框线粗细") + ":")
+        box_border_width_row.addWidget(box_border_width_label, 2)
+        self.box_border_width_spin = QDoubleSpinBox()
+        self.box_border_width_spin.setObjectName("paramSpin")
+        self.box_border_width_spin.setRange(0.5, 3.5)
+        self.box_border_width_spin.setSingleStep(0.5)
+        self.box_border_width_spin.setDecimals(1)
+        self.box_border_width_spin.setMinimumWidth(150)
+        self.box_border_width_spin.setValue(max(0.5, min(3.5, float(BOX_BORDER_CONFIG['width']))))
+        box_border_width_row.addWidget(self.box_border_width_spin)
+        box_border_width_row.addStretch()
+        opt_layout.addLayout(box_border_width_row)
+
         nudge_step_row = QHBoxLayout()
         nudge_step_label = QLabel(tr("移动步长") + ":")
         nudge_step_row.addWidget(nudge_step_label, 2)
@@ -283,19 +283,23 @@ class SettingsDialog(QDialog):
         nudge_step_row.addStretch()
         opt_layout.addLayout(nudge_step_row)
 
-        detection_box_wheel_scale_step_row = QHBoxLayout()
-        detection_box_wheel_scale_step_label = QLabel(tr("检测框缩放步长") + ":")
-        detection_box_wheel_scale_step_row.addWidget(detection_box_wheel_scale_step_label, 2)
-        self.detection_box_wheel_scale_step_spin = QDoubleSpinBox()
-        self.detection_box_wheel_scale_step_spin.setObjectName("paramSpin")
-        self.detection_box_wheel_scale_step_spin.setRange(0.01, 0.2)
-        self.detection_box_wheel_scale_step_spin.setSingleStep(0.01)
-        self.detection_box_wheel_scale_step_spin.setDecimals(2)
-        self.detection_box_wheel_scale_step_spin.setMinimumWidth(150)
-        self.detection_box_wheel_scale_step_spin.setValue(max(0.01, min(0.2, float(DETECTION_BOX_WHEEL_CONFIG.get('scale_step', 0.03)))))
-        detection_box_wheel_scale_step_row.addWidget(self.detection_box_wheel_scale_step_spin)
-        detection_box_wheel_scale_step_row.addStretch()
-        opt_layout.addLayout(detection_box_wheel_scale_step_row)
+        for label, attribute, config_key in (
+            ("检测框缩放步长", "detection_box_scale_step_spin", "detection_box_scale_step"),
+            ("贴图缩放步长", "paste_item_scale_step_spin", "paste_item_scale_step"),
+        ):
+            scale_step_row = QHBoxLayout()
+            scale_step_row.addWidget(QLabel(tr(label) + ":"), 2)
+            scale_step_spin = QDoubleSpinBox()
+            scale_step_spin.setObjectName("paramSpin")
+            scale_step_spin.setRange(0.01, 0.30)
+            scale_step_spin.setSingleStep(0.01)
+            scale_step_spin.setDecimals(2)
+            scale_step_spin.setMinimumWidth(150)
+            scale_step_spin.setValue(max(0.01, min(0.30, float(DETECTION_BOX_WHEEL_CONFIG[config_key]))))
+            setattr(self, attribute, scale_step_spin)
+            scale_step_row.addWidget(scale_step_spin)
+            scale_step_row.addStretch()
+            opt_layout.addLayout(scale_step_row)
 
         detection_box_wheel_edge_step_row = QHBoxLayout()
         detection_box_wheel_edge_step_label = QLabel(tr("单侧位移像素") + ":")
@@ -453,7 +457,8 @@ class SettingsDialog(QDialog):
         self.label_position_combo.setCurrentIndex(index if index >= 0 else 0)
         self.magnifier_zoom_spin.setValue(max(0.8, min(3.0, float(MAGNIFIER_CONFIG.get('zoom', 2.0)))))
         self.nudge_step_spin.setValue(NUDGE_CONFIG.get('step', 1))
-        self.detection_box_wheel_scale_step_spin.setValue(max(0.01, min(0.2, float(DETECTION_BOX_WHEEL_CONFIG.get('scale_step', 0.03)))))
+        self.detection_box_scale_step_spin.setValue(max(0.01, min(0.30, float(DETECTION_BOX_WHEEL_CONFIG['detection_box_scale_step']))))
+        self.paste_item_scale_step_spin.setValue(max(0.01, min(0.30, float(DETECTION_BOX_WHEEL_CONFIG['paste_item_scale_step']))))
         self.detection_box_wheel_edge_step_spin.setValue(max(1, min(50, int(DETECTION_BOX_WHEEL_CONFIG.get('edge_step', 5)))))
         self.crosshair_width_spin.setValue(max(0.5, min(3.0, float(CROSSHAIR_CONFIG.get('width', 1.0)))))
         color = str(CROSSHAIR_CONFIG.get('color', '#00FF80'))
@@ -469,34 +474,7 @@ class SettingsDialog(QDialog):
         )
 
     def _choose_crosshair_color(self):
-        class _ColorDialog(QColorDialog):
-            def showEvent(color_dialog, event):
-                super().showEvent(event)
-                from .dialog_helpers import sync_titlebar
-                sync_titlebar(color_dialog)
-                translations = {
-                    '&Basic colors': '基本颜色：',
-                    '&Custom colors': '自定义颜色：',
-                    '&Pick Screen Color': '拾取屏幕颜色',
-                    '&Add to Custom Colors': '添加到自定义颜色',
-                    'Hu&e:': '色调：',
-                    '&Sat:': '饱和度：',
-                    '&Val:': '亮度：',
-                    '&Red:': '红：',
-                    '&Green:': '绿：',
-                    'Bl&ue:': '蓝：',
-                    'A&lpha channel:': '透明度：',
-                    '&HTML:': 'HTML：',
-                    'OK': '确定',
-                    'Cancel': '取消',
-                }
-                for widget in color_dialog.findChildren(QLabel) + color_dialog.findChildren(QPushButton):
-                    text = widget.text()
-                    if text in translations:
-                        widget.setText(i18n.t(translations[text]))
-
-        dialog = _ColorDialog(self)
-        dialog.setOption(QColorDialog.DontUseNativeDialog, True)
+        dialog = ThemedColorDialog(self)
         dialog.setWindowTitle(i18n.t("十字线颜色"))
         dialog.setCurrentColor(QColor(self._crosshair_color))
         dialog.setStyleSheet(ThemeManager.get_dialog_button_style())
@@ -552,11 +530,13 @@ class SettingsDialog(QDialog):
         MAGNIFIER_CONFIG['zoom'] = magnifier_zoom
         nudge_step = max(1, min(5, self.nudge_step_spin.value()))
         NUDGE_CONFIG['step'] = nudge_step
-        detection_box_wheel_scale_step = max(0.01, min(0.2, float(self.detection_box_wheel_scale_step_spin.value())))
+        detection_box_scale_step = max(0.01, min(0.30, float(self.detection_box_scale_step_spin.value())))
+        paste_item_scale_step = max(0.01, min(0.30, float(self.paste_item_scale_step_spin.value())))
         detection_box_wheel_edge_step = max(1, min(50, self.detection_box_wheel_edge_step_spin.value()))
         crosshair_width = max(0.5, min(3.0, float(self.crosshair_width_spin.value())))
         crosshair_alpha = max(0, min(255, self.crosshair_alpha_spin.value()))
-        DETECTION_BOX_WHEEL_CONFIG['scale_step'] = detection_box_wheel_scale_step
+        DETECTION_BOX_WHEEL_CONFIG['detection_box_scale_step'] = detection_box_scale_step
+        DETECTION_BOX_WHEEL_CONFIG['paste_item_scale_step'] = paste_item_scale_step
         DETECTION_BOX_WHEEL_CONFIG['edge_step'] = detection_box_wheel_edge_step
         CROSSHAIR_CONFIG['width'] = crosshair_width
         CROSSHAIR_CONFIG['color'] = self._crosshair_color
@@ -575,7 +555,8 @@ class SettingsDialog(QDialog):
             magnifier_zoom=magnifier_zoom,
             label_cache_slots=label_cache_slots,
             nudge_step=nudge_step,
-            detection_box_wheel_scale_step=detection_box_wheel_scale_step,
+            detection_box_scale_step=detection_box_scale_step,
+            paste_item_scale_step=paste_item_scale_step,
             detection_box_wheel_edge_step=detection_box_wheel_edge_step,
             crosshair_width=crosshair_width,
             crosshair_color=self._crosshair_color,

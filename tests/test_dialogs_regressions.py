@@ -52,3 +52,55 @@ def test_label_stats_dialog_centers_after_show_event():
     assert 'def showEvent(self, event):' in stats_block
     assert 'center_on_parent(self, self.parent())' in stats_block
     assert 'dialog.setMinimumSize(540, 600)' in stats_block
+
+
+def test_label_stats_aggregates_in_memory_pastes_from_other_images():
+    from pastelabel.ui.main_window import ImageEditor
+
+    editor = ImageEditor.__new__(ImageEditor)
+    editor.background_images = ["current.png", "other.png"]
+    editor.current_background_index = 0
+    editor.canvas_items = []
+    editor.canvas_items_dict = {
+        0: [(None, None, "cached-current")],
+        1: [(None, None, "paste")],
+    }
+
+    assert editor._get_session_paste_stats() == {"paste": 1}
+
+
+def test_label_color_uses_all_open_image_paste_labels_when_switching_current_image():
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = '''
+from PyQt5.QtWidgets import QApplication
+from pastelabel.ui.main_window import ImageEditor
+
+app = QApplication.instance() or QApplication([])
+editor = ImageEditor()
+editor.background_images = ["zebra.png", "apple.png"]
+editor.label_colors = ["#111111", "#222222"]
+editor.current_background_index = 0
+editor.canvas_items = [(None, None, "zebra")]
+editor.canvas_items_dict = {1: [(None, None, "apple")]}
+
+assert editor.get_label_color("zebra") == "#222222"
+
+editor.current_background_index = 1
+editor.canvas_items = [(None, None, "apple")]
+editor.canvas_items_dict = {0: [(None, None, "zebra")]}
+
+assert editor.get_label_color("zebra") == "#222222"
+assert editor.get_label_color("apple") == "#111111"
+'''
+    env = os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(root)}
+
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=root, env=env, text=True, capture_output=True
+    )
+
+    assert result.returncode == 0, result.stderr

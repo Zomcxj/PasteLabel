@@ -146,10 +146,28 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
     def get_label_color(self, label):
         """使用本窗口当前标签集合按名称排序后的色板槽位。"""
         from ..core import config_manager
+        return config_manager.get_label_color(self._get_session_labels(), label, self.label_colors)
+
+    def _get_session_labels(self):
+        """收集当前打开文件夹中用于共享色板的全部标签。"""
         labels = [box.get('label', '') for boxes in self.detection_boxes_dict.values() for box in boxes]
         labels.extend(box.get('label', '') for box in self.detection_boxes)
         labels.extend(item[2] for item in self.canvas_items)
-        return config_manager.get_label_color(labels, label, self.label_colors)
+        labels.extend(
+            item[2] for idx, items in self.canvas_items_dict.items()
+            if idx != self.current_background_index for item in items
+        )
+        return labels
+
+    def _get_session_paste_stats(self):
+        """按图片聚合当前会话的贴图标签。"""
+        stats = {}
+        for idx in range(len(self.background_images)):
+            items = self.canvas_items if idx == self.current_background_index else self.canvas_items_dict.get(idx, [])
+            for _, _, label in items:
+                if label:
+                    stats[label] = stats.get(label, 0) + 1
+        return stats
 
     def _save_label_cache_slots(self):
         from ..core import config_manager
@@ -753,10 +771,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         paste_label.setStyleSheet("font-weight: bold; font-size: 13px;")
         layout.addWidget(paste_label)
 
-        paste_stats = {}
-        for _, _, lbl in self.canvas_items:
-            if lbl:
-                paste_stats[lbl] = paste_stats.get(lbl, 0) + 1
+        paste_stats = self._get_session_paste_stats()
 
         paste_table = QTableWidget(len(paste_stats), 3)
         paste_table.setHorizontalHeaderLabels([tr("类别"), tr("数量"), tr("颜色")])
@@ -791,10 +806,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         from ..core import config_manager
         from PyQt5.QtGui import QColor
         from .dialog_helpers import ThemedColorDialog
-        labels = [box.get('label', '') for boxes in self.detection_boxes_dict.values() for box in boxes]
-        labels.extend(box.get('label', '') for box in self.detection_boxes)
-        labels.extend(item[2] for item in self.canvas_items)
-        ordered_labels = sorted({value for value in labels if value})
+        ordered_labels = sorted({value for value in self._get_session_labels() if value})
         if label not in ordered_labels or not self.label_colors:
             return
         dialog = ThemedColorDialog(parent)

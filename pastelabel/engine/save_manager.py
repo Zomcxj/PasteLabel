@@ -116,7 +116,7 @@ class SaveManager(QObject):
     
     def auto_save_current_canvas(self):
         """自动保存当前画布"""
-        if self.editor.current_background is None or not self.editor.canvas_items:
+        if self.editor._is_delete_view or self.editor.current_background is None or not self.editor.canvas_items:
             return
         
         save_info = self.get_save_info()
@@ -142,6 +142,9 @@ class SaveManager(QObject):
     def save_canvas(self):
         """保存当前画布"""
         from ..ui.dialogs import SaveTipDialog
+
+        if self.editor._is_delete_view:
+            return
         
         if self.editor.current_background is None:
             _show_messagebox("warning", self.editor, tr("警告"), tr("请先选择背景图片"))
@@ -172,6 +175,8 @@ class SaveManager(QObject):
 
     def save_current_json(self):
         """仅保存当前图的标注 JSON，供切图和关闭窗口时兜底。"""
+        if self.editor._is_delete_view:
+            return
         save_info = self.get_save_info()
         if not save_info:
             return
@@ -180,8 +185,8 @@ class SaveManager(QObject):
     def save_all_canvas(self):
         """保存所有画布"""
         from ..ui.dialogs import ProgressDialogFactory
-        
-        if self.editor._busy:
+
+        if self.editor._is_delete_view or self.editor._busy:
             return
 
         if not self.editor.background_images:
@@ -304,6 +309,8 @@ class SaveManager(QObject):
     def save_json(self, image_path, image_name, label_prefix, canvas_items=None,
                  image_width=None, image_height=None, current_index=None):
         """生成并保存 JSON 文件"""
+        if self.editor._is_delete_view:
+            return
         json_path = os.path.splitext(image_path)[0] + '.json'
         
         items_to_use = canvas_items if canvas_items is not None else self.editor.canvas_items

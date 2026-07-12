@@ -224,7 +224,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._rebuild_label_cache_menu()
 
     def paste_label_cache_slot(self, slot_index):
-        if self.current_background is None:
+        if self._is_delete_view or self.current_background is None:
             return
         if slot_index < 0 or slot_index >= len(self.label_cache_slots):
             return
@@ -449,18 +449,17 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.btn_annotate_mode.setChecked(not is_paste)
         self.btn_paste_mode.blockSignals(False)
         self.btn_annotate_mode.blockSignals(False)
-        btn_ss = f"QPushButton {{ background: transparent; color: {t['accent']}; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }}"
-        active_text_ss = f"QPushButton {{ background: transparent; color: #FFFFFF; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }}"
-        self.btn_paste_mode.setStyleSheet(active_text_ss if is_paste else btn_ss)
-        self.btn_annotate_mode.setStyleSheet(active_text_ss if not is_paste else btn_ss)
+        btn_ss = f"QPushButton {{ background: transparent; color: {t['button_text']}; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }} QPushButton:hover {{ color: {t['button_text']}; }} QPushButton:checked {{ color: #FFFFFF; }}"
+        self.btn_paste_mode.setStyleSheet(btn_ss)
+        self.btn_annotate_mode.setStyleSheet(btn_ss)
         if hasattr(self, 'mode_seg_ctrl'):
-            self.mode_seg_ctrl.set_accent(t['accent'])
+            self.mode_seg_ctrl.set_accent("#2950ff")
             self.mode_seg_ctrl.update_position(animated=animated)
         if hasattr(self, 'mode_seg'):
             self.mode_seg.setStyleSheet(f"""
                 QFrame {{
-                    background-color: {t['accent_light']};
-                    border: none;
+                    background-color: {t['widget_bg']};
+                    border: 1px solid {t['border_color']};
                     border-radius: 5px;
                 }}
             """)
@@ -521,6 +520,10 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                     sc.setEnabled(False)
             if hasattr(self, 'draw_box_btn'):
                 self.draw_box_btn.setEnabled(False)
+            self.canvas._clear_selection()
+            self.canvas.is_drawing_box = False
+            self.canvas.draw_start_pos = None
+            self.canvas.temp_draw_box = None
         else:
             self.view_toggle_btn.setText(_tr("工作路径"))
             self._saved_delete_idx = getattr(self, '_delete_current_idx', 0)
@@ -793,7 +796,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def _set_label_color_button(self, button, color):
         button.setText(color)
-        button.setStyleSheet(f"QPushButton {{ background-color: {color}; color: white; }}")
+        button.setStyleSheet(
+            f"QPushButton {{ background-color: {color}; color: #FFFFFF; border: 1px solid {color}; }}"
+        )
 
     def _change_label_color(self, label, parent, color_button=None):
         """修改当前排序类别对应的全局色板槽位。"""
@@ -1073,10 +1078,14 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def save_undo_state(self):
         """保存撤销状态"""
+        if self._is_delete_view:
+            return
         self.undo_manager.save_state(self.canvas_items, self.detection_boxes)
 
     def undo(self):
         """撤销"""
+        if self._is_delete_view:
+            return
         self.canvas_items, self.detection_boxes = self.undo_manager.undo(
             self.canvas_items, self.detection_boxes
         )
@@ -1085,6 +1094,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def redo(self):
         """重做"""
+        if self._is_delete_view:
+            return
         self.canvas_items, self.detection_boxes = self.undo_manager.redo(
             self.canvas_items, self.detection_boxes
         )

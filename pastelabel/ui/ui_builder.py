@@ -383,8 +383,8 @@ class UIBuilderMixin:
         self.mode_seg.setContentsMargins(0, 0, 0, 0)
         self.mode_seg.setStyleSheet(f"""
             QFrame {{
-                background-color: {t['accent_light']};
-                border: none;
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
                 border-radius: 5px;
             }}
         """)
@@ -408,11 +408,10 @@ class UIBuilderMixin:
         mode_layout.addWidget(self.btn_paste_mode)
 
         self.mode_seg_ctrl = AnimatedSegmentedControl(self.mode_seg, self.btn_annotate_mode, self.btn_paste_mode)
-        self.mode_seg_ctrl.set_accent(t['accent'])
-        self.btn_annotate_mode.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: #FFFFFF; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }}")
-        self.btn_paste_mode.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: {t['accent']}; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }}")
+        self.mode_seg_ctrl.set_accent("#2950ff")
+        mode_button_style = f"QPushButton {{ background: transparent; color: {t['button_text']}; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }} QPushButton:hover {{ color: {t['button_text']}; }} QPushButton:checked {{ color: #FFFFFF; }}"
+        self.btn_annotate_mode.setStyleSheet(mode_button_style)
+        self.btn_paste_mode.setStyleSheet(mode_button_style)
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(0, lambda: self.mode_seg_ctrl.update_position(animated=False))
         layout.addWidget(self.mode_seg)
@@ -509,8 +508,10 @@ class UIBuilderMixin:
         theme = ThemeManager.get_theme()
         popup.setStyleSheet(
             "#optionsPopup { background-color: %s; border: none; }"
-            "QPushButton { background: transparent; border: none; padding: 6px 16px; text-align:left; color: %s; }"
-            % (theme['widget_bg'], theme['text_primary'])
+            "QPushButton { background-color: %s; border: 1px solid %s; padding: 6px 16px; text-align:left; color: %s; }"
+            "QPushButton:hover { border: 1px solid #2950ff; }"
+            "QPushButton:pressed { background-color: #2950ff; border: 1px solid #2950ff; color: #FFFFFF; }"
+            % (theme['widget_bg'], theme['widget_bg'], theme['border_color'], theme['button_text'])
         )
         popup_layout = QVBoxLayout(popup)
         popup_layout.setContentsMargins(4, 4, 4, 4)

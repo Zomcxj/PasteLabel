@@ -95,6 +95,8 @@ class CanvasMenuMixin:
 
     def _modify_box_label(self, box_index):
         """修改检测框标签"""
+        if self._editor._is_delete_view:
+            return
         current_label = self._editor.detection_boxes[box_index].get("label", "")
         new_label, ok = dialog_helpers.get_text(
             self, "修改标签", "请输入新的标签名称:", text=current_label
@@ -117,6 +119,8 @@ class CanvasMenuMixin:
 
     def _change_box_label(self, box_index, new_label):
         """切换检测框标签"""
+        if self._editor._is_delete_view:
+            return
         if 0 <= box_index < len(self._editor.detection_boxes):
             self._editor.detection_boxes[box_index]["label"] = new_label
             if self._editor.current_background_index >= 0:
@@ -250,12 +254,16 @@ class CanvasMenuMixin:
         menu.exec_(QPoint(self.mapToGlobal(mouse_pos)))
 
     def change_item_label(self, item_index, new_label):
+        if self._editor._is_delete_view:
+            return
         if 0 <= item_index < len(self._editor.canvas_items):
             pixmap, rect, _ = self._editor.canvas_items[item_index]
             self._editor.canvas_items[item_index] = (pixmap, rect, new_label)
             self.update()
 
     def add_new_label(self, item_index):
+        if self._editor._is_delete_view:
+            return
         new_label, ok = dialog_helpers.get_text(
             self, "增加标签", "请输入新的标签名称:"
         )
@@ -270,6 +278,8 @@ class CanvasMenuMixin:
 
     def _remove_paste_item(self, item_index):
         """移除贴图项"""
+        if self._editor._is_delete_view:
+            return
         if 0 <= item_index < len(self._editor.canvas_items):
             self._editor.canvas_items.pop(item_index)
             self._editor.selected_item = None

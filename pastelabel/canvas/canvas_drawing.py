@@ -10,7 +10,12 @@ from ..core.config import DETECTION_BOX_CONFIG
 class CanvasDrawingMixin:
     """检测框绘制、拖动、缩放"""
 
+    def _can_edit_canvas(self):
+        return not getattr(self._editor, '_is_delete_view', False)
+
     def _handle_drawing_press(self, mouse_pos):
+        if not self._can_edit_canvas():
+            return True
         if (not self._editor.background_images or
             self._editor.current_background_index < 0):
             return True
@@ -80,6 +85,8 @@ class CanvasDrawingMixin:
         return constrained
 
     def _create_detection_box(self, x, y, width, height, label):
+        if not self._can_edit_canvas():
+            return
         x = max(0, x)
         y = max(0, y)
         width = max(1, width)
@@ -125,6 +132,8 @@ class CanvasDrawingMixin:
             self._editor.detection_boxes_dict[idx] = self._editor.detection_boxes.copy()
 
     def _drag_box(self):
+        if not self._can_edit_canvas():
+            return
         delta = self.mouse_pos - self.box_drag_start
         bg_rect = self.get_background_rect()
 
@@ -151,6 +160,8 @@ class CanvasDrawingMixin:
             self.update()
 
     def _resize_box(self):
+        if not self._can_edit_canvas():
+            return
         delta = self.mouse_pos - self.box_resize_start
         bg_rect = self.get_background_rect()
 
@@ -187,6 +198,8 @@ class CanvasDrawingMixin:
             self.update()
 
     def _check_box_handle(self, mouse_pos, x, y, width, height, box_index):
+        if not self._can_edit_canvas():
+            return False
         handle_name = self._box_handle_at_pos(mouse_pos, box_index, x, y, width, height)
         if handle_name:
             self.selected_box = box_index

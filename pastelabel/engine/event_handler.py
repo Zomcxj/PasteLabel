@@ -173,6 +173,8 @@ class EventHandlerMixin:
             self.canvas.update()
 
     def _delete_selected_box(self):
+        if self._is_delete_view:
+            return
         saved = False
         selected_boxes = sorted({
             index for index in getattr(self.canvas, 'selected_boxes', [])
@@ -236,7 +238,7 @@ class EventHandlerMixin:
 
     def toggle_draw_mode(self):
         """切换绘制模式"""
-        if not self.background_images or self.current_background_index < 0:
+        if self._is_delete_view or not self.background_images or self.current_background_index < 0:
             return
 
         if not self.canvas.is_drawing_box:

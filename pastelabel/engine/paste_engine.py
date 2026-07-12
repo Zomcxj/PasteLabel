@@ -51,7 +51,7 @@ class PasteEngineMixin:
 
     def add_small_to_canvas(self, item):
         """添加贴图到画布"""
-        if self._busy:
+        if self._is_delete_view or self._busy:
             return
         self.save_undo_state()
         index = item.data(Qt.UserRole)
@@ -127,7 +127,7 @@ class PasteEngineMixin:
 
     def clear_canvas(self):
         """清空画布"""
-        if self._busy:
+        if self._is_delete_view or self._busy:
             return
         self.save_undo_state()
         self.canvas_items.clear()
@@ -138,7 +138,7 @@ class PasteEngineMixin:
 
     def random_paste_images(self, background=None, detection_boxes=None):
         """随机贴图 - 中心点避让算法"""
-        if not self.small_images or not self.current_background:
+        if self._is_delete_view or not self.small_images or not self.current_background:
             return
 
         self.save_undo_state()

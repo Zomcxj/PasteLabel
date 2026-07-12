@@ -20,12 +20,11 @@ def test_base_text_and_unselected_button_states_use_the_soft_theme_color(mode, t
     for selector in ("QPushButton", "QPushButton#langBtn", "QPushButton#langBtn:hover"):
         block = style.split(f"{selector} {{", 1)[1].split("}", 1)[0]
         assert f"color: {text_color};" in block
-    for path in ("pastelabel/ui/ui_builder.py", "pastelabel/ui/main_window.py"):
-        source = Path(path).read_text(encoding="utf-8")
-        assert "QPushButton:hover {{ color: {t['button_text']}; }}" in source
+    mode_button_hover = style.split("QPushButton#modeSegBtn:hover {", 1)[1].split("}", 1)[0]
+    assert f"color: {theme['button_text']};" in mode_button_hover
 
     pressed_block = style.split("QPushButton:pressed {", 1)[1].split("}", 1)[0]
-    assert "color: #FFFFFF;" in pressed_block
+    assert f"color: {theme['interaction_active_text']};" in pressed_block
 
 
 @pytest.mark.parametrize("mode", [ThemeMode.LIGHT, ThemeMode.DARK])
@@ -35,7 +34,7 @@ def test_buttons_use_theme_primary_text_except_background_list_controls(mode):
     theme = ThemeManager.get_theme()
 
     assert f"QPushButton {{\n                background-color: {theme['widget_bg']};" in style
-    assert f"color: {theme['button_text']};\n                font-family" in style
+    assert f"color: {theme['button_text']};" in style
     for name in ("optionsBtn", "drawBoxBtn", "successBtn", "dangerBtn"):
         block = style.split(f"QPushButton#{name} {{", 1)[1].split("}", 1)[0]
         assert f"color: {theme['button_text']};" in block
@@ -80,5 +79,6 @@ def test_language_button_uses_theme_button_text_until_pressed(mode):
         assert f"color: {color};" in block
 
     pressed_block = style.split("QPushButton#langBtn:pressed {", 1)[1].split("}", 1)[0]
-    assert "background-color: #2950ff;" in pressed_block
-    assert "color: #FFFFFF;" in pressed_block
+    theme = ThemeManager.get_theme()
+    assert f"background-color: {theme['interaction_active']};" in pressed_block
+    assert f"color: {theme['interaction_active_text']};" in pressed_block

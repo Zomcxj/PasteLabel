@@ -33,12 +33,10 @@ class LabelSelectionDialog(QDialog):
         top_layout = QHBoxLayout()
         self.ok_btn = QPushButton(tr("确定"))
         self.ok_btn.setObjectName("successBtn")
-        self.ok_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
         top_layout.addWidget(self.ok_btn)
 
         self.new_label_input = QLineEdit()
         self.new_label_input.setPlaceholderText(tr("或输入新标签："))
-        self.new_label_input.setStyleSheet(ThemeManager.get_input_style())
         top_layout.addWidget(self.new_label_input, 1)
         layout.addLayout(top_layout)
 
@@ -47,7 +45,6 @@ class LabelSelectionDialog(QDialog):
         for label in labels:
             pure_label = self._extract_pure_label(label)
             self.label_list.addItem(pure_label)
-        self.label_list.setStyleSheet(ThemeManager.get_list_style())
         layout.addWidget(self.label_list)
 
         self.setLayout(layout)
@@ -141,22 +138,6 @@ class ProgressDialogFactory:
             QProgressBar::chunk {{
                 background-color: {t['accent']};
                 border-radius: 6px;
-            }}
-            QPushButton {{
-                background-color: {t['widget_bg']};
-                border: 1px solid {t['border_color']};
-                border-radius: 10px;
-                padding: 4px 12px;
-                font-size: 12px;
-                color: {t['button_text']};
-            }}
-            QPushButton:hover {{
-                border: 1px solid #2950ff;
-            }}
-            QPushButton:pressed {{
-                background-color: #2950ff;
-                border: 1px solid #2950ff;
-                color: #FFFFFF;
             }}
         """)
 

@@ -375,24 +375,17 @@ class UIBuilderMixin:
 
         layout.addSpacing(4)
 
-        from .theme import ThemeManager
-        t = ThemeManager.get_theme()
         self.mode_seg = QFrame()
+        self.mode_seg.setObjectName("modeSeg")
         self.mode_seg.setFixedWidth(150)
         self.mode_seg.setFixedHeight(24)
         self.mode_seg.setContentsMargins(0, 0, 0, 0)
-        self.mode_seg.setStyleSheet(f"""
-            QFrame {{
-                background-color: {t['widget_bg']};
-                border: 1px solid {t['border_color']};
-                border-radius: 5px;
-            }}
-        """)
         mode_layout = QHBoxLayout(self.mode_seg)
         mode_layout.setContentsMargins(0, 0, 0, 0)
         mode_layout.setSpacing(0)
 
         self.btn_annotate_mode = QPushButton(tr("标注"))
+        self.btn_annotate_mode.setObjectName("modeSegBtn")
         self.btn_annotate_mode.setCheckable(True)
         self.btn_annotate_mode.setChecked(True)
         self.btn_annotate_mode.setFixedWidth(74)
@@ -401,6 +394,7 @@ class UIBuilderMixin:
         mode_layout.addWidget(self.btn_annotate_mode)
 
         self.btn_paste_mode = QPushButton(tr("贴图"))
+        self.btn_paste_mode.setObjectName("modeSegBtn")
         self.btn_paste_mode.setCheckable(True)
         self.btn_paste_mode.setFixedWidth(74)
         self.btn_paste_mode.setFixedHeight(22)
@@ -408,10 +402,7 @@ class UIBuilderMixin:
         mode_layout.addWidget(self.btn_paste_mode)
 
         self.mode_seg_ctrl = AnimatedSegmentedControl(self.mode_seg, self.btn_annotate_mode, self.btn_paste_mode)
-        self.mode_seg_ctrl.set_accent("#2950ff")
-        mode_button_style = f"QPushButton {{ background: transparent; color: {t['button_text']}; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }} QPushButton:hover {{ color: {t['button_text']}; }} QPushButton:checked {{ color: #FFFFFF; }}"
-        self.btn_annotate_mode.setStyleSheet(mode_button_style)
-        self.btn_paste_mode.setStyleSheet(mode_button_style)
+        self.mode_seg_ctrl.set_accent(ThemeManager.get_theme()["interaction_active"])
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(0, lambda: self.mode_seg_ctrl.update_position(animated=False))
         layout.addWidget(self.mode_seg)
@@ -449,12 +440,11 @@ class UIBuilderMixin:
             middle_layout.setSpacing(2)
 
             slot_name_input = QLineEdit(slot.get('name', f"{tr('缓存槽')}{index + 1}"))
+            slot_name_input.setObjectName("cacheSlotName")
             slot_name_input.setFrame(False)
             slot_name_input.setAttribute(Qt.WA_InputMethodEnabled, True)
             slot_name_input.setFixedWidth(slot_name_input.fontMetrics().horizontalAdvance("测" * 9) + 24)
-            slot_name_input.setStyleSheet("padding: 0 6px;")
-            if index == getattr(self, 'active_label_cache_slot', 0):
-                slot_name_input.setStyleSheet("padding: 0 6px; font-weight:bold;")
+            slot_name_input.setProperty("active", index == getattr(self, 'active_label_cache_slot', 0))
             slot_name_input.editingFinished.connect(
                 lambda idx=index, field=slot_name_input: self._commit_cache_slot_name(idx, field)
             )
@@ -505,14 +495,6 @@ class UIBuilderMixin:
             popup_flags |= no_shadow_flag
         popup = HoverDismissPopup(self, popup_flags)
         popup.setObjectName("optionsPopup")
-        theme = ThemeManager.get_theme()
-        popup.setStyleSheet(
-            "#optionsPopup { background-color: %s; border: none; }"
-            "QPushButton { background-color: %s; border: 1px solid %s; padding: 6px 16px; text-align:left; color: %s; }"
-            "QPushButton:hover { border: 1px solid #2950ff; }"
-            "QPushButton:pressed { background-color: #2950ff; border: 1px solid #2950ff; color: #FFFFFF; }"
-            % (theme['widget_bg'], theme['widget_bg'], theme['border_color'], theme['button_text'])
-        )
         popup_layout = QVBoxLayout(popup)
         popup_layout.setContentsMargins(4, 4, 4, 4)
         popup_layout.setSpacing(2)

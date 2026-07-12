@@ -85,7 +85,6 @@ class SettingsDialog(QDialog):
         self.shortcut_page_btn.setChecked(True)
         self.shortcut_page_btn.setFixedWidth(108)
         self.shortcut_page_btn.setMinimumHeight(38)
-        self.shortcut_page_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
         self.shortcut_page_btn.clicked.connect(lambda: self._switch_page(0))
         nav_layout.addWidget(self.shortcut_page_btn)
 
@@ -93,7 +92,6 @@ class SettingsDialog(QDialog):
         self.options_page_btn.setCheckable(True)
         self.options_page_btn.setFixedWidth(108)
         self.options_page_btn.setMinimumHeight(38)
-        self.options_page_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
         self.options_page_btn.clicked.connect(lambda: self._switch_page(1))
         nav_layout.addWidget(self.options_page_btn)
         nav_layout.addStretch()
@@ -148,7 +146,6 @@ class SettingsDialog(QDialog):
             reset_btn = QPushButton(tr("重置"))
             reset_btn.setObjectName("resetBtn")
             reset_btn.setFixedWidth(70)
-            reset_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
             reset_btn.clicked.connect(lambda _, k=key, f=input_field: self._reset_shortcut(k, f))
             row.addWidget(reset_btn)
 
@@ -341,7 +338,6 @@ class SettingsDialog(QDialog):
         crosshair_color_row.addWidget(crosshair_color_label, 2)
         self.crosshair_color_btn = QPushButton()
         self.crosshair_color_btn.setMinimumWidth(150)
-        self.crosshair_color_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
         self.crosshair_color_btn.clicked.connect(self._choose_crosshair_color)
         crosshair_color_row.addWidget(self.crosshair_color_btn)
         crosshair_color_row.addStretch()
@@ -360,12 +356,10 @@ class SettingsDialog(QDialog):
 
         save_btn = QPushButton(tr("保存"))
         save_btn.setObjectName("successBtn")
-        save_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
         save_btn.clicked.connect(self._save_shortcuts)
         btn_layout.addWidget(save_btn)
 
         cancel_btn = QPushButton(tr("取消"))
-        cancel_btn.setStyleSheet(ThemeManager.get_dialog_button_style())
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
@@ -476,7 +470,6 @@ class SettingsDialog(QDialog):
         dialog = ThemedColorDialog(self)
         dialog.setWindowTitle(i18n.t("十字线颜色"))
         dialog.setCurrentColor(QColor(self._crosshair_color))
-        dialog.setStyleSheet(ThemeManager.get_dialog_button_style())
         if dialog.exec_() != QDialog.Accepted:
             return
         color = dialog.currentColor()

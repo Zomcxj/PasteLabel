@@ -128,13 +128,9 @@ class CanvasRendererMixin:
         item_height = item_rect.height()
 
         if is_selected or is_pressed_label:
-            self._draw_selected_paste(painter, pixmap, item_rect, label)
+            self._draw_paste_with_overlay(painter, pixmap, item_rect, label, 80)
         else:
-            painter.drawPixmap(
-                int(item_x), int(item_y),
-                int(item_width), int(item_height),
-                pixmap
-            )
+            self._draw_paste_with_overlay(painter, pixmap, item_rect, label, 50)
 
         label_color_hex = self._editor.get_label_color(label)
         lr = int(label_color_hex[1:3], 16)
@@ -155,8 +151,8 @@ class CanvasRendererMixin:
 
         self._draw_paste_label(painter, item_x, item_y, label, is_selected, item_index)
 
-    def _draw_selected_paste(self, painter, pixmap, item_rect, label):
-        """绘制选中的贴图（带透明蒙版）"""
+    def _draw_paste_with_overlay(self, painter, pixmap, item_rect, label, fill_alpha):
+        """绘制带标签色透明覆盖层的贴图。"""
         temp_pixmap = QPixmap(int(item_rect.width()), int(item_rect.height()))
         temp_pixmap.fill(Qt.transparent)
         temp_painter = QPainter(temp_pixmap)
@@ -166,7 +162,7 @@ class CanvasRendererMixin:
         )
 
         color = QColor(self._editor.get_label_color(label))
-        overlay_color = QColor(color.red(), color.green(), color.blue(), 80)
+        overlay_color = QColor(color.red(), color.green(), color.blue(), fill_alpha)
         temp_painter.fillRect(
             0, 0, int(item_rect.width()), int(item_rect.height()), overlay_color
         )
@@ -259,18 +255,10 @@ class CanvasRendererMixin:
         lg = int(label_color_hex[3:5], 16)
         lb = int(label_color_hex[5:7], 16)
 
-        if is_selected:
-            fill_color = QColor(lr, lg, lb, 50)
-            border_color = QColor(lr, lg, lb)
-        elif is_pressed_label:
-            fill_color = QColor(lr, lg, lb, 50)
-            border_color = QColor(lr, lg, lb)
-        else:
-            fill_color = None
-            border_color = QColor(lr, lg, lb)
-
-        if fill_color:
-            painter.fillRect(int(x), int(y), int(width), int(height), fill_color)
+        fill_alpha = 80 if is_selected or is_pressed_label else 50
+        fill_color = QColor(lr, lg, lb, fill_alpha)
+        border_color = QColor(lr, lg, lb)
+        painter.fillRect(int(x), int(y), int(width), int(height), fill_color)
 
         pen = self._get_box_border_pen(border_color, is_selected or is_pressed_label)
         painter.setPen(pen)

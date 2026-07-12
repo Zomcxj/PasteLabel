@@ -1,5 +1,8 @@
 """画布渲染回归测试。"""
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 from PyQt5.QtCore import QRectF
 
@@ -57,3 +60,70 @@ def test_offset_overlapping_paste_group_keeps_boxes_inside_background_bounds():
     assert rect.y() >= 0
     assert rect.x() + rect.width() <= editor.current_background.width()
     assert rect.y() + rect.height() <= editor.current_background.height()
+
+
+def test_boxes_use_label_color_fills_with_expected_alpha_states():
+    script = '''
+from PyQt5.QtCore import Qt, QRectF
+from PyQt5.QtGui import QColor, QImage, QPainter, QPixmap
+from PyQt5.QtWidgets import QApplication
+from pastelabel.canvas.canvas_renderer import CanvasRendererMixin
+
+class Check:
+    def isChecked(self): return False
+
+class Editor:
+    show_paste_names_checkbox = Check()
+    show_label_names_checkbox = Check()
+    def get_label_color(self, label): return "#e53935"
+
+class Renderer(CanvasRendererMixin):
+    def __init__(self):
+        self._editor = Editor()
+        self.hover_resize_target = None
+        self.hover_resize_handle = None
+
+def pixel_after(draw):
+    image = QImage(60, 60, QImage.Format_ARGB32)
+    image.fill(Qt.white)
+    painter = QPainter(image)
+    draw(painter)
+    painter.end()
+    return image.pixelColor(30, 30)
+
+def expected(alpha):
+    color = QColor("#e53935")
+    return QColor(
+        round((color.red() * alpha + 255 * (255 - alpha)) / 255),
+        round((color.green() * alpha + 255 * (255 - alpha)) / 255),
+        round((color.blue() * alpha + 255 * (255 - alpha)) / 255),
+    )
+
+renderer = Renderer()
+app = QApplication.instance() or QApplication([])
+pixmap = QPixmap(40, 40)
+pixmap.fill(Qt.white)
+for draw in (
+    lambda painter: renderer._draw_single_detection_box(painter, 10, 10, 40, 40, "cat", False, False),
+    lambda painter: renderer._draw_single_paste_item(painter, pixmap, QRectF(10, 10, 40, 40), "cat", False, False),
+):
+    actual = pixel_after(draw)
+    assert actual == expected(50), (actual.getRgb(), expected(50).getRgb())
+
+for draw in (
+    lambda painter: renderer._draw_single_detection_box(painter, 10, 10, 40, 40, "cat", True, False),
+    lambda painter: renderer._draw_single_detection_box(painter, 10, 10, 40, 40, "cat", False, True),
+    lambda painter: renderer._draw_single_paste_item(painter, pixmap, QRectF(10, 10, 40, 40), "cat", True, False),
+    lambda painter: renderer._draw_single_paste_item(painter, pixmap, QRectF(10, 10, 40, 40), "cat", False, True),
+):
+    actual = pixel_after(draw)
+    assert actual == expected(80), (actual.getRgb(), expected(80).getRgb())
+'''
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        env=os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(ROOT)},
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr

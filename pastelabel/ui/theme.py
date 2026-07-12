@@ -11,6 +11,11 @@ class ThemeMode(Enum):
 
 LIGHT_THEME = {
     "name": "light",
+    "font_family": "'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif",
+    "font_size": 12,
+    "font_size_small": 11,
+    "interaction_active": "#2950ff",
+    "interaction_active_text": "#FFFFFF",
     "window_bg": "#F5F5F5",
     "widget_bg": "#FFFFFF",
     "panel_bg": "#FAFAFA",
@@ -48,6 +53,11 @@ LIGHT_THEME = {
 
 DARK_THEME = {
     "name": "dark",
+    "font_family": "'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif",
+    "font_size": 12,
+    "font_size_small": 11,
+    "interaction_active": "#2950ff",
+    "interaction_active_text": "#FFFFFF",
     "window_bg": "#1E1E1E",
     "widget_bg": "#2D2D2D",
     "panel_bg": "#252525",
@@ -132,8 +142,8 @@ class ThemeManager:
             QWidget {{
                 background-color: {t['widget_bg']};
                 color: {t['text_primary']};
-                font-family: 'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif;
-                font-size: 12px;
+                font-family: {t['font_family']};
+                font-size: {t['font_size']}px;
             }}
             QSplitter {{
                 background-color: {t['widget_bg']};
@@ -182,7 +192,6 @@ class ThemeManager:
                 background-color: {t['statusbar_bg']};
                 color: {t['text_secondary']};
                 border-top: 1px solid {t['border_color']};
-                font-family: 'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif;
             }}
             QLabel {{
                 background-color: transparent;
@@ -217,21 +226,19 @@ class ThemeManager:
                 background-color: {t['list_hover']};
             }}
             QListWidget::item:selected {{
-                background-color: #2950ff;
-                color: #FFFFFF;
+                background-color: {t['interaction_active']};
+                color: {t['interaction_active_text']};
             }}
             QLineEdit {{
                 border: 1px solid {t['border_color']};
                 border-radius: 6px;
                 padding: 3px 6px;
-                font-size: 12px;
                 background-color: {t['widget_bg']};
                 color: {t['text_primary']};
                 selection-background-color: {t['accent']};
-                font-family: 'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif;
             }}
             QLineEdit:hover {{
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
             }}
             QLineEdit:focus {{
                 border-color: {t['accent']};
@@ -240,13 +247,11 @@ class ThemeManager:
                 border: 1px solid {t['border_color']};
                 border-radius: 6px;
                 padding: 3px 6px;
-                font-size: 12px;
                 background-color: {t['widget_bg']};
                 color: {t['text_primary']};
-                font-family: 'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif;
             }}
             QSpinBox:hover, QDoubleSpinBox:hover {{
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
             }}
             QSpinBox:focus, QDoubleSpinBox:focus {{
                 border-color: {t['accent']};
@@ -259,7 +264,6 @@ class ThemeManager:
             }}
             QCheckBox {{
                 spacing: 6px;
-                font-size: 12px;
                 color: {t['text_primary']};
                 background-color: transparent;
             }}
@@ -283,17 +287,15 @@ class ThemeManager:
                 border-radius: 8px;
                 padding: 3px 8px;
                 color: {t['button_text']};
-                font-family: 'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif;
-                font-size: 12px;
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
             }}
             QPushButton:pressed {{
-                background-color: #2950ff;
-                border: 1px solid #2950ff;
-                color: #FFFFFF;
+                background-color: {t['interaction_active']};
+                border: 1px solid {t['interaction_active']};
+                color: {t['interaction_active_text']};
             }}
             QPushButton:disabled {{
                 background-color: {t['scrollbar_bg']};
@@ -340,10 +342,9 @@ class ThemeManager:
                 padding: 3px 6px;
                 background-color: {t['widget_bg']};
                 color: {t['text_primary']};
-                font-family: 'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif;
             }}
             QComboBox:hover {{
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
             }}
             QComboBox::drop-down {{
                 border: none;
@@ -455,12 +456,12 @@ class ThemeManager:
                 color: {t['button_text']};
             }}
             QPushButton#optionsBtn:hover {{
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
             }}
             QPushButton#optionsBtn:pressed {{
-                background-color: #2950ff;
-                border: 1px solid #2950ff;
-                color: #FFFFFF;
+                background-color: {t['interaction_active']};
+                border: 1px solid {t['interaction_active']};
+                color: {t['interaction_active_text']};
             }}
             QPushButton#optionsBtn::menu-indicator {{
                 width: 0px;
@@ -501,12 +502,12 @@ class ThemeManager:
                 color: {t['button_text']};
             }}
             QPushButton#drawBoxBtn:hover {{
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
             }}
             QPushButton#drawBoxBtn:pressed {{
-                background-color: #2950ff;
-                border: 1px solid #2950ff;
-                color: #FFFFFF;
+                background-color: {t['interaction_active']};
+                border: 1px solid {t['interaction_active']};
+                color: {t['interaction_active_text']};
             }}
             QPushButton#accentBtn {{
                 background-color: {t['widget_bg']};
@@ -518,12 +519,12 @@ class ThemeManager:
                 color: {t['button_text']};
             }}
             QPushButton#accentBtn:hover {{
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
             }}
             QPushButton#accentBtn:pressed {{
-                background-color: #2950ff;
-                border: 1px solid #2950ff;
-                color: #FFFFFF;
+                background-color: {t['interaction_active']};
+                border: 1px solid {t['interaction_active']};
+                color: {t['interaction_active_text']};
             }}
             QPushButton#warningBtn {{
                 background-color: {t['widget_bg']};
@@ -535,12 +536,12 @@ class ThemeManager:
                 color: {t['button_text']};
             }}
             QPushButton#warningBtn:hover {{
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
             }}
             QPushButton#warningBtn:pressed {{
-                background-color: #2950ff;
-                border: 1px solid #2950ff;
-                color: #FFFFFF;
+                background-color: {t['interaction_active']};
+                border: 1px solid {t['interaction_active']};
+                color: {t['interaction_active_text']};
             }}
             QPushButton#pasteListAccentBtn {{
                 background-color: {t['accent_light']};
@@ -582,7 +583,7 @@ class ThemeManager:
                 color: {t['button_text']};
             }}
             QPushButton#viewToggleBtn:hover {{
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
             }}
             QPushButton#successBtn {{
                 background-color: {t['widget_bg']};
@@ -594,12 +595,12 @@ class ThemeManager:
                 color: {t['button_text']};
             }}
             QPushButton#successBtn:hover {{
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
             }}
             QPushButton#successBtn:pressed {{
-                background-color: #2950ff;
-                border: 1px solid #2950ff;
-                color: #FFFFFF;
+                background-color: {t['interaction_active']};
+                border: 1px solid {t['interaction_active']};
+                color: {t['interaction_active_text']};
             }}
             QPushButton#dangerBtn {{
                 background-color: {t['widget_bg']};
@@ -611,12 +612,12 @@ class ThemeManager:
                 color: {t['button_text']};
             }}
             QPushButton#dangerBtn:hover {{
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
             }}
             QPushButton#dangerBtn:pressed {{
-                background-color: #2950ff;
-                border: 1px solid #2950ff;
-                color: #FFFFFF;
+                background-color: {t['interaction_active']};
+                border: 1px solid {t['interaction_active']};
+                color: {t['interaction_active_text']};
             }}
             QFrame#toolbarSep {{
                 background-color: transparent;
@@ -636,6 +637,49 @@ class ThemeManager:
             QLineEdit#prefixInput[placeholder="false"] {{
                 color: {t['text_primary']};
             }}
+            QFrame#modeSeg {{
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
+                border-radius: 5px;
+            }}
+            QPushButton#modeSegBtn {{
+                background: transparent;
+                border: none;
+                color: {t['button_text']};
+                font-size: {t['font_size_small']}px;
+                padding: 3px 8px;
+            }}
+            QPushButton#modeSegBtn:hover {{
+                color: {t['button_text']};
+            }}
+            QPushButton#modeSegBtn:checked {{
+                color: {t['interaction_active_text']};
+            }}
+            QLineEdit#cacheSlotName {{
+                padding: 0 6px;
+            }}
+            QLineEdit#cacheSlotName[active="true"] {{
+                font-weight: bold;
+            }}
+            QWidget#optionsPopup {{
+                background-color: {t['widget_bg']};
+                border: none;
+            }}
+            QWidget#optionsPopup QPushButton {{
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
+                padding: 6px 16px;
+                text-align: left;
+                color: {t['button_text']};
+            }}
+            QWidget#optionsPopup QPushButton:hover {{
+                border-color: {t['interaction_active']};
+            }}
+            QWidget#optionsPopup QPushButton:pressed {{
+                background-color: {t['interaction_active']};
+                border-color: {t['interaction_active']};
+                color: {t['interaction_active_text']};
+            }}
             QPushButton#iconBtn, QPushButton#navBtn, QPushButton#bgBtn,
             QPushButton#pasteBtn, QPushButton#labelBtn, QPushButton#themeBtn,
             QPushButton#settingsBtn, QPushButton#langBtn {{
@@ -646,15 +690,15 @@ class ThemeManager:
             QPushButton#pasteBtn:hover, QPushButton#labelBtn:hover, QPushButton#themeBtn:hover,
             QPushButton#settingsBtn:hover, QPushButton#langBtn:hover {{
                 background-color: {t['widget_bg']};
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
                 color: {t['button_text']};
             }}
             QPushButton#iconBtn:pressed, QPushButton#navBtn:pressed, QPushButton#bgBtn:pressed,
             QPushButton#pasteBtn:pressed, QPushButton#labelBtn:pressed, QPushButton#themeBtn:pressed,
             QPushButton#settingsBtn:pressed, QPushButton#langBtn:pressed {{
-                background-color: #2950ff;
-                border: 1px solid #2950ff;
-                color: #FFFFFF;
+                background-color: {t['interaction_active']};
+                border: 1px solid {t['interaction_active']};
+                color: {t['interaction_active_text']};
             }}
         """
 
@@ -676,8 +720,8 @@ class ThemeManager:
                 background-color: {t['list_hover']};
             }}
             QListWidget::item:selected {{
-                background-color: #2950ff;
-                color: #FFFFFF;
+                background-color: {t['interaction_active']};
+                color: {t['interaction_active_text']};
             }}
         """
 
@@ -693,12 +737,12 @@ class ThemeManager:
                     padding: 2px;
                 }}
                 QPushButton:hover {{
-                    border: 1px solid #2950ff;
+                    border: 1px solid {t['interaction_active']};
                 }}
                 QPushButton:pressed {{
-                    background-color: #2950ff;
-                    border: 1px solid #2950ff;
-                    color: #FFFFFF;
+                    background-color: {t['interaction_active']};
+                    border: 1px solid {t['interaction_active']};
+                    color: {t['interaction_active_text']};
                 }}
             """
         bg = bg_color or t['widget_bg']
@@ -709,17 +753,17 @@ class ThemeManager:
                 border: 1px solid {t['border_color']};
                 border-radius: 10px;
                 padding: 3px 8px;
-                font-size: 12px;
+                font-size: {t['font_size']}px;
                 font-weight: bold;
                 color: {fg};
             }}
             QPushButton:hover {{
-                border: 1px solid #2950ff;
+                border: 1px solid {t['interaction_active']};
             }}
             QPushButton:pressed {{
-                background-color: #2950ff;
-                border: 1px solid #2950ff;
-                color: #FFFFFF;
+                background-color: {t['interaction_active']};
+                border: 1px solid {t['interaction_active']};
+                color: {t['interaction_active_text']};
             }}
         """
 
@@ -727,125 +771,3 @@ class ThemeManager:
     def get_dialog_button_style(cls):
         """小窗按钮复用设置弹窗的普通按钮圆角。"""
         return cls.get_button_style()
-
-    @classmethod
-    def get_action_button_style(cls, bg_color, text_color):
-        t = cls._current_theme
-        return f"""
-            QPushButton {{
-                background-color: {t['widget_bg']};
-                border: 1px solid {t['border_color']};
-                border-radius: 10px;
-                padding: 3px 8px;
-                font-size: 12px;
-                font-weight: bold;
-                color: {text_color};
-            }}
-            QPushButton:hover {{
-                border: 1px solid #2950ff;
-            }}
-            QPushButton:pressed {{
-                background-color: #2950ff;
-                border: 1px solid #2950ff;
-                color: #FFFFFF;
-            }}
-        """
-
-    @classmethod
-    def get_draw_button_style(cls):
-        t = cls._current_theme
-        return f"""
-            QPushButton {{
-                background-color: {t['widget_bg']};
-                border: 1px solid {t['border_color']};
-                border-radius: 10px;
-                padding: 3px 8px;
-                font-size: 12px;
-                font-weight: 600;
-                color: {t['warning']};
-            }}
-            QPushButton:hover {{
-                border: 1px solid #2950ff;
-            }}
-            QPushButton:pressed {{
-                background-color: #2950ff;
-                border: 1px solid #2950ff;
-                color: #FFFFFF;
-            }}
-        """
-
-    @classmethod
-    def get_checkbox_style(cls, checked_color=None):
-        t = cls._current_theme
-        c = checked_color or t['accent']
-        return f"""
-            QCheckBox {{
-                spacing: 6px;
-                font-size: 12px;
-                color: {t['text_primary']};
-                background-color: transparent;
-            }}
-            QCheckBox::indicator {{
-                width: 14px;
-                height: 14px;
-                border: 2px solid {t['border_color']};
-                border-radius: 4px;
-                background-color: {t['widget_bg']};
-            }}
-            QCheckBox::indicator:checked {{
-                background-color: {c};
-                border-color: {c};
-            }}
-        """
-
-    @classmethod
-    def get_spinbox_style(cls):
-        t = cls._current_theme
-        return f"""
-            QSpinBox, QDoubleSpinBox {{
-                border: 1px solid {t['border_color']};
-                border-radius: 6px;
-                padding: 3px 6px;
-                font-size: 12px;
-                background-color: {t['widget_bg']};
-                color: {t['text_primary']};
-            }}
-            QSpinBox:hover, QDoubleSpinBox:hover {{
-                border: 1px solid #2950ff;
-            }}
-        """
-
-    @classmethod
-    def get_input_style(cls):
-        t = cls._current_theme
-        return f"""
-            QLineEdit {{
-                border: 1px solid {t['border_color']};
-                border-radius: 6px;
-                padding: 3px 6px;
-                font-size: 12px;
-                background-color: {t['widget_bg']};
-                color: {t['text_primary']};
-            }}
-            QLineEdit:hover {{
-                border: 1px solid #2950ff;
-            }}
-        """
-
-    @classmethod
-    def get_prefix_input_focus_style(cls, text_color=None):
-        t = cls._current_theme
-        fg = text_color or t['text_disabled']
-        return f"""
-            QLineEdit {{
-                border: 1px solid {t['border_color']};
-                border-radius: 6px;
-                padding: 3px 6px;
-                font-size: 12px;
-                background-color: {t['widget_bg']};
-                color: {fg};
-            }}
-            QLineEdit:hover {{
-                border: 1px solid #2950ff;
-            }}
-        """

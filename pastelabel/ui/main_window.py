@@ -436,12 +436,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.canvas.update()
 
     def _update_mode_seg_style(self, animated=False):
-        """刷新模式分段按钮的选中样式（照搬MemoPaws）"""
+        """同步模式分段控件的选中状态和指示器位置。"""
         if not hasattr(self, 'btn_paste_mode'):
             return
-        from .theme import ThemeManager, ThemeMode, DARK_THEME, LIGHT_THEME
-        is_dark = ThemeManager.get_mode() == ThemeMode.DARK
-        t = DARK_THEME if is_dark else LIGHT_THEME
         is_paste = self.edit_mode == 'paste'
         self.btn_paste_mode.blockSignals(True)
         self.btn_annotate_mode.blockSignals(True)
@@ -449,20 +446,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.btn_annotate_mode.setChecked(not is_paste)
         self.btn_paste_mode.blockSignals(False)
         self.btn_annotate_mode.blockSignals(False)
-        btn_ss = f"QPushButton {{ background: transparent; color: {t['button_text']}; border: none; font-size: 11px; font-weight: bold; padding: 3px 8px; }} QPushButton:hover {{ color: {t['button_text']}; }} QPushButton:checked {{ color: #FFFFFF; }}"
-        self.btn_paste_mode.setStyleSheet(btn_ss)
-        self.btn_annotate_mode.setStyleSheet(btn_ss)
         if hasattr(self, 'mode_seg_ctrl'):
-            self.mode_seg_ctrl.set_accent("#2950ff")
+            self.mode_seg_ctrl.set_accent(ThemeManager.get_theme()["interaction_active"])
             self.mode_seg_ctrl.update_position(animated=animated)
-        if hasattr(self, 'mode_seg'):
-            self.mode_seg.setStyleSheet(f"""
-                QFrame {{
-                    background-color: {t['widget_bg']};
-                    border: 1px solid {t['border_color']};
-                    border-radius: 5px;
-                }}
-            """)
 
     def _apply_mode_visibility_defaults(self):
         """模式切换时重置显示项，避免上个模式的显示状态串到当前模式。"""
@@ -898,6 +884,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.prefix_input.setProperty("placeholder", not has_text)
             self.prefix_input.style().unpolish(self.prefix_input)
             self.prefix_input.style().polish(self.prefix_input)
+        self._update_mode_seg_style()
         if hasattr(self, 'canvas'):
             self.canvas.update()
         app.processEvents()

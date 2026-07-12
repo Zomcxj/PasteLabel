@@ -63,10 +63,13 @@ class WheelEvent:
 class Editor:
     def __init__(self, mode):
         self.edit_mode = mode
+        self._is_delete_view = False
+        self.background_images = ["work.png"]
         self.current_background = Background()
         self.current_background_index = 0
         self.canvas_items = [(None, Rect(0, 0, 10, 10), "paste")]
         self.detection_boxes = [{"label": "cat", "x": 0, "y": 0, "width": 10, "height": 10}]
+        self.detection_boxes_dict = {0: [self.detection_boxes[0].copy()]}
         self.selected_item = None
         self.pressed_label = None
         self.show_labels_checkbox = type("Check", (), {"isChecked": lambda self: True})()
@@ -84,6 +87,11 @@ class Canvas(CanvasInteractionMixin):
         self.hover_resize_target = None
         self.hover_resize_handle = None
         self.synced_indexes = []
+        self.saved_detection_boxes = 0
+        self.is_drawing_box = False
+        self.draw_start_pos = None
+        self.temp_draw_box = None
+        self.box_drag_start = Point(0, 0)
 
     def setCursor(self, *a):
         pass
@@ -99,6 +107,9 @@ class Canvas(CanvasInteractionMixin):
 
     def _sync_detection_box_to_dict(self, index):
         self.synced_indexes.append(index)
+
+    def _save_current_detection_boxes(self):
+        self.saved_detection_boxes += 1
 
     def _current_modifiers(self):
         return 0
@@ -304,3 +315,43 @@ def test_wheel_event_uses_image_coords_for_right_edge_adjustment_when_scaled(mon
     assert box['y'] == 10
     assert box['width'] == 16
     assert box['height'] == 10
+
+
+def test_delete_view_ignores_detection_box_edits_and_preserves_work_cache(monkeypatch):
+    monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
+    monkeypatch.setitem(canvas_interaction.DETECTION_BOX_WHEEL_CONFIG, 'detection_box_scale_step', 0.1)
+    canvas = Canvas("annotate")
+    canvas._editor._is_delete_view = True
+    original = canvas._editor.detection_boxes[0].copy()
+    canvas.selected_box = 0
+
+    canvas._scale_selected_box(WheelEvent(120))
+    canvas._nudge_selected(1, 0)
+
+    assert canvas._editor.detection_boxes == [original]
+    assert canvas._editor.detection_boxes_dict[0] == [original]
+    assert canvas.synced_indexes == []
+
+
+def test_delete_view_ignores_box_drawing(monkeypatch):
+    monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
+    canvas = Canvas("annotate")
+    canvas._editor._is_delete_view = True
+
+    assert canvas._handle_drawing_press(Point(5, 5)) is True
+    assert canvas.draw_start_pos is None
+    assert canvas.temp_draw_box is None
+
+
+def test_delete_view_release_does_not_save_removed_image_labels_to_work_path(monkeypatch):
+    monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
+    canvas = Canvas("annotate")
+    canvas._editor._is_delete_view = True
+    work_boxes = [canvas._editor.detection_boxes[0].copy()]
+    canvas.is_dragging_box = True
+    canvas._needs_save = True
+
+    canvas.mouseReleaseEvent(None)
+
+    assert canvas.saved_detection_boxes == 0
+    assert canvas._editor.detection_boxes_dict[0] == work_boxes

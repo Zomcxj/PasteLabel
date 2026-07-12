@@ -143,16 +143,20 @@ class ProgressDialogFactory:
                 border-radius: 6px;
             }}
             QPushButton {{
-                background-color: {t['accent_light']};
-                border: 1px solid {t['accent']};
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
                 border-radius: 10px;
                 padding: 4px 12px;
                 font-size: 12px;
-                color: {t['accent']};
+                color: {t['button_text']};
             }}
             QPushButton:hover {{
-                background-color: {t['accent']};
-                color: {t['widget_bg']};
+                border: 1px solid #2950ff;
+            }}
+            QPushButton:pressed {{
+                background-color: #2950ff;
+                border: 1px solid #2950ff;
+                color: #FFFFFF;
             }}
         """)
 

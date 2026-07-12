@@ -17,8 +17,9 @@ LIGHT_THEME = {
             "canvas_bg": "#FFFFFF",
     "border_color": "#E0E0E0",
     "border_hover": "#BBDEFB",
-    "text_primary": "#212121",
-    "text_secondary": "#757575",
+    "text_primary": "#1F1F1F",
+    "button_text": "#1F1F1F",
+    "text_secondary": "#1F1F1F",
     "text_disabled": "#BDBDBD",
     "accent": "#2196F3",
     "accent_hover": "#1976D2",
@@ -53,8 +54,9 @@ DARK_THEME = {
     "canvas_bg": "#2D2D2D",
     "border_color": "#3E3E3E",
     "border_hover": "#505050",
-    "text_primary": "#E0E0E0",
-    "text_secondary": "#9E9E9E",
+    "text_primary": "#F5F5F5",
+    "button_text": "#F5F5F5",
+    "text_secondary": "#F5F5F5",
     "text_disabled": "#616161",
     "accent": "#42A5F5",
     "accent_hover": "#1E88E5",
@@ -215,8 +217,8 @@ class ThemeManager:
                 background-color: {t['list_hover']};
             }}
             QListWidget::item:selected {{
-                background-color: {t['list_selected_bg']};
-                color: {t['list_selected_text']};
+                background-color: #2950ff;
+                color: #FFFFFF;
             }}
             QLineEdit {{
                 border: 1px solid {t['border_color']};
@@ -229,7 +231,7 @@ class ThemeManager:
                 font-family: 'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif;
             }}
             QLineEdit:hover {{
-                border-color: {t['border_hover']};
+                border: 1px solid #2950ff;
             }}
             QLineEdit:focus {{
                 border-color: {t['accent']};
@@ -244,7 +246,7 @@ class ThemeManager:
                 font-family: 'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif;
             }}
             QSpinBox:hover, QDoubleSpinBox:hover {{
-                border-color: {t['border_hover']};
+                border: 1px solid #2950ff;
             }}
             QSpinBox:focus, QDoubleSpinBox:focus {{
                 border-color: {t['accent']};
@@ -276,22 +278,22 @@ class ThemeManager:
                 border-color: {t['accent']};
             }}
             QPushButton {{
-                background-color: {t['accent_light']};
-                border: none;
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
                 border-radius: 8px;
                 padding: 3px 8px;
-                color: {t['accent']};
+                color: {t['button_text']};
                 font-family: 'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif;
                 font-size: 12px;
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: {t['accent']};
-                color: {t['widget_bg']};
+                border: 1px solid #2950ff;
             }}
             QPushButton:pressed {{
-                background-color: {t['accent_hover']};
-                color: {t['widget_bg']};
+                background-color: #2950ff;
+                border: 1px solid #2950ff;
+                color: #FFFFFF;
             }}
             QPushButton:disabled {{
                 background-color: {t['scrollbar_bg']};
@@ -341,7 +343,7 @@ class ThemeManager:
                 font-family: 'JetBrains Mono', 'Microsoft YaHei', 'Segoe UI', sans-serif;
             }}
             QComboBox:hover {{
-                border-color: {t['border_hover']};
+                border: 1px solid #2950ff;
             }}
             QComboBox::drop-down {{
                 border: none;
@@ -377,7 +379,7 @@ class ThemeManager:
             }}
             QPushButton#navBtn:hover {{
                 background-color: {t['accent_light']};
-                color: {t['accent']};
+                color: {t['button_text']};
             }}
             QPushButton#navBtn:pressed {{
                 background-color: {t['accent']};
@@ -444,17 +446,21 @@ class ThemeManager:
 
             /* 选项按钮 */
             QPushButton#optionsBtn {{
-                background-color: {t['accent_light']};
-                border: none;
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
                 border-radius: 6px;
                 padding: 3px 8px;
                 font-size: 11px;
                 font-weight: bold;
-                color: {t['accent']};
+                color: {t['button_text']};
             }}
             QPushButton#optionsBtn:hover {{
-                background-color: {t['accent']};
-                color: {t['widget_bg']};
+                border: 1px solid #2950ff;
+            }}
+            QPushButton#optionsBtn:pressed {{
+                background-color: #2950ff;
+                border: 1px solid #2950ff;
+                color: #FFFFFF;
             }}
             QPushButton#optionsBtn::menu-indicator {{
                 width: 0px;
@@ -479,30 +485,64 @@ class ThemeManager:
                 padding: 2px;
                 font-size: 11px;
                 font-weight: bold;
-                color: {t['text_secondary']};
+                color: {t['button_text']};
             }}
             QPushButton#langBtn:hover {{
                 background-color: {t['accent_light']};
-                color: {t['accent']};
+                color: {t['button_text']};
             }}
             QPushButton#drawBoxBtn {{
-                background-color: {t['warning_light']};
-                border: none;
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
                 border-radius: 10px;
                 padding: 3px 8px;
                 font-size: 12px;
                 font-weight: 600;
-                color: {t['warning']};
+                color: {t['button_text']};
             }}
             QPushButton#drawBoxBtn:hover {{
-                background-color: {t['warning']};
-                color: {t['widget_bg']};
+                border: 1px solid #2950ff;
             }}
             QPushButton#drawBoxBtn:pressed {{
-                background-color: {t['warning']};
-                color: {t['widget_bg']};
+                background-color: #2950ff;
+                border: 1px solid #2950ff;
+                color: #FFFFFF;
             }}
             QPushButton#accentBtn {{
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
+                border-radius: 10px;
+                padding: 3px 8px;
+                font-size: 12px;
+                font-weight: bold;
+                color: {t['button_text']};
+            }}
+            QPushButton#accentBtn:hover {{
+                border: 1px solid #2950ff;
+            }}
+            QPushButton#accentBtn:pressed {{
+                background-color: #2950ff;
+                border: 1px solid #2950ff;
+                color: #FFFFFF;
+            }}
+            QPushButton#warningBtn {{
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
+                border-radius: 10px;
+                padding: 3px 8px;
+                font-size: 12px;
+                font-weight: bold;
+                color: {t['button_text']};
+            }}
+            QPushButton#warningBtn:hover {{
+                border: 1px solid #2950ff;
+            }}
+            QPushButton#warningBtn:pressed {{
+                background-color: #2950ff;
+                border: 1px solid #2950ff;
+                color: #FFFFFF;
+            }}
+            QPushButton#pasteListAccentBtn {{
                 background-color: {t['accent_light']};
                 border: none;
                 border-radius: 10px;
@@ -511,15 +551,15 @@ class ThemeManager:
                 font-weight: bold;
                 color: {t['accent']};
             }}
-            QPushButton#accentBtn:hover {{
+            QPushButton#pasteListAccentBtn:hover {{
                 background-color: {t['accent']};
                 color: {t['widget_bg']};
             }}
-            QPushButton#accentBtn:pressed {{
+            QPushButton#pasteListAccentBtn:pressed {{
                 background-color: {t['accent_hover']};
                 color: {t['widget_bg']};
             }}
-            QPushButton#warningBtn {{
+            QPushButton#pasteListWarningBtn {{
                 background-color: {t['warning_light']};
                 border: none;
                 border-radius: 10px;
@@ -528,60 +568,55 @@ class ThemeManager:
                 font-weight: bold;
                 color: {t['warning']};
             }}
-            QPushButton#warningBtn:hover {{
-                background-color: {t['warning']};
-                color: {t['widget_bg']};
-            }}
-            QPushButton#warningBtn:pressed {{
+            QPushButton#pasteListWarningBtn:hover, QPushButton#pasteListWarningBtn:pressed {{
                 background-color: {t['warning']};
                 color: {t['widget_bg']};
             }}
             QPushButton#viewToggleBtn {{
-                background-color: {t['warning_light']};
-                border: none;
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
                 border-radius: 10px;
                 padding: 3px 8px;
                 font-size: 12px;
                 font-weight: bold;
-                color: {t['warning']};
+                color: {t['button_text']};
             }}
             QPushButton#viewToggleBtn:hover {{
-                background-color: {t['warning']};
-                color: {t['widget_bg']};
+                border: 1px solid #2950ff;
             }}
             QPushButton#successBtn {{
-                background-color: {t['success_light']};
-                border: none;
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
                 border-radius: 10px;
                 padding: 3px 8px;
                 font-size: 12px;
                 font-weight: bold;
-                color: {t['success']};
+                color: {t['button_text']};
             }}
             QPushButton#successBtn:hover {{
-                background-color: {t['success']};
-                color: {t['widget_bg']};
+                border: 1px solid #2950ff;
             }}
             QPushButton#successBtn:pressed {{
-                background-color: {t['success']};
-                color: {t['widget_bg']};
+                background-color: #2950ff;
+                border: 1px solid #2950ff;
+                color: #FFFFFF;
             }}
             QPushButton#dangerBtn {{
-                background-color: {t['danger_light']};
-                border: none;
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
                 border-radius: 10px;
                 padding: 3px 8px;
                 font-size: 12px;
                 font-weight: bold;
-                color: {t['danger']};
+                color: {t['button_text']};
             }}
             QPushButton#dangerBtn:hover {{
-                background-color: {t['danger']};
-                color: {t['widget_bg']};
+                border: 1px solid #2950ff;
             }}
             QPushButton#dangerBtn:pressed {{
-                background-color: {t['danger']};
-                color: {t['widget_bg']};
+                background-color: #2950ff;
+                border: 1px solid #2950ff;
+                color: #FFFFFF;
             }}
             QFrame#toolbarSep {{
                 background-color: transparent;
@@ -600,6 +635,26 @@ class ThemeManager:
             }}
             QLineEdit#prefixInput[placeholder="false"] {{
                 color: {t['text_primary']};
+            }}
+            QPushButton#iconBtn, QPushButton#navBtn, QPushButton#bgBtn,
+            QPushButton#pasteBtn, QPushButton#labelBtn, QPushButton#themeBtn,
+            QPushButton#settingsBtn, QPushButton#langBtn {{
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
+            }}
+            QPushButton#iconBtn:hover, QPushButton#navBtn:hover, QPushButton#bgBtn:hover,
+            QPushButton#pasteBtn:hover, QPushButton#labelBtn:hover, QPushButton#themeBtn:hover,
+            QPushButton#settingsBtn:hover, QPushButton#langBtn:hover {{
+                background-color: {t['widget_bg']};
+                border: 1px solid #2950ff;
+                color: {t['button_text']};
+            }}
+            QPushButton#iconBtn:pressed, QPushButton#navBtn:pressed, QPushButton#bgBtn:pressed,
+            QPushButton#pasteBtn:pressed, QPushButton#labelBtn:pressed, QPushButton#themeBtn:pressed,
+            QPushButton#settingsBtn:pressed, QPushButton#langBtn:pressed {{
+                background-color: #2950ff;
+                border: 1px solid #2950ff;
+                color: #FFFFFF;
             }}
         """
 
@@ -621,8 +676,8 @@ class ThemeManager:
                 background-color: {t['list_hover']};
             }}
             QListWidget::item:selected {{
-                background-color: {t['list_selected_bg']};
-                color: {t['list_selected_text']};
+                background-color: #2950ff;
+                color: #FFFFFF;
             }}
         """
 
@@ -632,24 +687,26 @@ class ThemeManager:
         if variant == "icon":
             return f"""
                 QPushButton {{
-                    background-color: transparent;
-                    border: 1px solid transparent;
+                    background-color: {t['widget_bg']};
+                    border: 1px solid {t['border_color']};
                     border-radius: 4px;
                     padding: 2px;
                 }}
                 QPushButton:hover {{
-                    background-color: {t['accent_light']};
+                    border: 1px solid #2950ff;
                 }}
                 QPushButton:pressed {{
-                    background-color: {t['accent']};
+                    background-color: #2950ff;
+                    border: 1px solid #2950ff;
+                    color: #FFFFFF;
                 }}
             """
-        bg = bg_color or t['accent_light']
-        fg = text_color or t['accent']
+        bg = bg_color or t['widget_bg']
+        fg = text_color or t['button_text']
         return f"""
             QPushButton {{
                 background-color: {bg};
-                border: none;
+                border: 1px solid {t['border_color']};
                 border-radius: 10px;
                 padding: 3px 8px;
                 font-size: 12px;
@@ -657,10 +714,12 @@ class ThemeManager:
                 color: {fg};
             }}
             QPushButton:hover {{
-                background-color: {fg};
-                color: {t['widget_bg']};
+                border: 1px solid #2950ff;
             }}
             QPushButton:pressed {{
+                background-color: #2950ff;
+                border: 1px solid #2950ff;
+                color: #FFFFFF;
             }}
         """
 
@@ -674,8 +733,8 @@ class ThemeManager:
         t = cls._current_theme
         return f"""
             QPushButton {{
-                background-color: {bg_color};
-                border: none;
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
                 border-radius: 10px;
                 padding: 3px 8px;
                 font-size: 12px;
@@ -683,10 +742,12 @@ class ThemeManager:
                 color: {text_color};
             }}
             QPushButton:hover {{
-                background-color: {text_color};
-                color: {t['widget_bg']};
+                border: 1px solid #2950ff;
             }}
             QPushButton:pressed {{
+                background-color: #2950ff;
+                border: 1px solid #2950ff;
+                color: #FFFFFF;
             }}
         """
 
@@ -695,8 +756,8 @@ class ThemeManager:
         t = cls._current_theme
         return f"""
             QPushButton {{
-                background-color: {t['warning_light']};
-                border: none;
+                background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']};
                 border-radius: 10px;
                 padding: 3px 8px;
                 font-size: 12px;
@@ -704,10 +765,12 @@ class ThemeManager:
                 color: {t['warning']};
             }}
             QPushButton:hover {{
-                background-color: {t['warning']};
-                color: {t['widget_bg']};
+                border: 1px solid #2950ff;
             }}
             QPushButton:pressed {{
+                background-color: #2950ff;
+                border: 1px solid #2950ff;
+                color: #FFFFFF;
             }}
         """
 
@@ -747,6 +810,9 @@ class ThemeManager:
                 background-color: {t['widget_bg']};
                 color: {t['text_primary']};
             }}
+            QSpinBox:hover, QDoubleSpinBox:hover {{
+                border: 1px solid #2950ff;
+            }}
         """
 
     @classmethod
@@ -760,6 +826,9 @@ class ThemeManager:
                 font-size: 12px;
                 background-color: {t['widget_bg']};
                 color: {t['text_primary']};
+            }}
+            QLineEdit:hover {{
+                border: 1px solid #2950ff;
             }}
         """
 
@@ -775,5 +844,8 @@ class ThemeManager:
                 font-size: 12px;
                 background-color: {t['widget_bg']};
                 color: {fg};
+            }}
+            QLineEdit:hover {{
+                border: 1px solid #2950ff;
             }}
         """

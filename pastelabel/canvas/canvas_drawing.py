@@ -125,6 +125,8 @@ class CanvasDrawingMixin:
         if idx in self._editor.detection_boxes_dict:
             self._editor.detection_boxes_dict[idx][box_index] = \
                 self._editor.detection_boxes[box_index].copy()
+        if hasattr(self._editor, '_sync_pasted_boxes_to_cache'):
+            self._editor._sync_pasted_boxes_to_cache()
 
     def _sync_all_detection_boxes_to_dict(self):
         idx = self._editor.current_background_index

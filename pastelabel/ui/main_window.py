@@ -125,6 +125,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
         self.detection_boxes_dict = {}
         self.detection_boxes = []
+        self._last_paste_slot = None
         self.global_labels = set()
 
         self.prefix_input = QLineEdit()
@@ -238,6 +239,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         slot['items'] = items
         slot['copied_at'] = datetime.now().strftime('%H:%M:%S')
         slot['copy_order'] = self._label_cache_copy_counter
+        self._last_paste_slot = None
         self._save_label_cache_slots()
         self._rebuild_label_cache_menu()
 
@@ -257,6 +259,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 box['label'],
             ))
         adjusted_group = self._offset_overlapping_paste_group(pasted_group)
+        start_index = len(self.detection_boxes)
         if adjusted_group:
             self.save_undo_state()
         for rect, label in adjusted_group:
@@ -267,10 +270,19 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 'height': rect.height(),
                 'label': label,
             })
+        if adjusted_group:
+            self._last_paste_slot = slot_index
         if adjusted_group and self.current_background_index >= 0:
             self.detection_boxes_dict[self.current_background_index] = self.detection_boxes.copy()
         self.update_label_list()
         self.canvas.update()
+
+    def _sync_pasted_boxes_to_cache(self):
+        if self._last_paste_slot is None:
+            return
+        slot = self.label_cache_slots[self._last_paste_slot]
+        slot['items'] = [dict(b) for b in self.detection_boxes]
+        self._save_label_cache_slots()
 
     def toggle_label_cache_slot_lock(self, slot_index):
         if slot_index < 0 or slot_index >= len(self.label_cache_slots):

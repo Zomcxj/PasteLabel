@@ -134,7 +134,7 @@ SHORTCUT_CONFIG = {
     'quit_draw': 'Q',
     'next_image': 'D',
     'prev_image': 'A',
-    'delete_selected': 'Delete',
+    'delete_selected': 'E',
     'fit_view': 'Ctrl+F',
     'zoom_in': 'Ctrl++',
     'zoom_out': 'Ctrl+-',

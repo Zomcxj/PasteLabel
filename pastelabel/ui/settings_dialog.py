@@ -248,7 +248,7 @@ class SettingsDialog(QDialog):
         handle_size_label = QLabel(tr("缩放句柄大小") + ":")
         handle_size_row.addWidget(handle_size_label, 2)
         self.handle_size_spin = QSpinBox()
-        self.handle_size_spin.setRange(3, 15)
+        self.handle_size_spin.setRange(7, 15)
         self.handle_size_spin.setValue(DETECTION_BOX_CONFIG.get('resize_handle_size', 8))
         self.handle_size_spin.setMinimumWidth(150)
         handle_size_row.addWidget(self.handle_size_spin)
@@ -260,11 +260,11 @@ class SettingsDialog(QDialog):
         box_border_width_row.addWidget(box_border_width_label, 2)
         self.box_border_width_spin = QDoubleSpinBox()
         self.box_border_width_spin.setObjectName("paramSpin")
-        self.box_border_width_spin.setRange(0.5, 3.5)
+        self.box_border_width_spin.setRange(1, 4)
         self.box_border_width_spin.setSingleStep(0.5)
         self.box_border_width_spin.setDecimals(1)
         self.box_border_width_spin.setMinimumWidth(150)
-        self.box_border_width_spin.setValue(max(0.5, min(3.5, float(BOX_BORDER_CONFIG['width']))))
+        self.box_border_width_spin.setValue(max(1, min(4, float(BOX_BORDER_CONFIG['width']))))
         box_border_width_row.addWidget(self.box_border_width_spin)
         box_border_width_row.addStretch()
         opt_layout.addLayout(box_border_width_row)
@@ -443,8 +443,8 @@ class SettingsDialog(QDialog):
         from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG
         self.grid_width_spin.setValue(GRID_CONFIG.get('line_width', 1))
         self.grid_alpha_spin.setValue(GRID_CONFIG.get('alpha', 120))
-        self.handle_size_spin.setValue(max(3, min(15, DETECTION_BOX_CONFIG.get('resize_handle_size', 8))))
-        self.box_border_width_spin.setValue(max(0.5, min(3.5, float(BOX_BORDER_CONFIG['width']))))
+        self.handle_size_spin.setValue(max(7, min(15, DETECTION_BOX_CONFIG.get('resize_handle_size', 8))))
+        self.box_border_width_spin.setValue(max(1, min(4, float(BOX_BORDER_CONFIG['width']))))
         self.label_font_size_spin.setValue(max(5, min(15, DETECTION_BOX_CONFIG.get('label_font_size', 9))))
         label_position = DETECTION_BOX_CONFIG.get('label_position', 'outside')
         index = self.label_position_combo.findData(label_position)
@@ -507,10 +507,10 @@ class SettingsDialog(QDialog):
         from ..core.config import GRID_CONFIG, DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, MAGNIFIER_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG
         GRID_CONFIG['line_width'] = self.grid_width_spin.value()
         GRID_CONFIG['alpha'] = self.grid_alpha_spin.value()
-        handle_size = max(3, min(15, self.handle_size_spin.value()))
+        handle_size = max(7, min(15, self.handle_size_spin.value()))
         DETECTION_BOX_CONFIG['resize_handle_size'] = handle_size
         PASTE_ITEM_CONFIG['handle_size'] = handle_size
-        box_border_width = max(0.5, min(3.5, float(self.box_border_width_spin.value())))
+        box_border_width = max(1, min(4, float(self.box_border_width_spin.value())))
         BOX_BORDER_CONFIG['width'] = box_border_width
         label_font_size = max(5, min(15, self.label_font_size_spin.value()))
         label_position = self.label_position_combo.currentData() or 'outside'

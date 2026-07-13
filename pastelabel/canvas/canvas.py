@@ -142,7 +142,7 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
 
                 parts = []
                 if info:
-                    parts.append(f"Paste:{info['paste_count']} Box:{info['box_count']}")
+                    parts.append(f"Box:{info['box_count']} Paste:{info['paste_count']}")
                 parts.append(f"X:{int(orig_x)} Y:{int(orig_y)}")
 
                 if self.selected_item_size:
@@ -167,7 +167,7 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         # 鼠标不在canvas上：只显示 Paste/Box + 类别
         parts = []
         if info:
-            parts.append(f"Paste:{info['paste_count']} Box:{info['box_count']}")
+            parts.append(f"Box:{info['box_count']} Paste:{info['paste_count']}")
         if stats_parts:
             parts.append(" ".join(stats_parts))
         if parts:

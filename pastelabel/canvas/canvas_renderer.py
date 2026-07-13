@@ -115,9 +115,9 @@ class CanvasRendererMixin:
 
     def _get_box_border_pen(self, border_color, is_selected):
         from ..core.config import BOX_BORDER_CONFIG
-        w = max(0.5, min(3.5, float(BOX_BORDER_CONFIG['width'])))
+        w = max(1, min(4, float(BOX_BORDER_CONFIG['width'])))
         pen_width = w * 1.5 if is_selected else w
-        pen_width = max(0.5, min(3.5, pen_width))
+        pen_width = max(1, min(4, pen_width))
         return QPen(border_color, pen_width)
 
     def _draw_single_paste_item(self, painter, pixmap, item_rect, label, is_selected, is_pressed_label, item_index=0):
@@ -127,27 +127,30 @@ class CanvasRendererMixin:
         item_width = item_rect.width()
         item_height = item_rect.height()
 
-        if is_selected or is_pressed_label:
-            self._draw_paste_with_overlay(painter, pixmap, item_rect, label, 80)
-        else:
-            self._draw_paste_with_overlay(painter, pixmap, item_rect, label, 50)
-
         label_color_hex = self._editor.get_label_color(label)
         lr = int(label_color_hex[1:3], 16)
         lg = int(label_color_hex[3:5], 16)
         lb = int(label_color_hex[5:7], 16)
 
-        border_color = QColor(lr, lg, lb)
+        if is_selected or is_pressed_label:
+            border_color = QColor(255, 255, 255)
+        else:
+            border_color = QColor(lr, lg, lb)
         pen = self._get_box_border_pen(border_color, is_selected or is_pressed_label)
         painter.setPen(pen)
         painter.drawRect(int(item_x), int(item_y), int(item_width), int(item_height))
+
+        if is_selected or is_pressed_label:
+            self._draw_paste_with_overlay(painter, pixmap, item_rect, label, 155)
+        else:
+            self._draw_paste_with_overlay(painter, pixmap, item_rect, label, 60)
 
         if is_selected:
             is_handle_hovered = (
                 self.hover_resize_target == 'item' and
                 self.hover_resize_handle == 'br'
             )
-            self._draw_resize_handle(painter, item_rect, border_color, is_handle_hovered)
+            self._draw_resize_handle(painter, item_rect, QColor(255, 255, 255), QColor(lr, lg, lb), is_handle_hovered)
 
         self._draw_paste_label(painter, item_x, item_y, label, is_selected, item_index)
 
@@ -173,7 +176,7 @@ class CanvasRendererMixin:
             temp_pixmap
         )
 
-    def _draw_resize_handle(self, painter, item_rect, color, is_hovered=False):
+    def _draw_resize_handle(self, painter, item_rect, stroke_color, fill_color, is_hovered=False):
         """绘制右下角缩放手柄；悬停时显示白色正方形命中范围。"""
         size = PASTE_ITEM_CONFIG['handle_size']
         radius = size / 2
@@ -181,12 +184,22 @@ class CanvasRendererMixin:
 
         painter.save()
         if is_hovered:
-            painter.setPen(QPen(color, 2))
+            painter.setPen(QPen(stroke_color, 2))
             painter.setBrush(QColor(255, 255, 255))
             painter.drawRect(QRectF(br_handle.x() - radius, br_handle.y() - radius, size, size))
         else:
+            # 1. 白色底层——减去贴图区域，只留贴图外部分
+            from PyQt5.QtGui import QPainterPath
+            circle = QPainterPath()
+            circle.addEllipse(br_handle, radius * 1.3, radius * 1.3)
+            item = QPainterPath()
+            item.addRect(item_rect)
             painter.setPen(Qt.NoPen)
-            painter.setBrush(color)
+            painter.setBrush(QColor(255, 255, 255))
+            painter.drawPath(circle.subtracted(item))
+            # 2. 常态句柄覆盖（标签色）
+            painter.setPen(QPen(fill_color, 1))
+            painter.setBrush(fill_color)
             painter.drawEllipse(br_handle, radius, radius)
         painter.restore()
 
@@ -255,20 +268,25 @@ class CanvasRendererMixin:
         lg = int(label_color_hex[3:5], 16)
         lb = int(label_color_hex[5:7], 16)
 
-        fill_alpha = 80 if is_selected or is_pressed_label else 50
+        fill_alpha = 155 if is_selected or is_pressed_label else 60
         fill_color = QColor(lr, lg, lb, fill_alpha)
-        border_color = QColor(lr, lg, lb)
-        painter.fillRect(int(x), int(y), int(width), int(height), fill_color)
-
+        if is_selected or is_pressed_label:
+            border_color = QColor(255, 255, 255)
+        else:
+            border_color = QColor(lr, lg, lb)
         pen = self._get_box_border_pen(border_color, is_selected or is_pressed_label)
         painter.setPen(pen)
         painter.drawRect(int(x), int(y), int(width), int(height))
+        painter.fillRect(int(x), int(y), int(width), int(height), fill_color)
 
         if label and getattr(self._editor, 'show_label_names_checkbox', None) and self._editor.show_label_names_checkbox.isChecked():
-            self._draw_box_label(painter, x, y, label, border_color)
+            label_bg = QColor(lr, lg, lb)
+            self._draw_box_label(painter, x, y, label, label_bg)
 
         if is_selected:
-            self._draw_box_handles(painter, x, y, width, height, border_color)
+            handle_stroke = QColor(255, 255, 255)
+            handle_fill = QColor(lr, lg, lb)
+            self._draw_box_handles(painter, x, y, width, height, handle_stroke, handle_fill)
 
     def _draw_box_label(self, painter, x, y, label, bg_color):
         """绘制检测框标签"""
@@ -278,7 +296,7 @@ class CanvasRendererMixin:
             position = 'outside'
         self._draw_label_above_rect(painter, x, y, label, bg_color, font_size, position)
 
-    def _draw_box_handles(self, painter, x, y, width, height, color):
+    def _draw_box_handles(self, painter, x, y, width, height, stroke_color, fill_color):
         """绘制检测框四个角的调整手柄；悬停时显示白色正方形命中范围。"""
         size = DETECTION_BOX_CONFIG['resize_handle_size']
         radius = size / 2
@@ -296,12 +314,22 @@ class CanvasRendererMixin:
                 self.hover_resize_handle == handle_name
             )
             if is_hovered:
-                painter.setPen(QPen(color, 2))
+                painter.setPen(QPen(stroke_color, 2))
                 painter.setBrush(QColor(255, 255, 255))
                 painter.drawRect(QRectF(corner.x() - radius, corner.y() - radius, size, size))
             else:
+                # 1. 白色底层——减去框区域，只留框外部分
+                from PyQt5.QtGui import QPainterPath
+                circle = QPainterPath()
+                circle.addEllipse(corner, radius * 1.3, radius * 1.3)
+                box = QPainterPath()
+                box.addRect(QRectF(x, y, width, height))
                 painter.setPen(Qt.NoPen)
-                painter.setBrush(color)
+                painter.setBrush(QColor(255, 255, 255))
+                painter.drawPath(circle.subtracted(box))
+                # 2. 常态句柄覆盖（标签色）
+                painter.setPen(QPen(fill_color, 1))
+                painter.setBrush(fill_color)
                 painter.drawEllipse(corner, radius, radius)
         painter.restore()
 
@@ -364,7 +392,7 @@ class CanvasRendererMixin:
         m_scale = size / src_size
         painter.setClipRect(dst)
         from ..core.config import BOX_BORDER_CONFIG
-        m_bw = max(0.5, min(3.5, float(BOX_BORDER_CONFIG['width']))) * m_scale
+        m_bw = max(1, min(4, float(BOX_BORDER_CONFIG['width']))) * m_scale
         m_bw = max(0.5, m_bw)
         for box in getattr(self._editor, 'detection_boxes', []):
             if box["width"] <= 0 or box["height"] <= 0:

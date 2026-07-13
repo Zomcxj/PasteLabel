@@ -5,7 +5,7 @@ import os
 from PyQt5.QtCore import Qt, QRectF, QUrl, QMimeData
 from PyQt5.QtGui import QDrag
 
-from ..core.config import BACKGROUND_SCALE_CONFIG, PASTE_ITEM_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG
+from ..core.config import BACKGROUND_SCALE_CONFIG, PASTE_ITEM_CONFIG, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, DETECTION_BOX_CONFIG
 from .canvas_drawing import CanvasDrawingMixin
 from .canvas_menu import CanvasMenuMixin
 
@@ -174,6 +174,32 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
         return None
 
+    def _collect_nearest_handle(self, mouse_pos):
+        """遍历所有框收集手柄命中，返回离鼠标最近的那个"""
+        background_rect = self.get_background_rect()
+        if not background_rect:
+            return None, None
+        handle_size = DETECTION_BOX_CONFIG['resize_handle_size']
+        best_box = best_handle = None
+        min_dist = float('inf')
+        for i, box in enumerate(self._editor.detection_boxes):
+            x = box["x"] * self.background_scale + background_rect.left()
+            y = box["y"] * self.background_scale + background_rect.top()
+            w = box["width"] * self.background_scale
+            h = box["height"] * self.background_scale
+            for hname, (hx, hy) in (("tl", (x, y)), ("tr", (x+w, y)),
+                                     ("bl", (x, y+h)), ("br", (x+w, y+h))):
+                hr = QRectF(hx - handle_size/2, hy - handle_size/2, handle_size, handle_size)
+                if hr.contains(mouse_pos):
+                    dx = mouse_pos.x() - hx
+                    dy = mouse_pos.y() - hy
+                    d2 = dx*dx + dy*dy
+                    if d2 < min_dist:
+                        min_dist = d2
+                        best_box = i
+                        best_handle = hname
+        return best_box, best_handle
+
     def _handle_detection_box_click(self, mouse_pos):
         if not self._can_edit_canvas():
             return False
@@ -183,14 +209,23 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
         ctrl_pressed = bool(self._current_modifiers() & Qt.ControlModifier)
 
+        # 第一遍：检查所有框的手柄，选最近的那个（解决重叠时下层框手柄被遮挡的问题）
+        box_idx, handle = self._collect_nearest_handle(mouse_pos)
+        if box_idx is not None:
+            box = self._editor.detection_boxes[box_idx]
+            box_x = box["x"] * self.background_scale + background_rect.left()
+            box_y = box["y"] * self.background_scale + background_rect.top()
+            box_width = box["width"] * self.background_scale
+            box_height = box["height"] * self.background_scale
+            if self._check_box_handle(mouse_pos, box_x, box_y, box_width, box_height, box_idx):
+                return True
+
+        # 第二遍：按顺序检查框内命中
         for i, box in enumerate(self._editor.detection_boxes):
             box_x = box["x"] * self.background_scale + background_rect.left()
             box_y = box["y"] * self.background_scale + background_rect.top()
             box_width = box["width"] * self.background_scale
             box_height = box["height"] * self.background_scale
-
-            if self._check_box_handle(mouse_pos, box_x, box_y, box_width, box_height, i):
-                return True
 
             box_rect = QRectF(box_x, box_y, box_width, box_height)
             if box_rect.contains(mouse_pos):
@@ -424,6 +459,37 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             modifiers = 0
         ctrl_pressed = bool(modifiers & Qt.ControlModifier)
 
+        # 第一遍：检查所有框的手柄，选最近的
+        box_idx, handle = self._collect_nearest_handle(self.mouse_pos)
+        if box_idx is not None:
+            i = box_idx
+            selection_changed = self.selected_box != i
+            if ctrl_pressed:
+                valid_indexes = [
+                    idx for idx in self.selected_boxes
+                    if 0 <= idx < len(self._editor.detection_boxes)
+                ]
+                if i not in valid_indexes:
+                    valid_indexes.append(i)
+                    selection_changed = True
+                self.selected_boxes = valid_indexes
+                self.selected_box = i
+            else:
+                if self.selected_boxes != [i]:
+                    selection_changed = True
+                self.selected_box = i
+                self.selected_boxes = [i]
+
+            if selection_changed:
+                self._editor.selected_item = None
+                self.selected_item_size = None
+                self.update_status_label()
+            self.hover_resize_target = 'box'
+            self.hover_resize_handle = handle
+            self.setCursor(Qt.PointingHandCursor)
+            return True
+
+        # 第二遍：按顺序检查框内命中
         for i, box in enumerate(self._editor.detection_boxes):
             box_rect = QRectF(
                 box["x"] * self.background_scale + background_rect.left(),

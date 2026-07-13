@@ -74,6 +74,9 @@ class Editor:
         self.pressed_label = None
         self.show_labels_checkbox = type("Check", (), {"isChecked": lambda self: True})()
 
+    def save_undo_state(self):
+        pass
+
 
 class Canvas(CanvasInteractionMixin):
     def __init__(self, mode):

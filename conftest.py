@@ -5,6 +5,17 @@ pytest conftest - 在收集测试前 mock PyQt5
 import sys
 import types
 
+# ponytail: 子进程测试用 sys.executable 在本地无 PyQt5，转至 llm 环境
+import os as _os
+for _p in (
+    r"D:\Softwaredata\miniforge3\envs\llm\python.exe",
+    r"D:\Softwaredata\miniforge3\envs\llm\Scripts\python.exe",
+):
+    if _os.path.exists(_p):
+        sys.executable = _p
+        break
+del _os, _p
+
 
 def _make_mock_module(name):
     """创建一个支持 from X import Y 的 mock 模块"""
@@ -307,6 +318,7 @@ qtcore.Qt = type('Qt', (), {
     'SmoothTransformation': 1, 'transparent': 0,
     'PointingHandCursor': 18,
     'OpenHandCursor': 17,
+    'ClosedHandCursor': 18,
     'ArrowCursor': 0,
 })()
 qtcore.QPoint = type('QPoint', (), {'__init__': lambda self, x=0, y=0: None})

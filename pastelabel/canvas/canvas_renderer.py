@@ -138,7 +138,10 @@ class CanvasRendererMixin:
             border_color = QColor(lr, lg, lb)
         pen = self._get_box_border_pen(border_color, is_selected or is_pressed_label)
         painter.setPen(pen)
-        painter.drawRect(int(item_x), int(item_y), int(item_width), int(item_height))
+        rx, ry = int(item_x), int(item_y)
+        rw = int(item_x + item_width) - rx
+        rh = int(item_y + item_height) - ry
+        painter.drawRect(rx, ry, rw, rh)
 
         if is_selected or is_pressed_label:
             self._draw_paste_with_overlay(painter, pixmap, item_rect, label, 155)
@@ -276,8 +279,11 @@ class CanvasRendererMixin:
             border_color = QColor(lr, lg, lb)
         pen = self._get_box_border_pen(border_color, is_selected or is_pressed_label)
         painter.setPen(pen)
-        painter.drawRect(int(x), int(y), int(width), int(height))
-        painter.fillRect(int(x), int(y), int(width), int(height), fill_color)
+        rx, ry = int(x), int(y)
+        rw = int(x + width) - rx
+        rh = int(y + height) - ry
+        painter.drawRect(rx, ry, rw, rh)
+        painter.fillRect(rx, ry, rw, rh, fill_color)
 
         if label and getattr(self._editor, 'show_label_names_checkbox', None) and self._editor.show_label_names_checkbox.isChecked():
             label_bg = QColor(lr, lg, lb)

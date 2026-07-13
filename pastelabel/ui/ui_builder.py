@@ -249,12 +249,12 @@ class UIBuilderMixin:
         """初始化隐藏的复选框"""
         self.show_labels_checkbox = QCheckBox(tr("显示BOX"))
         self.show_labels_checkbox.setObjectName("showBoxCb")
-        self.show_labels_checkbox.setChecked(False)
+        self.show_labels_checkbox.setChecked(True)
         self.show_labels_checkbox.stateChanged.connect(self.on_labels_checkbox_changed)
 
         self.show_label_names_checkbox = QCheckBox(tr("显示Label"))
         self.show_label_names_checkbox.setObjectName("showLabelCb")
-        self.show_label_names_checkbox.setChecked(False)
+        self.show_label_names_checkbox.setChecked(True)
         self.show_label_names_checkbox.stateChanged.connect(self.on_labels_checkbox_changed)
 
         self.auto_label_checkbox = QCheckBox(tr("贴图标签"))

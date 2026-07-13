@@ -96,7 +96,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         CROSSHAIR_CONFIG['color'] = color if len(color) == 7 and color.startswith('#') else CROSSHAIR_CONFIG['color']
         CROSSHAIR_CONFIG['alpha'] = max(0, min(255, int(settings.get('crosshair_alpha', CROSSHAIR_CONFIG['alpha']))))
         from ..core.config import BOX_BORDER_CONFIG
-        BOX_BORDER_CONFIG['width'] = max(0.5, min(3.5, float(settings.get('box_border_width', BOX_BORDER_CONFIG['width']))))
+        BOX_BORDER_CONFIG['width'] = max(1, min(4, float(settings.get('box_border_width', BOX_BORDER_CONFIG['width']))))
 
     def _init_data(self):
         """初始化数据结构"""

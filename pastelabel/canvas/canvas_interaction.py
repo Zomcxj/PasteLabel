@@ -329,6 +329,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
     def mouseMoveEvent(self, event):
         self.mouse_pos = event.pos()
+        self._wheel_edge_target = None
         self.update_status_label()
 
         if self._drag_out_pending:
@@ -672,10 +673,16 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         elif self._editor.selected_item is not None:
             self._scale_selected_item(event)
         elif self.selected_box is not None:
-            if self._is_mouse_inside_selected_box():
+            locked_target = getattr(self, '_wheel_edge_target', None)
+            if locked_target and locked_target[0] == self.selected_box:
+                self._adjust_selected_box_edge(event, locked_target[1])
+            elif self._is_mouse_inside_selected_box():
                 self._scale_selected_box(event)
             else:
-                self._adjust_selected_box_edge(event)
+                edge = self._get_selected_box_edge()
+                if edge:
+                    self._wheel_edge_target = (self.selected_box, edge)
+                    self._adjust_selected_box_edge(event, edge)
 
         self.update()
 
@@ -785,7 +792,41 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
         self._sync_detection_box_to_dict(self.selected_box)
 
-    def _adjust_selected_box_edge(self, event):
+    def _get_selected_box_edge(self):
+        """返回鼠标相对当前检测框的最近边。"""
+        if (self.selected_box is None or
+                self.selected_box >= len(self._editor.detection_boxes)):
+            return None
+
+        box = self._editor.detection_boxes[self.selected_box]
+        mouse_pos = self._get_mouse_pos_in_image_coords()
+        if mouse_pos is None:
+            return None
+
+        left = box["x"]
+        top = box["y"]
+        right = left + box["width"]
+        bottom = top + box["height"]
+        mouse_x, mouse_y = mouse_pos
+
+        if mouse_x < left and top <= mouse_y <= bottom:
+            return 'left'
+        if mouse_x > right and top <= mouse_y <= bottom:
+            return 'right'
+        if mouse_y < top and left <= mouse_x <= right:
+            return 'top'
+        if mouse_y > bottom and left <= mouse_x <= right:
+            return 'bottom'
+
+        distances = {
+            'left': abs(mouse_x - left),
+            'right': abs(mouse_x - right),
+            'top': abs(mouse_y - top),
+            'bottom': abs(mouse_y - bottom),
+        }
+        return min(distances, key=distances.get)
+
+    def _adjust_selected_box_edge(self, event, edge=None):
         if not self._can_edit_canvas():
             return
         if (self.selected_box is None or
@@ -803,27 +844,9 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         top = box["y"]
         right = left + box["width"]
         bottom = top + box["height"]
-        mouse_pos = self._get_mouse_pos_in_image_coords()
-        if mouse_pos is None:
+        nearest_edge = edge or self._get_selected_box_edge()
+        if nearest_edge is None:
             return
-        mouse_x, mouse_y = mouse_pos
-
-        if mouse_x < left and top <= mouse_y <= bottom:
-            nearest_edge = 'left'
-        elif mouse_x > right and top <= mouse_y <= bottom:
-            nearest_edge = 'right'
-        elif mouse_y < top and left <= mouse_x <= right:
-            nearest_edge = 'top'
-        elif mouse_y > bottom and left <= mouse_x <= right:
-            nearest_edge = 'bottom'
-        else:
-            distances = {
-                'left': abs(mouse_x - left),
-                'right': abs(mouse_x - right),
-                'top': abs(mouse_y - top),
-                'bottom': abs(mouse_y - bottom),
-            }
-            nearest_edge = min(distances, key=distances.get)
 
         if nearest_edge == 'left':
             new_left = max(0, min(left - step, right - min_width))

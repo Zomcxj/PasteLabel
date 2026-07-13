@@ -299,6 +299,24 @@ def test_wheel_event_uses_edge_adjustment_when_mouse_is_outside_selected_box(mon
     assert box['height'] == 10
 
 
+def test_wheel_edge_adjustment_keeps_opposite_edge_fixed_across_scrolls(monkeypatch):
+    monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
+    monkeypatch.setitem(canvas_interaction.DETECTION_BOX_WHEEL_CONFIG, 'edge_step', 5)
+    canvas = Canvas("annotate")
+    canvas.selected_box = 0
+    canvas._editor.detection_boxes[0].update({"x": 20, "y": 10, "width": 10, "height": 10})
+    canvas.mouse_pos = Point(17, 15)
+
+    canvas.wheelEvent(WheelEvent(120))
+    canvas.wheelEvent(WheelEvent(120))
+
+    box = canvas._editor.detection_boxes[0]
+    assert box['x'] == 10
+    assert box['y'] == 10
+    assert box['width'] == 20
+    assert box['height'] == 10
+
+
 def test_wheel_event_uses_image_coords_for_right_edge_adjustment_when_scaled(monkeypatch):
     monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
     monkeypatch.setitem(canvas_interaction.DETECTION_BOX_WHEEL_CONFIG, 'edge_step', 4)

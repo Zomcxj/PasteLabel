@@ -39,6 +39,14 @@ class TestLoadAll:
         for key in config.SHORTCUT_CONFIG:
             assert key in sc, f"fallback missing: {key}"
 
+    def test_legacy_delete_shortcut_uses_new_default(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            config_manager.save_config({'shortcuts': {'delete_selected': 'Delete'}})
+            assert config_manager.load_all()['shortcuts']['delete_selected'] == 'E'
+        finally:
+            config_manager.CONFIG_PATH = original
+
     def test_default_theme(self):
         theme = config_manager.load_all()['theme']
         assert theme in ('light', 'dark')

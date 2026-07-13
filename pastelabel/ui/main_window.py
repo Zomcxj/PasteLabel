@@ -96,7 +96,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         CROSSHAIR_CONFIG['color'] = color if len(color) == 7 and color.startswith('#') else CROSSHAIR_CONFIG['color']
         CROSSHAIR_CONFIG['alpha'] = max(0, min(255, int(settings.get('crosshair_alpha', CROSSHAIR_CONFIG['alpha']))))
         from ..core.config import BOX_BORDER_CONFIG
-        BOX_BORDER_CONFIG['width'] = max(0.5, min(3.5, float(settings.get('box_border_width', BOX_BORDER_CONFIG['width']))))
+        BOX_BORDER_CONFIG['width'] = max(1, min(4, float(settings.get('box_border_width', BOX_BORDER_CONFIG['width']))))
 
     def _init_data(self):
         """初始化数据结构"""
@@ -534,9 +534,10 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 self._delete_current_idx = saved_del
                 self._load_delete_image(saved_del)
                 self.background_list.setCurrentRow(saved_del)
+            disabled_keys = {'W', 'Q', self._get_shortcut('delete_selected')}
             for sc in getattr(self, '_shortcuts', []):
                 key = sc.key().toString()
-                if key in ('W', 'Q', 'Delete'):
+                if key in disabled_keys:
                     sc.setEnabled(False)
             if hasattr(self, 'draw_box_btn'):
                 self.draw_box_btn.setEnabled(False)
@@ -924,7 +925,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             stats = self.get_label_stats()
             stats_text = " | ".join([f"{k}:{v}" for k, v in list(stats.items())[:3]])
             self.status_label.setText(
-                f"Paste: {info['paste_count']} Box: {info['box_count']}"
+                f"Box: {info['box_count']} Paste: {info['paste_count']}"
                 + (f" | {stats_text}" if stats_text else "")
             )
 

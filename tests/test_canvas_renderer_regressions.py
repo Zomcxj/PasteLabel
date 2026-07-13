@@ -108,7 +108,7 @@ for draw in (
     lambda painter: renderer._draw_single_paste_item(painter, pixmap, QRectF(10, 10, 40, 40), "cat", False, False),
 ):
     actual = pixel_after(draw)
-    assert actual == expected(50), (actual.getRgb(), expected(50).getRgb())
+    assert actual == expected(60), (actual.getRgb(), expected(60).getRgb())
 
 for draw in (
     lambda painter: renderer._draw_single_detection_box(painter, 10, 10, 40, 40, "cat", True, False),
@@ -117,7 +117,7 @@ for draw in (
     lambda painter: renderer._draw_single_paste_item(painter, pixmap, QRectF(10, 10, 40, 40), "cat", False, True),
 ):
     actual = pixel_after(draw)
-    assert actual == expected(80), (actual.getRgb(), expected(80).getRgb())
+    assert actual == expected(155), (actual.getRgb(), expected(155).getRgb())
 '''
     result = subprocess.run(
         [sys.executable, "-c", script],

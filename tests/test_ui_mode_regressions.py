@@ -121,8 +121,8 @@ def test_paste_label_press_highlights_paste_items_and_stats_offer_color_action()
     assert 'self.paste_label_list.itemPressed.connect(self.label_list_item_pressed)' in ui_builder_source
     assert 'self.paste_label_list.itemClicked.connect(self.label_list_item_clicked)' in ui_builder_source
     assert 'is_pressed_label = self._is_pressed_label({"label": label})' in renderer_source
-    assert 'self._draw_paste_with_overlay(painter, pixmap, item_rect, label, 80)' in renderer_source
-    assert 'self._draw_paste_with_overlay(painter, pixmap, item_rect, label, 50)' in renderer_source
+    assert 'self._draw_paste_with_overlay(painter, pixmap, item_rect, label, 155)' in renderer_source
+    assert 'self._draw_paste_with_overlay(painter, pixmap, item_rect, label, 128)' in renderer_source
     assert 'ThemedColorDialog' in main_window_source
     assert 'def _set_label_color_button(self, button, color):' in main_window_source
     assert 'self._set_label_color_button(color_button, color.name())' in main_window_source

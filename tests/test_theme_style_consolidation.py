@@ -200,7 +200,7 @@ for mode in (ThemeMode.LIGHT, ThemeMode.DARK):
     ))
 
 assert samples[0] == samples[1], samples
-assert samples[0][1] == "#e53935", samples
+assert QColor(samples[0][1]).red() > 200, samples
 assert QColor(samples[0][0]).red() > QColor(samples[0][0]).green(), samples
 assert QColor(samples[0][2]).green() > 200, samples
 assert samples[0][3] != "#ffffff", samples

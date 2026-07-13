@@ -292,7 +292,7 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
     if crosshair_alpha is not None:
         config['crosshair_alpha'] = max(0, min(255, int(crosshair_alpha)))
     if box_border_width is not None:
-        config['box_border_width'] = max(0.5, min(3.5, float(box_border_width)))
+        config['box_border_width'] = max(1, min(4, float(box_border_width)))
     if label_colors is not None:
         config['label_colors'] = _normalize_label_colors(label_colors)
     return save_config(config)

@@ -342,7 +342,8 @@ class CanvasRendererMixin:
     def _draw_temp_box(self, painter):
         """绘制临时检测框（正在绘制中）"""
         if self.temp_draw_box is not None and self.draw_start_pos is not None:
-            pen = QPen(QColor(0, 255, 0), 2, Qt.DashLine)
+            crosshair = CROSSHAIR_CONFIG.get('color', '#00FF80')
+            pen = QPen(QColor(crosshair), 2, Qt.DashLine)
             painter.setPen(pen)
             painter.drawRect(self.temp_draw_box)
 

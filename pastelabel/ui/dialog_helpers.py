@@ -34,9 +34,12 @@ class ThemedMessageBox(QMessageBox):
         super().showEvent(event)
         center_on_parent(self)
         sync_titlebar(self)
-        details_button = self.findChild(QPushButton, "qt_msgbox_details")
-        if details_button:
-            details_button.setText(i18n.t("显示详情"))
+        for btn in self.findChildren(QPushButton):
+            raw = btn.text().replace('&', '')
+            if raw in ("Show Details...", "Show Details", "显示详情"):
+                btn.setText(i18n.t("显示详情"))
+            elif raw in ("Hide Details...", "Hide Details", "隐藏详情"):
+                btn.setText(i18n.t("隐藏详情"))
 
 
 class ThemedColorDialog(QColorDialog):

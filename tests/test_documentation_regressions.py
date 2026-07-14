@@ -13,7 +13,7 @@ def test_build_script_is_at_repository_root_and_uses_its_directory_as_root():
 
 
 def test_documentation_uses_pastelabel_log_without_a_leading_dot():
-    for path in (ROOT / "README.md", ROOT / "user_guide.md", ROOT / "project_structure.md"):
+    for path in (ROOT / "README.md", ROOT / "docs" / "user_guide.md", ROOT / "docs" / "project_structure.md"):
         source = path.read_text(encoding="utf-8")
         assert "pastelabel.log" in source
         assert ".pastelabel.log" not in source
@@ -29,7 +29,7 @@ def test_build_script_does_not_list_removed_hidden_imports():
 
 def test_documentation_describes_stats_color_replacement_and_separate_wheel_steps():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    guide = (ROOT / "user_guide.md").read_text(encoding="utf-8")
+    guide = (ROOT / "docs" / "user_guide.md").read_text(encoding="utf-8")
 
     for source in (readme, guide):
         assert "颜色替换" in source

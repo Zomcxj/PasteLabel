@@ -9,10 +9,8 @@ build/
 .pytest_cache/
 
 AGENTS.md
-plan/
+docs/plan/
 docs/superpowers/
-.atomcode/
-.mimocode/
 .vscode/
 .idea/
 *.swp

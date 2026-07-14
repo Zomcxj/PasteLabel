@@ -80,8 +80,8 @@ class CanvasDrawingMixin:
 
     def _constrain_to_background(self, pos, background_rect):
         constrained = pos
-        constrained.setX(max(background_rect.left(), min(constrained.x(), background_rect.right())))
-        constrained.setY(max(background_rect.top(), min(constrained.y(), background_rect.bottom())))
+        constrained.setX(int(max(background_rect.left(), min(constrained.x(), background_rect.right()))))
+        constrained.setY(int(max(background_rect.top(), min(constrained.y(), background_rect.bottom()))))
         return constrained
 
     def _create_detection_box(self, x, y, width, height, label):

@@ -71,8 +71,8 @@ python pastelabel/main.py
 
 ## 文档导航
 
-- [用户使用指南](./user_guide.md)
-- [项目结构说明](./project_structure.md)
+- [用户使用指南](./docs/user_guide.md)
+- [项目结构说明](./docs/project_structure.md)
 
 ## 测试
 

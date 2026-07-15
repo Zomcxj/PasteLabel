@@ -261,19 +261,22 @@ class UIBuilderMixin:
         self.auto_label_checkbox.setObjectName("autoLabelCb")
         self.auto_label_checkbox.setChecked(True)
 
-        self.auto_save_checkbox = QCheckBox(tr("自动保存"))
-        self.auto_save_checkbox.setObjectName("autoSaveCb")
-        self.auto_save_checkbox.setChecked(False)
-
-        self.show_grid_checkbox = QCheckBox(tr("显示网格"))
-        self.show_grid_checkbox.setObjectName("gridCb")
-        self.show_grid_checkbox.setChecked(False)
-        self.show_grid_checkbox.stateChanged.connect(self._on_grid_changed)
+        self.auto_save_b_checkbox = QCheckBox(tr("自动保存B"))
+        self.auto_save_b_checkbox.setObjectName("autoSaveBCb")
+        self.auto_save_b_checkbox.setChecked(False)
+        self.auto_save_p_checkbox = QCheckBox(tr("自动保存P"))
+        self.auto_save_p_checkbox.setObjectName("autoSavePCb")
+        self.auto_save_p_checkbox.setChecked(False)
 
         self.show_paste_names_checkbox = QCheckBox(tr("显示贴图名"))
         self.show_paste_names_checkbox.setObjectName("pasteNameCb")
         self.show_paste_names_checkbox.setChecked(True)
         self.show_paste_names_checkbox.stateChanged.connect(self._on_grid_changed)
+
+        self.show_grid_checkbox = QCheckBox(tr("显示网格线"))
+        self.show_grid_checkbox.setObjectName("gridCb")
+        self.show_grid_checkbox.setChecked(False)
+        self.show_grid_checkbox.stateChanged.connect(self._on_grid_changed)
 
     def _init_prefix_checkbox(self):
         """初始化前缀复选框"""
@@ -313,9 +316,10 @@ class UIBuilderMixin:
         items = [
             (tr("显示BOX"), "toggle_labels", self.show_labels_checkbox),
             (tr("显示Label"), "toggle_label_names", self.show_label_names_checkbox),
-            (tr("自动保存"), "toggle_auto_save", self.auto_save_checkbox),
-            (tr("显示网格"), "toggle_grid", self.show_grid_checkbox),
             (tr("显示贴图名"), "toggle_paste_names", self.show_paste_names_checkbox),
+            (tr("自动保存B"), "auto_save_b", self.auto_save_b_checkbox),
+            (tr("自动保存P"), "auto_save_p", self.auto_save_p_checkbox),
+            (tr("显示网格线"), "toggle_grid", self.show_grid_checkbox),
         ]
 
         self._menu_actions = []
@@ -507,9 +511,10 @@ class UIBuilderMixin:
         items = [
             (tr("显示BOX"), "toggle_labels", self.show_labels_checkbox, lambda cb=self.show_labels_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.show_labels_checkbox: cb.isChecked()),
             (tr("显示Label"), "toggle_label_names", self.show_label_names_checkbox, lambda cb=self.show_label_names_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.show_label_names_checkbox: cb.isChecked()),
-            (tr("自动保存"), "toggle_auto_save", self.auto_save_checkbox, lambda cb=self.auto_save_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.auto_save_checkbox: cb.isChecked()),
-            (tr("显示网格"), "toggle_grid", self.show_grid_checkbox, lambda cb=self.show_grid_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.show_grid_checkbox: cb.isChecked()),
             (tr("显示贴图名"), "toggle_paste_names", self.show_paste_names_checkbox, lambda cb=self.show_paste_names_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.show_paste_names_checkbox: cb.isChecked()),
+            (tr("自动保存B"), "auto_save_b", self.auto_save_b_checkbox, lambda cb=self.auto_save_b_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.auto_save_b_checkbox: cb.isChecked()),
+            (tr("自动保存P"), "auto_save_p", self.auto_save_p_checkbox, lambda cb=self.auto_save_p_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.auto_save_p_checkbox: cb.isChecked()),
+            (tr("显示网格线"), "toggle_grid", self.show_grid_checkbox, lambda cb=self.show_grid_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.show_grid_checkbox: cb.isChecked()),
             (tr("添加文件名前缀"), None, self.prefix_checkbox, lambda cb=self.prefix_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.prefix_checkbox: cb.isChecked()),
             (tr("画布图片复制"), None, None, lambda: self._on_canvas_copy_menu_changed(not getattr(self, '_canvas_image_copy_enabled', False)), lambda: getattr(self, '_canvas_image_copy_enabled', False)),
             (tr("窗口放大器"), None, None, lambda: self._on_magnifier_menu_changed(not getattr(self, '_magnifier_enabled', False)), lambda: getattr(self, '_magnifier_enabled', False)),

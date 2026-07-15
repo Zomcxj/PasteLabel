@@ -87,6 +87,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._canvas_image_copy_enabled = bool(settings.get('canvas_image_copy_enabled', False))
         self._magnifier_enabled = bool(settings.get('magnifier_enabled', False))
         MAGNIFIER_CONFIG['zoom'] = max(0.8, min(3.0, float(settings.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom']))))
+        MAGNIFIER_CONFIG['size'] = max(80, min(400, int(settings.get('magnifier_size', MAGNIFIER_CONFIG['size']))))
         NUDGE_CONFIG['step'] = max(1, min(5, int(settings.get('nudge_step', NUDGE_CONFIG['step']))))
         DETECTION_BOX_WHEEL_CONFIG['detection_box_scale_step'] = max(0.01, min(0.30, float(settings.get('detection_box_scale_step', DETECTION_BOX_WHEEL_CONFIG['detection_box_scale_step']))))
         DETECTION_BOX_WHEEL_CONFIG['paste_item_scale_step'] = max(0.01, min(0.30, float(settings.get('paste_item_scale_step', DETECTION_BOX_WHEEL_CONFIG['paste_item_scale_step']))))
@@ -429,9 +430,10 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             canvas_items, image_width, image_height, current_index
         )
 
-    def auto_save_current_canvas(self):
-        """自动保存当前画布"""
-        self.save_manager.auto_save_current_canvas()
+    def auto_save_background(self):
+        self.save_manager.auto_save_background()
+    def auto_save_project(self):
+        self.save_manager.auto_save_project()
 
     def save_current_json(self):
         """保存当前图的标注 JSON。"""
@@ -963,13 +965,14 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             sc = self._get_shortcut('draw_box')
             self.draw_box_btn.setText(f"{tr('绘制BOX')}({sc})")
             self.draw_box_btn.setToolTip(tr("绘制检测框"))
-        self.auto_save_checkbox.setText(tr("自动保存"))
+        self.auto_save_b_checkbox.setText(tr("自动保存B"))
+        self.auto_save_p_checkbox.setText(tr("自动保存P"))
         self.show_labels_checkbox.setText(tr("显示BOX"))
         self.show_label_names_checkbox.setText(tr("显示Label"))
         self.auto_label_checkbox.setText(tr("贴图标签"))
         self.prefix_checkbox.setText(tr("添加文件名前缀"))
-        self.show_grid_checkbox.setText(tr("显示网格"))
         self.show_paste_names_checkbox.setText(tr("显示贴图名"))
+        self.show_grid_checkbox.setText(tr("显示网格线"))
         self.random_paste_btn.setText(tr("随机贴图"))
         self.batch_paste_btn.setText(tr("一键贴图"))
         is_thumb = self.is_thumbnail_mode
@@ -1034,7 +1037,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self._draw_box_action.setText(f"{tr('绘制BOX')}\t{sc}")
         if hasattr(self, '_menu_actions'):
             menu_texts = [tr("显示BOX"), tr("显示Label"),
-                          tr("自动保存"), tr("显示网格"), tr("显示贴图名"),
+                          tr("显示贴图名"),
+                          tr("自动保存B"), tr("自动保存P"),
+                          tr("显示网格线"),
                           tr("添加文件名前缀"), tr("画布图片复制"),
                           tr("窗口放大器")]
             for i, item in enumerate(self._menu_actions):
@@ -1076,7 +1081,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self._draw_box_action.setText(f"{tr('绘制BOX')}\t{sc}")
         if hasattr(self, '_menu_actions'):
             menu_texts = [tr("显示BOX"), tr("显示Label"),
-                          tr("自动保存"), tr("显示网格"), tr("显示贴图名"),
+                          tr("显示贴图名"),
+                          tr("自动保存B"), tr("自动保存P"),
+                          tr("显示网格线"),
                           tr("添加文件名前缀"), tr("画布图片复制"),
                           tr("窗口放大器")]
             for i, item in enumerate(self._menu_actions):

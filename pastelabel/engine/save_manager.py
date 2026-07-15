@@ -114,29 +114,34 @@ class SaveManager(QObject):
         
         return (file_path, base_name, prefix)
     
-    def auto_save_current_canvas(self):
-        """自动保存当前画布"""
+    def _get_save_info_or_none(self):
         if self.editor._is_delete_view or self.editor.current_background is None or not self.editor.canvas_items:
-            return
-        
-        save_info = self.get_save_info()
+            return None
+        return self.get_save_info()
+
+    def auto_save_background(self):
+        """自动保存合成图（B）"""
+        save_info = self._get_save_info_or_none()
         if not save_info:
             return
-        
-        file_path, base_name, prefix = save_info
-        
+        file_path, _, _ = save_info
         result = QPixmap(self.editor.current_background.size())
         painter = QPainter(result)
         painter.fillRect(result.rect(), QColor(255, 255, 255))
         painter.drawPixmap(0, 0, self.editor.current_background)
-        
         for pixmap, rect, label in self.editor.canvas_items:
             painter.drawPixmap(rect.toRect(), pixmap)
-        
         painter.end()
         if not result.save(file_path):
             from ..core.exception_hook import _write_log
-            _write_log(f"自动保存失败: {file_path}")
+            _write_log(f"自动保存B失败: {file_path}")
+
+    def auto_save_project(self):
+        """自动保存 JSON（P）"""
+        save_info = self._get_save_info_or_none()
+        if not save_info:
+            return
+        file_path, base_name, prefix = save_info
         self.save_json(file_path, base_name, prefix)
     
     def save_canvas(self):

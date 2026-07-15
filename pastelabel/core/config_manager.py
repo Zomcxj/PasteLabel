@@ -25,6 +25,8 @@ def _normalize_label_cache_slots(slots):
             'locked': bool(slot.get('locked', default['locked'])),
             'items': items if isinstance(items, list) else [],
             'shortcut': str(slot.get('shortcut', default['shortcut']) or default['shortcut']),
+            'copy_order': int(slot.get('copy_order', 0) or 0),
+            'copied_at': str(slot.get('copied_at', '') or ''),
         })
     return normalized
 
@@ -49,7 +51,7 @@ def _normalize_label_colors(colors):
 
 
 def get_label_color(labels, label, palette=None):
-    """按当前类别名升序确定色板槽位，不保留类别到颜色的映射。"""
+    """按当前标签名升序确定色板槽位，不保留类别到颜色的映射。"""
     colors = _normalize_label_colors(palette if palette is not None else LABEL_COLORS)
     ordered_labels = sorted({str(value) for value in labels if value})
     return colors[ordered_labels.index(label) % len(colors)] if label in ordered_labels else colors[0]
@@ -219,6 +221,7 @@ def load_all():
         'canvas_image_copy_enabled': bool(config.get('canvas_image_copy_enabled', False)),
         'magnifier_enabled': bool(config.get('magnifier_enabled', False)),
         'magnifier_zoom': float(config.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom'])),
+        'magnifier_size': int(config.get('magnifier_size', MAGNIFIER_CONFIG['size'])),
         'label_cache_slots': _normalize_label_cache_slots(config.get('label_cache_slots')),
         'nudge_step': int(config.get('nudge_step', NUDGE_CONFIG['step'])),
         'detection_box_scale_step': float(config.get(
@@ -243,7 +246,8 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
              grid_line_width=None, grid_alpha=None, resize_handle_size=None,
              label_font_size=None, label_position=None,
              canvas_image_copy_enabled=None, magnifier_enabled=None,
-             magnifier_zoom=None, label_cache_slots=None, nudge_step=None,
+             magnifier_zoom=None, magnifier_size=None,
+             label_cache_slots=None, nudge_step=None,
                detection_box_scale_step=None, paste_item_scale_step=None,
                detection_box_wheel_edge_step=None,
               crosshair_width=None, crosshair_color=None, crosshair_alpha=None,
@@ -274,6 +278,8 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['magnifier_enabled'] = bool(magnifier_enabled)
     if magnifier_zoom is not None:
         config['magnifier_zoom'] = max(0.8, min(3.0, float(magnifier_zoom)))
+    if magnifier_size is not None:
+        config['magnifier_size'] = max(80, min(400, int(magnifier_size)))
     if label_cache_slots is not None:
         config['label_cache_slots'] = _normalize_label_cache_slots(label_cache_slots)
     if nudge_step is not None:

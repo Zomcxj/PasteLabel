@@ -109,11 +109,12 @@ class SettingsDialog(QDialog):
         shortcut_names = {
             'undo': tr("撤销"),
             'redo': tr("重做"),
-            'toggle_grid': tr("显示网格"),
+            'toggle_grid': tr("显示网格线"),
             'toggle_labels': tr("显示BOX"),
-            'toggle_label_names': tr("显示Label"),
-            'toggle_auto_save': tr("自动保存"),
+            'toggle_label_names': tr("显示标签名"),
             'toggle_paste_names': tr("显示贴图名"),
+            'auto_save_b': tr("自动保存B"),
+            'auto_save_p': tr("自动保存P"),
             'draw_box': tr("绘制检测框"),
             'quit_draw': tr("退出绘制"),
             'next_image': tr("下一张"),
@@ -123,7 +124,7 @@ class SettingsDialog(QDialog):
             'zoom_in': tr("放大"),
             'zoom_out': tr("缩小"),
             'remove_image': tr("移除图片"),
-            'restore_image': tr("恢复到工作路径"),
+            'restore_image': tr("恢复图片"),
             'label_cache_slot_1': tr("缓存槽1"),
             'label_cache_slot_2': tr("缓存槽2"),
             'label_cache_slot_3': tr("缓存槽3"),
@@ -185,6 +186,20 @@ class SettingsDialog(QDialog):
         magnifier_zoom_row.addStretch()
         opt_layout.addLayout(magnifier_zoom_row)
 
+        magnifier_size_row = QHBoxLayout()
+        magnifier_size_label = QLabel(tr("窗口放大器尺寸") + ":")
+        magnifier_size_row.addWidget(magnifier_size_label, 2)
+        self.magnifier_size_spin = QSpinBox()
+        self.magnifier_size_spin.setObjectName("paramSpin")
+        self.magnifier_size_spin.setRange(80, 400)
+        self.magnifier_size_spin.setSingleStep(10)
+        self.magnifier_size_spin.setSuffix(" px")
+        self.magnifier_size_spin.setMinimumWidth(150)
+        self.magnifier_size_spin.setValue(max(80, min(400, int(MAGNIFIER_CONFIG.get('size', 160)))))
+        magnifier_size_row.addWidget(self.magnifier_size_spin)
+        magnifier_size_row.addStretch()
+        opt_layout.addLayout(magnifier_size_row)
+
         grid_width_row = QHBoxLayout()
         grid_width_label = QLabel(tr("网格线粗细") + ":")
         grid_width_row.addWidget(grid_width_label, 2)
@@ -231,7 +246,7 @@ class SettingsDialog(QDialog):
         opt_layout.addLayout(label_font_size_row)
 
         label_position_row = QHBoxLayout()
-        label_position_label = QLabel(tr("类别名位置") + ":")
+        label_position_label = QLabel(tr("标签名位置") + ":")
         label_position_row.addWidget(label_position_label, 2)
         self.label_position_combo = QComboBox()
         self.label_position_combo.setMinimumWidth(150)
@@ -450,6 +465,7 @@ class SettingsDialog(QDialog):
         index = self.label_position_combo.findData(label_position)
         self.label_position_combo.setCurrentIndex(index if index >= 0 else 0)
         self.magnifier_zoom_spin.setValue(max(0.8, min(3.0, float(MAGNIFIER_CONFIG.get('zoom', 2.0)))))
+        self.magnifier_size_spin.setValue(max(80, min(400, int(MAGNIFIER_CONFIG.get('size', 160)))))
         self.nudge_step_spin.setValue(NUDGE_CONFIG.get('step', 1))
         self.detection_box_scale_step_spin.setValue(max(0.01, min(0.30, float(DETECTION_BOX_WHEEL_CONFIG['detection_box_scale_step']))))
         self.paste_item_scale_step_spin.setValue(max(0.01, min(0.30, float(DETECTION_BOX_WHEEL_CONFIG['paste_item_scale_step']))))
@@ -520,6 +536,8 @@ class SettingsDialog(QDialog):
         DETECTION_BOX_CONFIG['label_position'] = label_position
         magnifier_zoom = max(0.8, min(3.0, float(self.magnifier_zoom_spin.value())))
         MAGNIFIER_CONFIG['zoom'] = magnifier_zoom
+        magnifier_size = max(80, min(400, self.magnifier_size_spin.value()))
+        MAGNIFIER_CONFIG['size'] = magnifier_size
         nudge_step = max(1, min(5, self.nudge_step_spin.value()))
         NUDGE_CONFIG['step'] = nudge_step
         detection_box_scale_step = max(0.01, min(0.30, float(self.detection_box_scale_step_spin.value())))
@@ -545,6 +563,7 @@ class SettingsDialog(QDialog):
             label_font_size=label_font_size,
             label_position=label_position,
             magnifier_zoom=magnifier_zoom,
+            magnifier_size=magnifier_size,
             label_cache_slots=label_cache_slots,
             nudge_step=nudge_step,
             detection_box_scale_step=detection_box_scale_step,

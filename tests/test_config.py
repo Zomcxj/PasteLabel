@@ -19,7 +19,8 @@ class TestShortcutConfig:
 
     REQUIRED_KEYS = [
         'undo', 'redo', 'toggle_grid',
-        'toggle_labels', 'toggle_label_names', 'toggle_auto_save',
+        'toggle_labels', 'toggle_label_names',
+        'auto_save_b', 'auto_save_p',
         'toggle_paste_names', 'draw_box', 'quit_draw',
         'next_image', 'prev_image', 'delete_selected', 'fit_view',
         'zoom_in', 'zoom_out',

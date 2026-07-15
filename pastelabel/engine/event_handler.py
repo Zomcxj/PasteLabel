@@ -75,7 +75,8 @@ class EventHandlerMixin:
             'toggle_labels': self._toggle_labels,
             'toggle_label_names': self._toggle_label_names,
             'toggle_grid': self.toggle_grid,
-            'toggle_auto_save': self._toggle_auto_save,
+            'auto_save_b': self._toggle_auto_save_b,
+            'auto_save_p': self._toggle_auto_save_p,
             'toggle_paste_names': self._toggle_paste_names,
             'draw_box': self.toggle_draw_mode,
             'quit_draw': self._quit_draw,
@@ -153,9 +154,12 @@ class EventHandlerMixin:
         if hasattr(self, 'show_label_names_checkbox'):
             self.show_label_names_checkbox.setChecked(not self.show_label_names_checkbox.isChecked())
 
-    def _toggle_auto_save(self):
-        self.auto_save_checkbox.setChecked(not self.auto_save_checkbox.isChecked())
-        self.auto_save_current_canvas()
+    def _toggle_auto_save_b(self):
+        self.auto_save_b_checkbox.setChecked(not self.auto_save_b_checkbox.isChecked())
+        self.auto_save_background()
+    def _toggle_auto_save_p(self):
+        self.auto_save_p_checkbox.setChecked(not self.auto_save_p_checkbox.isChecked())
+        self.auto_save_project()
 
     def _toggle_paste_names(self):
         self.show_paste_names_checkbox.setChecked(not self.show_paste_names_checkbox.isChecked())
@@ -291,8 +295,11 @@ class EventHandlerMixin:
             self.canvas_items_dict[self.current_background_index] = self.canvas_items.copy()
             self.detection_boxes_dict[self.current_background_index] = self.detection_boxes.copy()
             self.save_current_json()
-            if hasattr(self, 'auto_save_checkbox') and self.auto_save_checkbox.isChecked() and self.canvas_items:
-                self.auto_save_current_canvas()
+            if self.canvas_items:
+                if hasattr(self, 'auto_save_b_checkbox') and self.auto_save_b_checkbox.isChecked():
+                    self.auto_save_background()
+                if hasattr(self, 'auto_save_p_checkbox') and self.auto_save_p_checkbox.isChecked():
+                    self.auto_save_project()
 
         self.current_background_index = new_index
 

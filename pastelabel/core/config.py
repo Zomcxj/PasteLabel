@@ -36,8 +36,8 @@ DETECTION_BOX_CONFIG = {
     'min_width': 3,  # 最小宽度
     'min_height': 3,  # 最小高度
     'resize_handle_size': 8,  # 调整手柄大小
-    'label_font_size': 9,  # 类别名字号
-    'label_position': 'outside',  # 类别名位置：outside=框外侧，inside=框内侧
+    'label_font_size': 9,  # 标签名字号
+    'label_position': 'outside',  # 标签名位置：outside=框外侧，inside=框内侧
     'border_color_selected': (0, 255, 128),  # 选中边框颜色 (RGB)
     'border_color_normal': (0, 255, 128),  # 普通边框颜色 (RGB)
     'fill_color_selected': (0, 255, 128, 50),  # 选中填充颜色 (RGBA)
@@ -128,7 +128,8 @@ SHORTCUT_CONFIG = {
     'toggle_grid': 'Ctrl+G',
     'toggle_labels': 'R',
     'toggle_label_names': 'T',
-    'toggle_auto_save': 'G',
+    'auto_save_b': 'G',
+    'auto_save_p': 'H',
     'toggle_paste_names': 'F',
     'draw_box': 'W',
     'quit_draw': 'Q',
@@ -143,9 +144,9 @@ SHORTCUT_CONFIG = {
 }
 
 LABEL_CACHE_SLOTS = [
-    {'name': '缓存槽1', 'locked': False, 'items': [], 'shortcut': '1'},
-    {'name': '缓存槽2', 'locked': False, 'items': [], 'shortcut': '2'},
-    {'name': '缓存槽3', 'locked': False, 'items': [], 'shortcut': '3'},
+    {'name': '缓存槽1', 'locked': False, 'items': [], 'shortcut': '1', 'copy_order': 0, 'copied_at': ''},
+    {'name': '缓存槽2', 'locked': False, 'items': [], 'shortcut': '2', 'copy_order': 0, 'copied_at': ''},
+    {'name': '缓存槽3', 'locked': False, 'items': [], 'shortcut': '3', 'copy_order': 0, 'copied_at': ''},
 ]
 
 # 撤销/重做配置

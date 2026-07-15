@@ -2,7 +2,7 @@
 import os
 import sys
 
-_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_root = os.getcwd()
 
 _ffi_dll = os.path.join(_root, '..', 'Library', 'bin', 'ffi.dll')
 _binaries = []
@@ -31,8 +31,9 @@ exe = EXE(
     a.scripts,
     a.binaries,
     a.datas,
-    [('-O2', None, 'OPTION')],
+    ([('-O2', None, 'OPTION')] if sys.platform == 'win32' else []),
     name='PasteLabel',
+    onefile=(sys.platform != 'win32'),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

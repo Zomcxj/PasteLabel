@@ -89,9 +89,10 @@ AUTO_SAVE_CONFIG = {
 
 # 窗口放大器配置
 MAGNIFIER_CONFIG = {
-    'enabled': False,  # 默认关闭，避免影响标注视野
+    'enabled': False,
     'size': 160,
     'zoom': 2.0,
+    'always_on': False,  # 始终跟随鼠标显示，不依赖选中框
 }
 
 # 主题配置

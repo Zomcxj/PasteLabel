@@ -2,7 +2,7 @@
 import os
 import sys
 
-_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_root = os.getcwd()
 
 _ffi_dll = os.path.join(_root, '..', 'Library', 'bin', 'ffi.dll')
 _binaries = []
@@ -16,7 +16,7 @@ a = Analysis(
     pathex=[_root],
     binaries=_binaries,
     datas=[(os.path.join(_root, 'ico_image'), 'ico_image')],
-    hiddenimports=['pastelabel', 'pastelabel.ui', 'pastelabel.ui.main_window', 'pastelabel.ui.ui_builder', 'pastelabel.ui.settings_dialog', 'pastelabel.ui.theme', 'pastelabel.ui.dwm', 'pastelabel.ui.dialogs', 'pastelabel.ui.i18n', 'pastelabel.engine', 'pastelabel.engine.save_manager', 'pastelabel.engine.undo_manager', 'pastelabel.engine.label_manager', 'pastelabel.engine.image_loader', 'pastelabel.engine.paste_engine', 'pastelabel.engine.event_handler', 'pastelabel.canvas', 'pastelabel.canvas.canvas', 'pastelabel.canvas.canvas_renderer', 'pastelabel.canvas.canvas_interaction', 'pastelabel.canvas.canvas_drawing', 'pastelabel.canvas.canvas_menu', 'pastelabel.core', 'pastelabel.core.config', 'pastelabel.core.config_manager', 'pastelabel.core.utils', 'pastelabel.core.editor_protocol', 'pastelabel.core.exception_hook'],
+    hiddenimports=['pastelabel', 'pastelabel.ui', 'pastelabel.ui.main_window', 'pastelabel.ui.ui_builder', 'pastelabel.ui.settings_dialog', 'pastelabel.ui.theme', 'pastelabel.ui.dwm', 'pastelabel.ui.dialogs', 'pastelabel.ui.i18n', 'pastelabel.engine', 'pastelabel.engine.save_manager', 'pastelabel.engine.undo_manager', 'pastelabel.engine.label_manager', 'pastelabel.engine.image_loader', 'pastelabel.engine.paste_engine', 'pastelabel.engine.event_handler', 'pastelabel.canvas', 'pastelabel.canvas.canvas', 'pastelabel.canvas.canvas_renderer', 'pastelabel.canvas.canvas_interaction', 'pastelabel.canvas.canvas_drawing', 'pastelabel.canvas.canvas_menu', 'pastelabel.core', 'pastelabel.core.config', 'pastelabel.core.config_manager', 'pastelabel.core.utils', 'pastelabel.core.editor_protocol', 'pastelabel.core.exception_hook', 'pkgutil'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -31,8 +31,9 @@ exe = EXE(
     a.scripts,
     a.binaries,
     a.datas,
-    [('-O2', None, 'OPTION')],
+    ([('-O2', None, 'OPTION')] if sys.platform == 'win32' else []),
     name='PasteLabel',
+    onefile=(sys.platform != 'win32'),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

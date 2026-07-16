@@ -86,13 +86,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         is_annotate = getattr(self._editor, 'edit_mode', 'paste') == 'annotate'
 
         if is_annotate:
-            if self._editor.show_labels_checkbox.isChecked() and self._editor.current_background:
-                if self._handle_detection_box_click(mouse_pos):
-                    return
-            item_at_pos = self.find_item_at_position(mouse_pos)
-            if item_at_pos is not None:
-                self._handle_item_click(item_at_pos, mouse_pos)
-                return
+            # 标注模式下左键不进入框/贴图编辑，仅用于画框（W进入绘制模式）
+            pass
         else:
             item_at_pos = self.find_item_at_position(mouse_pos)
             if item_at_pos is not None:

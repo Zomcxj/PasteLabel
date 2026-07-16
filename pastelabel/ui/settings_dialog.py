@@ -193,12 +193,16 @@ class SettingsDialog(QDialog):
         self.magnifier_size_spin.setObjectName("paramSpin")
         self.magnifier_size_spin.setRange(80, 400)
         self.magnifier_size_spin.setSingleStep(10)
-        self.magnifier_size_spin.setSuffix(" px")
+        self.magnifier_size_spin.setSuffix("")
         self.magnifier_size_spin.setMinimumWidth(150)
         self.magnifier_size_spin.setValue(max(80, min(400, int(MAGNIFIER_CONFIG.get('size', 160)))))
         magnifier_size_row.addWidget(self.magnifier_size_spin)
         magnifier_size_row.addStretch()
         opt_layout.addLayout(magnifier_size_row)
+
+        self.magnifier_always_on_cb = QCheckBox(tr("放大器始终跟随鼠标"))
+        self.magnifier_always_on_cb.setChecked(MAGNIFIER_CONFIG.get('always_on', False))
+        opt_layout.addWidget(self.magnifier_always_on_cb)
 
         grid_width_row = QHBoxLayout()
         grid_width_label = QLabel(tr("网格线粗细") + ":")
@@ -538,6 +542,7 @@ class SettingsDialog(QDialog):
         MAGNIFIER_CONFIG['zoom'] = magnifier_zoom
         magnifier_size = max(80, min(400, self.magnifier_size_spin.value()))
         MAGNIFIER_CONFIG['size'] = magnifier_size
+        MAGNIFIER_CONFIG['always_on'] = self.magnifier_always_on_cb.isChecked()
         nudge_step = max(1, min(5, self.nudge_step_spin.value()))
         NUDGE_CONFIG['step'] = nudge_step
         detection_box_scale_step = max(0.01, min(0.30, float(self.detection_box_scale_step_spin.value())))
@@ -564,6 +569,7 @@ class SettingsDialog(QDialog):
             label_position=label_position,
             magnifier_zoom=magnifier_zoom,
             magnifier_size=magnifier_size,
+            magnifier_always_on=MAGNIFIER_CONFIG['always_on'],
             label_cache_slots=label_cache_slots,
             nudge_step=nudge_step,
             detection_box_scale_step=detection_box_scale_step,

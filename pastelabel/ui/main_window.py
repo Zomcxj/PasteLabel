@@ -88,6 +88,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._magnifier_enabled = bool(settings.get('magnifier_enabled', False))
         MAGNIFIER_CONFIG['zoom'] = max(0.8, min(3.0, float(settings.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom']))))
         MAGNIFIER_CONFIG['size'] = max(80, min(400, int(settings.get('magnifier_size', MAGNIFIER_CONFIG['size']))))
+        MAGNIFIER_CONFIG['always_on'] = bool(settings.get('magnifier_always_on', MAGNIFIER_CONFIG['always_on']))
         NUDGE_CONFIG['step'] = max(1, min(5, int(settings.get('nudge_step', NUDGE_CONFIG['step']))))
         DETECTION_BOX_WHEEL_CONFIG['detection_box_scale_step'] = max(0.01, min(0.30, float(settings.get('detection_box_scale_step', DETECTION_BOX_WHEEL_CONFIG['detection_box_scale_step']))))
         DETECTION_BOX_WHEEL_CONFIG['paste_item_scale_step'] = max(0.01, min(0.30, float(settings.get('paste_item_scale_step', DETECTION_BOX_WHEEL_CONFIG['paste_item_scale_step']))))
@@ -284,9 +285,12 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
     def _sync_pasted_boxes_to_cache(self):
         if self._last_paste_slot is None or self._last_paste_count <= 0:
             return
+        start = self._last_paste_start
+        end = start + self._last_paste_count
+        if start < 0 or end > len(self.detection_boxes):
+            return
         slot = self.label_cache_slots[self._last_paste_slot]
-        end = self._last_paste_start + self._last_paste_count
-        slot['items'] = [dict(self.detection_boxes[i]) for i in range(self._last_paste_start, min(end, len(self.detection_boxes)))]
+        slot['items'] = [dict(self.detection_boxes[i]) for i in range(start, end)]
         self._save_label_cache_slots()
 
     def toggle_label_cache_slot_lock(self, slot_index):

@@ -12,41 +12,48 @@ class CanvasRendererMixin:
 
     def paintEvent(self, event):
         """绘制事件"""
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
+        scene = QPixmap(self.size())
+        scene.fill(Qt.transparent)
+        sp = QPainter(scene)
+        sp.setRenderHint(QPainter.Antialiasing)
 
         t = ThemeManager.get_theme()
         bg_color = t['canvas_bg']
         r = int(bg_color[1:3], 16)
         g = int(bg_color[3:5], 16)
         b = int(bg_color[5:7], 16)
-        painter.fillRect(self.rect(), QColor(r, g, b))
+        sp.fillRect(self.rect(), QColor(r, g, b))
 
         background_rect = self.get_background_rect()
 
         if self._editor.current_background is not None and background_rect:
-            self._draw_background(painter, background_rect)
+            self._draw_background(sp, background_rect)
 
         if background_rect:
-            self._draw_grid(painter, background_rect)
+            self._draw_grid(sp, background_rect)
 
         if background_rect:
-            self._draw_paste_items(painter, background_rect)
+            self._draw_paste_items(sp, background_rect)
 
         if (self._editor.show_labels_checkbox.isChecked() and
             background_rect and self._editor.detection_boxes):
-            self._draw_detection_boxes(painter, background_rect)
+            self._draw_detection_boxes(sp, background_rect)
 
         if self.is_drawing_box:
-            self._draw_temp_box(painter)
+            self._draw_temp_box(sp)
 
         if (getattr(self._editor, 'edit_mode', 'paste') == 'annotate' and
                 self.mouse_inside and self._editor.current_background is not None and
                 background_rect is not None):
-            self._draw_crosshair(painter)
+            self._draw_crosshair(sp)
+        sp.end()
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.drawPixmap(0, 0, scene)
 
         if background_rect:
-            self._draw_magnifier(painter, background_rect)
+            self._draw_magnifier(painter, background_rect, scene)
 
     def _draw_background(self, painter, background_rect):
         """绘制背景图"""
@@ -357,13 +364,13 @@ class CanvasRendererMixin:
         painter.drawLine(QPointF(0, self.mouse_pos.y()), QPointF(self.width(), self.mouse_pos.y()))
         painter.drawLine(QPointF(self.mouse_pos.x(), 0), QPointF(self.mouse_pos.x(), self.height()))
 
-    def _draw_magnifier(self, painter, background_rect):
+    def _draw_magnifier(self, painter, background_rect, scene):
         if not getattr(self._editor, '_magnifier_enabled', False):
             return
         if getattr(self._editor, 'edit_mode', 'paste') != 'annotate':
             return
-        always = MAGNIFIER_CONFIG.get('always_on', False)
-        if not always and self.selected_box is None and not self.is_drawing_box:
+        mag_pos = MAGNIFIER_CONFIG.get('position', 'side')
+        if mag_pos == 'side' and self.selected_box is None and not self.is_drawing_box:
             return
         if not self.mouse_inside or self.mouse_pos is None:
             return
@@ -382,51 +389,36 @@ class CanvasRendererMixin:
         src_x = max(0, min(pixmap.width() - src_size, orig_x - src_size // 2))
         src_y = max(0, min(pixmap.height() - src_size, orig_y - src_size // 2))
 
-        margin = 18
-        dst_x = self.mouse_pos.x() + margin
-        dst_y = self.mouse_pos.y() + margin
-        if dst_x + size > self.width():
-            dst_x = self.mouse_pos.x() - margin - size
-        if dst_y + size > self.height():
-            dst_y = self.mouse_pos.y() - margin - size
+        mag_pos = MAGNIFIER_CONFIG.get('position', 'side')
+        if mag_pos == 'center':
+            dst_x = self.mouse_pos.x() - size // 2
+            dst_y = self.mouse_pos.y() - size // 2
+            if dst_x < 0:
+                dst_x = self.mouse_pos.x() + 18
+            if dst_x + size > self.width():
+                dst_x = self.mouse_pos.x() - 18 - size
+            if dst_y < 0:
+                dst_y = self.mouse_pos.y() + 18
+            if dst_y + size > self.height():
+                dst_y = self.mouse_pos.y() - 18 - size
+        else:
+            margin = 18
+            dst_x = self.mouse_pos.x() + margin
+            dst_y = self.mouse_pos.y() + margin
+            if dst_x + size > self.width():
+                dst_x = self.mouse_pos.x() - margin - size
+            if dst_y + size > self.height():
+                dst_y = self.mouse_pos.y() - margin - size
         dst_x = max(0, min(self.width() - size, int(dst_x)))
         dst_y = max(0, min(self.height() - size, int(dst_y)))
         dst = QRectF(dst_x, dst_y, size, size)
 
         painter.save()
         painter.fillRect(dst, QColor(255, 255, 255, 210))
-        painter.drawPixmap(dst, pixmap, QRectF(src_x, src_y, src_size, src_size))
-        m_scale = size / src_size
-        painter.setClipRect(dst)
-        from ..core.config import BOX_BORDER_CONFIG
-        m_bw = max(1, min(4, float(BOX_BORDER_CONFIG['width']))) * m_scale
-        m_bw = max(0.5, m_bw)
-
-        def _draw_single_box(bx, by, bw, bh, label):
-            if bw <= 0 or bh <= 0:
-                return
-            if bx + bw < src_x or bx > src_x + src_size or by + bh < src_y or by > src_y + src_size:
-                return
-            lh = self._editor.get_label_color(label)
-            mc = QColor(int(lh[1:3], 16), int(lh[3:5], 16), int(lh[5:7], 16))
-            mx = dst.left() + (bx - src_x) * m_scale
-            my = dst.top() + (by - src_y) * m_scale
-            mw = bw * m_scale
-            mh = bh * m_scale
-            painter.setPen(QPen(mc, m_bw))
-            painter.drawRect(QRectF(mx, my, mw, mh))
-
-        for box in getattr(self._editor, 'detection_boxes', []):
-            _draw_single_box(box["x"], box["y"], box["width"], box["height"], box.get("label", ""))
-        # 编辑态中的框（拖拽/缩放中途）
-        if (getattr(self, 'is_dragging_box', False) or getattr(self, 'is_resizing_box', False)):
-            sb = getattr(self, 'selected_box', None)
-            if sb is not None:
-                _draw_single_box(sb["x"], sb["y"], sb["width"], sb["height"], sb.get("label", ""))
-        for pix, item_rect, label in getattr(self._editor, 'canvas_items', []):
-            ir = item_rect
-            _draw_single_box(ir.x(), ir.y(), ir.width(), ir.height(), label)
-        painter.setClipping(False)
+        wx = background_rect.left() + src_x * self.background_scale
+        wy = background_rect.top() + src_y * self.background_scale
+        ws = src_size * self.background_scale
+        painter.drawPixmap(dst, scene, QRectF(wx, wy, ws, ws))
         painter.setPen(QPen(QColor(60, 60, 60, 180), 1))
         painter.drawRect(dst)
         cross_color = QColor(CROSSHAIR_CONFIG.get('color', '#00FF80'))

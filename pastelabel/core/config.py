@@ -92,7 +92,7 @@ MAGNIFIER_CONFIG = {
     'enabled': False,
     'size': 160,
     'zoom': 2.0,
-    'always_on': False,  # 始终跟随鼠标显示，不依赖选中框
+    'position': 'side',  # 显示位置: side(侧边) / center(鼠标中心)
 }
 
 # 主题配置

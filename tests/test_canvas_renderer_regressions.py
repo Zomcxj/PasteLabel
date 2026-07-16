@@ -15,8 +15,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_magnifier_only_appears_for_selected_box_or_draw_mode():
     source = (ROOT / "pastelabel" / "canvas" / "canvas_renderer.py").read_text(encoding="utf-8")
 
-    assert "if self.selected_box is None and not self.is_drawing_box:" in source
+    assert "if mag_pos == 'side' and self.selected_box is None and not self.is_drawing_box:" in source
     assert "if getattr(self._editor, 'edit_mode', 'paste') != 'annotate':" in source
+    assert "MAGNIFIER_CONFIG.get('position', 'side')" in source
 
 
 def test_crosshair_is_drawn_only_in_annotate_mode_while_mouse_is_inside_canvas():

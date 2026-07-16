@@ -6,7 +6,7 @@
 PasteLabel/
 ├── .gitattributes             # 文本属性（Shell 脚本使用 LF）
 ├── .gitignore                 # Git 忽略规则
-├── build.sh                   # 跨平台 PyInstaller 构建脚本
+├── build.sh                   # 跨平台 PyInstaller 构建脚本（推荐，自动处理依赖）
 ├── paste_label.txt            # 默认贴图标签文件
 ├── requirements.txt           # Python 依赖
 ├── README.md                  # 项目说明
@@ -15,7 +15,7 @@ PasteLabel/
 ├── pastelabel/                # 主代码包
 │   ├── __init__.py
 │   ├── main.py                # 程序入口
-│   ├── PasteLabel.spec        # Windows PyInstaller spec
+│   ├── PasteLabel.spec        # Windows PyInstaller spec（`pyinstaller pastelabel/PasteLabel.spec` 直接编译）
 │   ├── sip.py                 # PyInstaller 的 PyQt5 SIP 兼容模块
 │   ├── canvas/                # 画布绘制与交互
 │   │   ├── __init__.py

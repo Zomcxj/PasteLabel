@@ -200,9 +200,19 @@ class SettingsDialog(QDialog):
         magnifier_size_row.addStretch()
         opt_layout.addLayout(magnifier_size_row)
 
-        self.magnifier_always_on_cb = QCheckBox(tr("放大器始终跟随鼠标"))
-        self.magnifier_always_on_cb.setChecked(MAGNIFIER_CONFIG.get('always_on', False))
-        opt_layout.addWidget(self.magnifier_always_on_cb)
+        magnifier_pos_row = QHBoxLayout()
+        magnifier_pos_label = QLabel(tr("放大器显示位置") + ":")
+        magnifier_pos_row.addWidget(magnifier_pos_label, 2)
+        self.magnifier_pos_combo = QComboBox()
+        self.magnifier_pos_combo.addItem(tr("侧边"), "side")
+        self.magnifier_pos_combo.addItem(tr("鼠标中心"), "center")
+        idx = self.magnifier_pos_combo.findData(MAGNIFIER_CONFIG.get('position', 'side'))
+        if idx >= 0:
+            self.magnifier_pos_combo.setCurrentIndex(idx)
+        self.magnifier_pos_combo.setMinimumWidth(150)
+        magnifier_pos_row.addWidget(self.magnifier_pos_combo)
+        magnifier_pos_row.addStretch()
+        opt_layout.addLayout(magnifier_pos_row)
 
         grid_width_row = QHBoxLayout()
         grid_width_label = QLabel(tr("网格线粗细") + ":")
@@ -542,7 +552,7 @@ class SettingsDialog(QDialog):
         MAGNIFIER_CONFIG['zoom'] = magnifier_zoom
         magnifier_size = max(80, min(400, self.magnifier_size_spin.value()))
         MAGNIFIER_CONFIG['size'] = magnifier_size
-        MAGNIFIER_CONFIG['always_on'] = self.magnifier_always_on_cb.isChecked()
+        MAGNIFIER_CONFIG['position'] = self.magnifier_pos_combo.currentData() or 'side'
         nudge_step = max(1, min(5, self.nudge_step_spin.value()))
         NUDGE_CONFIG['step'] = nudge_step
         detection_box_scale_step = max(0.01, min(0.30, float(self.detection_box_scale_step_spin.value())))
@@ -569,7 +579,7 @@ class SettingsDialog(QDialog):
             label_position=label_position,
             magnifier_zoom=magnifier_zoom,
             magnifier_size=magnifier_size,
-            magnifier_always_on=MAGNIFIER_CONFIG['always_on'],
+            magnifier_position=MAGNIFIER_CONFIG['position'],
             label_cache_slots=label_cache_slots,
             nudge_step=nudge_step,
             detection_box_scale_step=detection_box_scale_step,

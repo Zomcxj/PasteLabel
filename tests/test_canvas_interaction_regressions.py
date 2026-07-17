@@ -31,6 +31,7 @@ class Rect:
     def left(self): return self._x
     def top(self): return self._y
     def center(self): return Point(self._x + self._w / 2, self._y + self._h / 2)
+    def bottomRight(self): return Point(self._x + self._w, self._y + self._h)
     def contains(self, point):
         return self._x <= point.x() <= self._x + self._w and self._y <= point.y() <= self._y + self._h
 

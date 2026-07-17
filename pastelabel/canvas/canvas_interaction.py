@@ -83,11 +83,18 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self._drag_out_pending = False
 
     def _handle_left_click(self, mouse_pos):
+        if getattr(self, 'is_drawing_box', False):
+            return
         is_annotate = getattr(self._editor, 'edit_mode', 'paste') == 'annotate'
 
         if is_annotate:
-            # 标注模式下左键不进入框/贴图编辑，仅用于画框（W进入绘制模式）
-            pass
+            if self._editor.show_labels_checkbox.isChecked() and self._editor.current_background:
+                if self._handle_detection_box_click(mouse_pos):
+                    return
+            item_at_pos = self.find_item_at_position(mouse_pos)
+            if item_at_pos is not None:
+                self._handle_item_click(item_at_pos, mouse_pos)
+                return
         else:
             item_at_pos = self.find_item_at_position(mouse_pos)
             if item_at_pos is not None:
@@ -108,6 +115,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.hover_resize_handle = None
         self.selected_box = None
         self.selected_boxes = []
+        self.resize_handle = None
         _, rect, _ = self._editor.canvas_items[item_index]
 
         if self._editor.selected_item != item_index:
@@ -115,18 +123,11 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self.selected_item_size = (rect.width(), rect.height())
             self.update()
 
-        if self._check_resize_handle(mouse_pos, rect):
-            self.setCursor(Qt.ClosedHandCursor)
-            return
+        self._check_resize_handle(mouse_pos, rect)
 
-        background_rect = self.get_background_rect()
-        if background_rect:
-            item_x = (rect.x() * self.background_scale) + background_rect.left()
-            item_y = (rect.y() * self.background_scale) + background_rect.top()
-            item_rect = QRectF(item_x, item_y, rect.width() * self.background_scale,
-                              rect.height() * self.background_scale)
+        if not self.resize_handle:
             self._editor.save_undo_state()
-            self.drag_start = mouse_pos - item_rect.topLeft()
+            self.drag_start = mouse_pos
             self.is_dragging_item = True
             self.setCursor(Qt.ClosedHandCursor)
 
@@ -273,6 +274,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.selected_boxes = []
         self.hover_resize_target = None
         self.hover_resize_handle = None
+        self.resize_handle = None
         self.setCursor(Qt.ArrowCursor)
         self.update_status_label()
         self.update()
@@ -417,7 +419,13 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self.selected_item_size = (rect.width(), rect.height())
             self.selected_box = None
             self.selected_boxes = []
-            self.setCursor(Qt.OpenHandCursor)
+            handle = self._item_handle_at_pos(self.mouse_pos, rect)
+            if handle:
+                self.hover_resize_target = 'item'
+                self.hover_resize_handle = handle
+                self.setCursor(Qt.PointingHandCursor)
+            else:
+                self.setCursor(Qt.OpenHandCursor)
         elif (self._editor.selected_item is not None and
             0 <= self._editor.selected_item < len(self._editor.canvas_items)):
             _, rect, _ = self._editor.canvas_items[self._editor.selected_item]
@@ -574,12 +582,15 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
     def _drag_item(self):
         if not self._can_edit_canvas():
             return
+        delta = self.mouse_pos - self.drag_start
         bg_rect = self.get_background_rect()
         if bg_rect:
             p, rect, label = self._editor.canvas_items[self._editor.selected_item]
-            np = self.mouse_pos - self.drag_start
-            nx = (np.x() - bg_rect.left()) / self.background_scale
-            ny = (np.y() - bg_rect.top()) / self.background_scale
+            dx = delta.x() / self.background_scale
+            dy = delta.y() / self.background_scale
+
+            nx = rect.x() + dx
+            ny = rect.y() + dy
 
             nx = max(0, nx)
             ny = max(0, ny)
@@ -592,6 +603,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
             nr = QRectF(nx, ny, rect.width(), rect.height())
             self._editor.canvas_items[self._editor.selected_item] = (p, nr, label)
+            self.drag_start = self.mouse_pos
             self.update()
 
     def _scale_item(self):

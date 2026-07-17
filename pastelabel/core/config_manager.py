@@ -51,10 +51,12 @@ def _normalize_label_colors(colors):
 
 
 def get_label_color(labels, label, palette=None):
-    """按当前标签名升序确定色板槽位，不保留类别到颜色的映射。"""
+    """按标签名字符加权和稳定分配颜色，新增标签不影响已有标签颜色。"""
     colors = _normalize_label_colors(palette if palette is not None else LABEL_COLORS)
-    ordered_labels = sorted({str(value) for value in labels if value})
-    return colors[ordered_labels.index(label) % len(colors)] if label in ordered_labels else colors[0]
+    if not label:
+        return colors[0]
+    idx = sum(ord(c) * (i + 1) for i, c in enumerate(label)) % len(colors)
+    return colors[idx]
 
 
 def get_config_path():

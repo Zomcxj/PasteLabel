@@ -99,13 +99,16 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         self.is_manual_scale = False
 
     def find_item_at_position(self, pos):
-        """查找指定位置的贴图索引"""
+        """查找指定位置的贴图索引（含右下角缩放手柄区域）"""
         if self._editor.current_background is None:
             return None
 
         background_rect = self.get_background_rect()
         if background_rect is None:
             return None
+
+        from pastelabel.core.config import PASTE_ITEM_CONFIG
+        handle_size = PASTE_ITEM_CONFIG['handle_size']
 
         for i in range(len(self._editor.canvas_items) - 1, -1, -1):
             pixmap, rect, label = self._editor.canvas_items[i]
@@ -117,6 +120,13 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
 
             if (item_x <= pos.x() <= item_x + item_width and
                 item_y <= pos.y() <= item_y + item_height):
+                return i
+
+            # 右下角缩放手柄区域（延伸到贴图框外，与检测框手柄一致）
+            br_x = item_x + item_width
+            br_y = item_y + item_height
+            if (br_x - handle_size / 2 <= pos.x() <= br_x + handle_size / 2 and
+                br_y - handle_size / 2 <= pos.y() <= br_y + handle_size / 2):
                 return i
 
         return None

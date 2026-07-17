@@ -215,13 +215,18 @@ class TestSaveLoadRoundtrip:
             config_manager.CONFIG_PATH = original
 
 
-def test_label_color_uses_alphabetical_category_slot_and_cycles_palette():
+def test_label_color_stable_by_label_name():
     palette = ['#111111', '#222222']
     labels = ['zebra', 'apple', 'mango']
 
     assert config_manager.get_label_color(labels, 'apple', palette) == '#111111'
-    assert config_manager.get_label_color(labels, 'mango', palette) == '#222222'
-    assert config_manager.get_label_color(labels, 'zebra', palette) == '#111111'
+    assert config_manager.get_label_color(labels, 'mango', palette) == '#111111'
+    assert config_manager.get_label_color(labels, 'zebra', palette) == '#222222'
+
+    # adding new label does not shift existing colors
+    labels2 = ['zebra', 'apple', 'mango', 'newlabel']
+    assert config_manager.get_label_color(labels2, 'apple', palette) == '#111111'
+    assert config_manager.get_label_color(labels2, 'zebra', palette) == '#222222'
 
     def test_crosshair_settings_roundtrip_through_save_all(self, tmp_path):
         original = _with_temp_config(tmp_path)

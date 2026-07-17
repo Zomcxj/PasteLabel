@@ -55,10 +55,12 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 self._handle_background_click(mouse_pos)
             return
 
-        if self.is_drawing_box and event.button() == Qt.LeftButton:
-            self._drag_out_pending = False
-            if self._handle_drawing_press(mouse_pos):
-                return
+        if self.is_drawing_box:
+            # 绘制模式下只响应左键画框，禁止贴图/检测框进入编辑态
+            if event.button() == Qt.LeftButton:
+                self._drag_out_pending = False
+                self._handle_drawing_press(mouse_pos)
+            return
 
         if event.button() == Qt.RightButton:
             self._drag_out_pending = False
@@ -111,6 +113,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self._clear_selection()
 
     def _handle_item_click(self, item_index, mouse_pos):
+        if self.is_drawing_box:
+            return
         self.hover_resize_target = None
         self.hover_resize_handle = None
         self.selected_box = None
@@ -197,6 +201,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         return best_box, best_handle
 
     def _handle_detection_box_click(self, mouse_pos):
+        if self.is_drawing_box:
+            return False
         if not self._can_edit_canvas():
             return False
         background_rect = self.get_background_rect()
@@ -397,6 +403,9 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         old_handle = self.hover_resize_handle
         self.hover_resize_target = None
         self.hover_resize_handle = None
+
+        if self.is_drawing_box:
+            return
 
         if self._editor.current_background is None or self._editor.current_background_index < 0:
             if (old_target, old_handle) != (self.hover_resize_target, self.hover_resize_handle):

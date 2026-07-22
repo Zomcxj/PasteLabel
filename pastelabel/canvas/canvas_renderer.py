@@ -382,23 +382,15 @@ class CanvasRendererMixin:
             return
 
         src_size = max(1, int(size / zoom))
-        orig_x = int((self.mouse_pos.x() - background_rect.left()) / self.background_scale)
-        orig_y = int((self.mouse_pos.y() - background_rect.top()) / self.background_scale)
-        src_x = max(0, min(pixmap.width() - src_size, orig_x - src_size // 2))
-        src_y = max(0, min(pixmap.height() - src_size, orig_y - src_size // 2))
+        src_x = int(self.mouse_pos.x() - src_size // 2)
+        src_y = int(self.mouse_pos.y() - src_size // 2)
+        src_x = max(0, min(self.width() - src_size, src_x))
+        src_y = max(0, min(self.height() - src_size, src_y))
 
         mag_pos = MAGNIFIER_CONFIG.get('position', 'side')
         if mag_pos == 'center':
             dst_x = self.mouse_pos.x() - size // 2
             dst_y = self.mouse_pos.y() - size // 2
-            if dst_x < 0:
-                dst_x = self.mouse_pos.x() + 18
-            if dst_x + size > self.width():
-                dst_x = self.mouse_pos.x() - 18 - size
-            if dst_y < 0:
-                dst_y = self.mouse_pos.y() + 18
-            if dst_y + size > self.height():
-                dst_y = self.mouse_pos.y() - 18 - size
         else:
             margin = 18
             dst_x = self.mouse_pos.x() + margin
@@ -407,16 +399,13 @@ class CanvasRendererMixin:
                 dst_x = self.mouse_pos.x() - margin - size
             if dst_y + size > self.height():
                 dst_y = self.mouse_pos.y() - margin - size
-        dst_x = max(0, min(self.width() - size, int(dst_x)))
-        dst_y = max(0, min(self.height() - size, int(dst_y)))
+            dst_x = max(0, min(self.width() - size, int(dst_x)))
+            dst_y = max(0, min(self.height() - size, int(dst_y)))
         dst = QRectF(dst_x, dst_y, size, size)
 
         painter.save()
         painter.fillRect(dst, QColor(255, 255, 255, 210))
-        wx = background_rect.left() + src_x * self.background_scale
-        wy = background_rect.top() + src_y * self.background_scale
-        ws = src_size * self.background_scale
-        painter.drawPixmap(dst, scene, QRectF(wx, wy, ws, ws))
+        painter.drawPixmap(dst, scene, QRectF(src_x, src_y, src_size, src_size))
         painter.setPen(QPen(QColor(60, 60, 60, 180), 1))
         painter.drawRect(dst)
         cross_color = QColor(CROSSHAIR_CONFIG.get('color', '#00FF80'))

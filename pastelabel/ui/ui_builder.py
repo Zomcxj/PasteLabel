@@ -7,8 +7,8 @@ from PyQt5.QtWidgets import (
     QListWidget, QListWidgetItem, QSplitter, QScrollArea,
     QLineEdit, QCheckBox, QSpinBox, QGroupBox, QFrame, QMenu, QApplication
 )
-from PyQt5.QtGui import QIcon, QPixmap, QPainter, QDrag
-from PyQt5.QtCore import Qt, QSize, QTimer, QPoint, QMimeData, QUrl
+from PyQt5.QtGui import QIcon, QPixmap, QPainter, QDrag, QColor, QPen, QConicalGradient
+from PyQt5.QtCore import Qt, QSize, QTimer, QPoint, QMimeData, QUrl, QRectF, QPointF
 from PyQt5.QtWidgets import QWidgetAction
 from .segmented_control import AnimatedSegmentedControl
 
@@ -17,6 +17,55 @@ from ..core.utils import create_thumbnail
 from ..canvas import Canvas
 from .theme import ThemeManager
 from .i18n import t as tr
+
+
+class _SpinnerWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._angle = 0
+        self._text = ""
+        self._timer = QTimer(self)
+        self._timer.setInterval(30)
+        self._timer.timeout.connect(self._rotate)
+        self.setFixedSize(180, 60)
+
+    def setText(self, text):
+        self._text = text
+        self.adjustSize()
+
+    def start(self):
+        self._timer.start()
+
+    def stop(self):
+        self._timer.stop()
+
+    def _rotate(self):
+        self._angle = (self._angle + 10) % 360
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        cx, cy, r = 18, 30, 14
+        pen = QPen(QColor(255, 255, 255), 3, Qt.SolidLine, Qt.RoundCap)
+        p.setPen(pen)
+        p.drawArc(QRectF(cx - r, cy - r, r * 2, r * 2),
+                  self._angle * 16, 90 * 16)
+        bg = QColor(0, 0, 0, 160)
+        p.setBrush(bg)
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(QRectF(40, 6, self.width() - 44, self.height() - 12), 10, 10)
+        p.setPen(QColor(255, 255, 255))
+        p.setFont(p.font())
+        p.drawText(QRectF(42, 6, self.width() - 48, self.height() - 12),
+                   Qt.AlignCenter, self._text)
+        p.end()
+
+    def adjustSize(self):
+        fm = self.fontMetrics()
+        tw = fm.horizontalAdvance(self._text) if hasattr(fm, 'horizontalAdvance') else fm.width(self._text)
+        w = max(180, 50 + tw + 20)
+        self.setFixedSize(w, 60)
 
 try:
     from PyQt5.QtSvg import QSvgRenderer
@@ -42,6 +91,7 @@ SVG_FILE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d=
 SVG_FOLDER = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/></svg>'
 SUN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
 MOON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
+PROCESS_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2l2.4 7.2H22l-6.2 4.4 2.4 7.2L12 16.4 5.8 20.8l2.4-7.2L2 9.2h7.6z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/></svg>'
 
 
 class DragOutListWidget(QListWidget):
@@ -287,14 +337,47 @@ class UIBuilderMixin:
     def _create_options_menu(self, layout):
         """创建选项下拉菜单按钮"""
 
-        self.cache_btn = QPushButton(tr("缓存"))
-        self.cache_btn.setObjectName("optionsBtn")
-        self.cache_btn.setFixedWidth(70)
-        self.cache_btn.setFixedHeight(24)
-        self.cache_btn.setToolTip(tr("复制缓存管理"))
-        self.cache_menu = None
-        layout.addWidget(self.cache_btn)
-        self._rebuild_label_cache_menu()
+        self.mode_seg = QFrame()
+        self.mode_seg.setObjectName("modeSeg")
+        self.mode_seg.setFixedWidth(150)
+        self.mode_seg.setFixedHeight(24)
+        self.mode_seg.setContentsMargins(0, 0, 0, 0)
+        mode_layout = QHBoxLayout(self.mode_seg)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        mode_layout.setSpacing(0)
+
+        self.btn_annotate_mode = QPushButton(tr("标注"))
+        self.btn_annotate_mode.setObjectName("modeSegBtn")
+        self.btn_annotate_mode.setCheckable(True)
+        self.btn_annotate_mode.setChecked(True)
+        self.btn_annotate_mode.setFixedWidth(74)
+        self.btn_annotate_mode.setFixedHeight(22)
+        self.btn_annotate_mode.clicked.connect(lambda: self._toggle_edit_mode())
+        mode_layout.addWidget(self.btn_annotate_mode)
+
+        self.btn_paste_mode = QPushButton(tr("贴图"))
+        self.btn_paste_mode.setObjectName("modeSegBtn")
+        self.btn_paste_mode.setCheckable(True)
+        self.btn_paste_mode.setFixedWidth(74)
+        self.btn_paste_mode.setFixedHeight(22)
+        self.btn_paste_mode.clicked.connect(lambda: self._toggle_edit_mode())
+        mode_layout.addWidget(self.btn_paste_mode)
+
+        self.mode_seg_ctrl = AnimatedSegmentedControl(self.mode_seg, self.btn_annotate_mode, self.btn_paste_mode)
+        self.mode_seg_ctrl.set_accent(ThemeManager.get_theme()["interaction_active"])
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, lambda: self.mode_seg_ctrl.update_position(animated=False))
+        layout.addWidget(self.mode_seg)
+
+        layout.addSpacing(4)
+
+        self.memory_btn = QPushButton(tr("记忆"))
+        self.memory_btn.setObjectName("optionsBtn")
+        self.memory_btn.setFixedWidth(70)
+        self.memory_btn.setFixedHeight(24)
+        self.memory_btn.setToolTip(tr("记忆记录"))
+        self.memory_btn.clicked.connect(self._show_memory_records)
+        layout.addWidget(self.memory_btn)
 
         layout.addSpacing(4)
 
@@ -359,13 +442,14 @@ class UIBuilderMixin:
 
         layout.addSpacing(4)
 
-        self.memory_btn = QPushButton(tr("记忆"))
-        self.memory_btn.setObjectName("optionsBtn")
-        self.memory_btn.setFixedWidth(70)
-        self.memory_btn.setFixedHeight(24)
-        self.memory_btn.setToolTip(tr("记忆记录"))
-        self.memory_btn.clicked.connect(self._show_memory_records)
-        layout.addWidget(self.memory_btn)
+        self.cache_btn = QPushButton(tr("缓存"))
+        self.cache_btn.setObjectName("optionsBtn")
+        self.cache_btn.setFixedWidth(70)
+        self.cache_btn.setFixedHeight(24)
+        self.cache_btn.setToolTip(tr("复制缓存管理"))
+        self.cache_menu = None
+        layout.addWidget(self.cache_btn)
+        self._rebuild_label_cache_menu()
 
         layout.addSpacing(4)
 
@@ -379,37 +463,14 @@ class UIBuilderMixin:
 
         layout.addSpacing(4)
 
-        self.mode_seg = QFrame()
-        self.mode_seg.setObjectName("modeSeg")
-        self.mode_seg.setFixedWidth(150)
-        self.mode_seg.setFixedHeight(24)
-        self.mode_seg.setContentsMargins(0, 0, 0, 0)
-        mode_layout = QHBoxLayout(self.mode_seg)
-        mode_layout.setContentsMargins(0, 0, 0, 0)
-        mode_layout.setSpacing(0)
-
-        self.btn_annotate_mode = QPushButton(tr("标注"))
-        self.btn_annotate_mode.setObjectName("modeSegBtn")
-        self.btn_annotate_mode.setCheckable(True)
-        self.btn_annotate_mode.setChecked(True)
-        self.btn_annotate_mode.setFixedWidth(74)
-        self.btn_annotate_mode.setFixedHeight(22)
-        self.btn_annotate_mode.clicked.connect(lambda: self._toggle_edit_mode())
-        mode_layout.addWidget(self.btn_annotate_mode)
-
-        self.btn_paste_mode = QPushButton(tr("贴图"))
-        self.btn_paste_mode.setObjectName("modeSegBtn")
-        self.btn_paste_mode.setCheckable(True)
-        self.btn_paste_mode.setFixedWidth(74)
-        self.btn_paste_mode.setFixedHeight(22)
-        self.btn_paste_mode.clicked.connect(lambda: self._toggle_edit_mode())
-        mode_layout.addWidget(self.btn_paste_mode)
-
-        self.mode_seg_ctrl = AnimatedSegmentedControl(self.mode_seg, self.btn_annotate_mode, self.btn_paste_mode)
-        self.mode_seg_ctrl.set_accent(ThemeManager.get_theme()["interaction_active"])
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self.mode_seg_ctrl.update_position(animated=False))
-        layout.addWidget(self.mode_seg)
+        self.process_btn = QPushButton(tr("导出"))
+        self.process_btn.setObjectName("optionsBtn")
+        self.process_btn.setFixedWidth(70)
+        self.process_btn.setFixedHeight(24)
+        self.process_btn.setToolTip(tr("数据处理"))
+        self.process_btn.setCheckable(True)
+        self.process_btn.clicked.connect(self._toggle_processing_panel)
+        layout.addWidget(self.process_btn)
 
     def _rebuild_label_cache_menu(self):
         if not hasattr(self, 'cache_btn'):
@@ -594,12 +655,16 @@ class UIBuilderMixin:
         """创建分割器"""
         canvas_widget = QWidget()
         canvas_layout = QVBoxLayout(canvas_widget)
+        canvas_layout.setContentsMargins(0, 0, 0, 0)
         self.canvas = Canvas(self)
         canvas_scroll = QScrollArea()
         canvas_scroll.setObjectName("canvasScroll")
         canvas_scroll.setWidget(self.canvas)
         canvas_scroll.setWidgetResizable(True)
         canvas_layout.addWidget(canvas_scroll)
+
+        self._loading_spinner = _SpinnerWidget(canvas_scroll.viewport())
+        self._loading_spinner.hide()
 
         control_widget = self._create_control_panel()
         control_widget.setFixedWidth(350)
@@ -844,6 +909,22 @@ class UIBuilderMixin:
             self.small_list.setResizeMode(QListWidget.Adjust)
             self.small_list.setVerticalScrollMode(QListWidget.ScrollPerPixel)
             self.small_list.setHorizontalScrollMode(QListWidget.ScrollPerPixel)
+
+    def _show_loading_spinner(self, text=""):
+        self._loading_spinner.setText(text or tr("识别中..."))
+        self._loading_spinner.adjustSize()
+        parent = self._loading_spinner.parentWidget()
+        if parent:
+            pw, ph = parent.width(), parent.height()
+            sw, sh = self._loading_spinner.width(), self._loading_spinner.height()
+            self._loading_spinner.move((pw - sw) // 2, (ph - sh) // 2)
+        self._loading_spinner.show()
+        self._loading_spinner.raise_()
+        self._loading_spinner.start()
+
+    def _hide_loading_spinner(self):
+        self._loading_spinner.stop()
+        self._loading_spinner.hide()
 
     def _create_bottom_buttons(self, layout):
         """创建底部按钮"""

@@ -91,7 +91,8 @@ class ImageLoaderMixin:
         self.canvas_items_dict.clear()
         self.canvas_items.clear()
 
-        # 延后列表刷新，避免路径先显示而首图还没完成首轮渲染。
+        self._show_loading_spinner()
+
         self.background_list.setUpdatesEnabled(False)
         try:
             for file_name in sorted(os.listdir(folder_path), key=natural_sort_key):
@@ -117,8 +118,7 @@ class ImageLoaderMixin:
                         self.canvas.reset_view()
                         self.update_label_list()
                         self.canvas.update()
-                    if not load_first and new_index % 20 == 0:
-                        QApplication.processEvents()
+                    QApplication.processEvents()
 
             if self.background_images:
                 if load_first:
@@ -134,6 +134,7 @@ class ImageLoaderMixin:
                 QMessageBox.warning(self, tr("警告"), tr("该文件夹中没有找到支持的图片文件"))
                 self.update_file_count()
         finally:
+            self._hide_loading_spinner()
             self.background_list.setUpdatesEnabled(True)
             self.background_list.viewport().update()
 
@@ -402,8 +403,7 @@ class ImageLoaderMixin:
             for box in boxes:
                 if "label" in box and box["label"]:
                     self.global_labels.add(box["label"])
-            if idx % 20 == 0:
-                QApplication.processEvents()
+            QApplication.processEvents()
 
     def update_file_count(self):
         """更新文件计数显示和标题栏"""

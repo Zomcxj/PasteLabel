@@ -301,6 +301,15 @@ class ThemeManager:
                 background-color: {t['scrollbar_bg']};
                 color: {t['text_disabled']};
             }}
+            QTextEdit#logArea {{
+                border: 1px solid {t['groupbox_border']};
+                border-radius: 6px;
+                background-color: {t['widget_bg']};
+                color: {t['text_secondary']};
+                font-family: Consolas, "Courier New", monospace;
+                font-size: 11px;
+                padding: 4px;
+            }}
             QGroupBox {{
                 border: 1px solid {t['groupbox_border']};
                 border-radius: 6px;

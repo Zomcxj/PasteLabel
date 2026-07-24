@@ -1,4 +1,5 @@
 """对话框辅助函数：统一标题栏主题和按钮文字。"""
+from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QDialog, QInputDialog, QMessageBox, QColorDialog, QLabel, QPushButton
 
 from . import i18n
@@ -34,6 +35,9 @@ class ThemedMessageBox(QMessageBox):
         super().showEvent(event)
         center_on_parent(self)
         sync_titlebar(self)
+        QTimer.singleShot(0, self._fix_detail_buttons)
+
+    def _fix_detail_buttons(self):
         for btn in self.findChildren(QPushButton):
             raw = btn.text().replace('&', '')
             if raw in ("Show Details...", "Show Details", "显示详情"):

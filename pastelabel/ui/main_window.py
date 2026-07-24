@@ -20,6 +20,7 @@ from .i18n import t as tr
 from .theme import ThemeManager, ThemeMode
 from .dwm import set_titlebar_dark
 from .settings_dialog import SettingsDialog
+from .processing_panel import ProcessingPanel
 
 
 class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
@@ -1035,6 +1036,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         if hasattr(self, 'memory_btn'):
             self.memory_btn.setText(tr("记忆"))
             self.memory_btn.setToolTip(tr("记忆记录"))
+        if hasattr(self, 'process_btn'):
+            self.process_btn.setText(tr("导出"))
+            self.process_btn.setToolTip(tr("数据处理"))
         if hasattr(self, '_rebuild_label_cache_menu'):
             self._rebuild_label_cache_menu()
         if hasattr(self, '_draw_box_action'):
@@ -1140,6 +1144,48 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         """打开设置对话框"""
         dialog = SettingsDialog(self)
         dialog.exec_()
+
+    def _toggle_processing_panel(self):
+        if not hasattr(self, '_processing_panel') or self._processing_panel is None:
+            self._processing_panel = ProcessingPanel(self)
+        if self._processing_panel.isVisible():
+            self._processing_panel.hide()
+        else:
+            self._update_processing_panel_labels()
+            self._processing_panel.show()
+            self._center_processing_panel()
+
+    def _update_processing_panel_labels(self):
+        if hasattr(self, '_processing_panel') and self._processing_panel:
+            self._processing_panel._refresh_texts()
+            self._processing_panel._update_labels_list()
+
+    def _center_processing_panel(self):
+        if not hasattr(self, '_processing_panel') or not self._processing_panel:
+            return
+        parent_geo = self.geometry()
+        child_geo = self._processing_panel.geometry()
+        x = parent_geo.x() + (parent_geo.width() - child_geo.width()) // 2
+        y = parent_geo.y() + (parent_geo.height() - child_geo.height()) // 2
+        self._processing_panel.move(x, y)
+
+    def closeEvent(self, event):
+        if hasattr(self, '_processing_panel') and self._processing_panel and self._processing_panel.isVisible():
+            from PyQt5.QtWidgets import QMessageBox
+            from .dwm import set_titlebar_dark
+            from .i18n import t as _t
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Warning)
+            box.setWindowTitle(tr("提示"))
+            box.setText(tr("数据处理正在进行中，无法关闭主界面"))
+            ok_btn = box.addButton(_t("确定"), QMessageBox.AcceptRole)
+            box.setDefaultButton(ok_btn)
+            hwnd = int(box.winId())
+            set_titlebar_dark(hwnd, True)
+            box.exec_()
+            event.ignore()
+            return
+        event.accept()
 
     def get_image_info(self):
         """获取当前图片信息"""

@@ -31,14 +31,25 @@ PasteLabel/
 │   │   ├── editor_protocol.py
 │   │   ├── exception_hook.py  # 全局异常与 Qt 消息捕获 -> ~/pastelabel.log
 │   │   └── utils.py
-│   ├── engine/                # 图片、标签、保存和事件业务逻辑
+│   ├── engine/                # 图片、标签、保存、事件与数据处理
 │   │   ├── __init__.py
+│   │   ├── augmenter/         # 数据增强模块
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py
+│   │   │   ├── color.py
+│   │   │   ├── flipt.py
+│   │   │   ├── noise.py
+│   │   │   ├── rotate.py
+│   │   │   ├── scale.py
+│   │   │   └── translate.py
 │   │   ├── event_handler.py
 │   │   ├── image_loader.py
 │   │   ├── label_manager.py
 │   │   ├── paste_engine.py
 │   │   ├── save_manager.py
-│   │   └── undo_manager.py
+│   │   ├── splitter.py
+│   │   ├── undo_manager.py
+│   │   └── yolo_exporter.py
 │   └── ui/                    # 主窗口、对话框、主题与国际化
 │       ├── __init__.py
 │       ├── dialog_helpers.py
@@ -47,6 +58,7 @@ PasteLabel/
 │       ├── i18n.py
 │       ├── main_window.py
 │       ├── memory_dialog.py
+│       ├── processing_panel.py
 │       ├── segmented_control.py
 │       ├── settings_dialog.py
 │       ├── theme.py

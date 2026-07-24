@@ -336,6 +336,7 @@ qtcore.QRectF = type('QRectF', (), {
 qtcore.QRect = type('QRect', (), {'__init__': lambda self, *a: None})
 qtcore.QSize = type('QSize', (), {'__init__': lambda self, w=0, h=0: None})
 qtcore.QSizeF = type('QSizeF', (), {'__init__': lambda self, w=0, h=0: None})
+qtcore.QThread = type('QThread', (), {'__init__': lambda self, *a, **kw: None})
 qtcore.QTimer = type('QTimer', (), {'singleShot': staticmethod(lambda *a: None)})
 qtcore.QPropertyAnimation = type('QPropertyAnimation', (), {'__init__': lambda self, *a: None})
 qtcore.QEasingCurve = type('QEasingCurve', (), {'OutCubic': 0})
@@ -402,6 +403,7 @@ qtgui.QDragEnterEvent = type('QDragEnterEvent', (), {'__init__': lambda self, *a
 qtgui.QDropEvent = type('QDropEvent', (), {'__init__': lambda self, *a: None})
 qtgui.QDrag = type('QDrag', (), {'__init__': lambda self, *a: None, 'exec_': lambda self, *a: 0})
 qtgui.QFontDatabase = type('QFontDatabase', (), {'addApplicationFont': staticmethod(lambda *a: 0)})
+qtgui.QImage = type('QImage', (), {})
 
 qtwidgets = types.ModuleType('PyQt5.QtWidgets')
 qtwidgets.QWidget = _MockQWidget
@@ -478,6 +480,32 @@ qtwidgets.QFrame = type('QFrame', (_MockQWidget,), {
     'setFrameShape': lambda self, *a: None,
     'setFrameShadow': lambda self, *a: None,
     'setFixedHeight': lambda self, *a: None,
+})
+qtwidgets.QGridLayout = type('QGridLayout', (_MockQBoxLayout,), {})
+qtwidgets.QTextBrowser = type('QTextBrowser', (_MockQWidget,), {
+    'setReadOnly': lambda self, *a: None,
+    'setText': lambda self, *a: None,
+    'append': lambda self, *a: None,
+    'setPlaceholderText': lambda self, *a: None,
+    'verticalScrollBar': lambda self: type('SB', (), {'setValue': lambda s, v: None, 'maximum': lambda s: 0})(),
+})
+qtwidgets.QTextEdit = type('QTextEdit', (_MockQWidget,), {
+    'setReadOnly': lambda self, *a: None,
+    'setText': lambda self, *a: None,
+    'append': lambda self, *a: None,
+    'setPlaceholderText': lambda self, *a: None,
+    'textCursor': lambda self: type('TC', (), {
+        'movePosition': lambda s, *a: None,
+        'setPosition': lambda s, *a: None,
+        'insertText': lambda s, *a: None,
+        'End': 0,
+        'Start': 1,
+        'EndOfBlock': 2,
+        'KeepAnchor': 0,
+    })(),
+    'setVerticalScrollBar': lambda self, *a: None,
+    'setContentsMargins': lambda self, *a: None,
+    'setMinimumHeight': lambda self, *a: None,
 })
 qtwidgets.QComboBox = type('QComboBox', (_MockQWidget,), {
     'addItems': lambda self, *a: None,

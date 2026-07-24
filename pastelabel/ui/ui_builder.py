@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QListWidget, QListWidgetItem, QSplitter, QScrollArea,
     QLineEdit, QCheckBox, QSpinBox, QGroupBox, QFrame, QMenu, QApplication
 )
-from PyQt5.QtGui import QIcon, QPixmap, QPainter, QDrag, QColor, QPen, QConicalGradient
+from PyQt5.QtGui import QIcon, QPixmap, QPainter, QDrag, QColor, QPen
 from PyQt5.QtCore import Qt, QSize, QTimer, QPoint, QMimeData, QUrl, QRectF, QPointF
 from PyQt5.QtWidgets import QWidgetAction
 from .segmented_control import AnimatedSegmentedControl

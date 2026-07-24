@@ -21,6 +21,7 @@ Thumbs.db
 *.exe
 
 # Data
+exports/
 images/
 x-anylabeling-matting/
 images_paste_output/

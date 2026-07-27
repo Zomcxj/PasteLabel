@@ -38,23 +38,65 @@ def _filter_shortcuts(shortcuts):
     return {k: v for k, v in shortcuts.items() if k not in DISABLED_SHORTCUT_ACTIONS}
 
 
-def _normalize_label_colors(colors):
+def _normalize_label_colors(colors, extend=False):
     if not isinstance(colors, list) or not colors:
         return list(LABEL_COLORS)
     normalized = [str(color) for color in colors]
     try:
         if all(len(color) == 7 and color.startswith('#') and int(color[1:], 16) >= 0 for color in normalized):
-            return normalized
+            if not extend:
+                return normalized
+            # Keep custom colors first, then fill from defaults without duplicates.
+            palette = []
+            for color in normalized + list(LABEL_COLORS):
+                if color not in palette:
+                    palette.append(color)
+                if len(palette) >= 30:
+                    return palette
     except ValueError:
         pass
     return list(LABEL_COLORS)
 
 
-def get_label_color(labels, label, palette=None):
-    """按标签名字符加权和稳定分配颜色，新增标签不影响已有标签颜色。"""
-    colors = _normalize_label_colors(palette if palette is not None else LABEL_COLORS)
+def _normalize_label_color_map(color_map):
+    if not isinstance(color_map, dict):
+        return {}
+    normalized = {}
+    for label, color in color_map.items():
+        label = str(label)
+        color = str(color)
+        try:
+            if label and len(color) == 7 and color.startswith('#') and int(color[1:], 16) >= 0:
+                normalized[label] = color
+        except ValueError:
+            continue
+    return normalized
+
+
+def get_label_color(labels, label, palette=None, label_color_map=None):
+    """获取标签颜色，优先使用已保存的显式颜色。"""
+    colors = _normalize_label_colors(
+        palette if palette is not None else LABEL_COLORS, extend=palette is None,
+    )
     if not label:
         return colors[0]
+    label = str(label)
+    color_map = _normalize_label_color_map(
+        load_config().get('label_color_map') if palette is None and label_color_map is None
+        else label_color_map
+    )
+    if label in color_map:
+        return color_map[label]
+    if len(colors) >= 30:
+        unique_labels = sorted({str(value) for value in labels if value})
+        if label in unique_labels:
+            start = unique_labels.index(label) % len(colors)
+            used_colors = set(color_map.values())
+            for offset in range(len(colors)):
+                color = colors[(start + offset) % len(colors)]
+                if color not in used_colors:
+                    return color
+            return colors[start]
     idx = sum(ord(c) * (i + 1) for i, c in enumerate(label)) % len(colors)
     return colors[idx]
 
@@ -240,7 +282,8 @@ def load_all():
         'crosshair_color': str(config.get('crosshair_color', CROSSHAIR_CONFIG['color'])),
         'crosshair_alpha': int(config.get('crosshair_alpha', CROSSHAIR_CONFIG['alpha'])),
         'box_border_width': float(config.get('box_border_width', BOX_BORDER_CONFIG['width'])),
-        'label_colors': _normalize_label_colors(config.get('label_colors')),
+        'label_colors': _normalize_label_colors(config.get('label_colors'), extend=True),
+        'label_color_map': _normalize_label_color_map(config.get('label_color_map')),
         'memory': load_memory_records(),
     }
 
@@ -254,7 +297,7 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
                detection_box_scale_step=None, paste_item_scale_step=None,
                detection_box_wheel_edge_step=None,
               crosshair_width=None, crosshair_color=None, crosshair_alpha=None,
-              box_border_width=None, label_colors=None):
+               box_border_width=None, label_colors=None, label_color_map=None):
     """保存所有配置"""
     config = load_config()
     if shortcuts is not None:
@@ -307,5 +350,7 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
     if box_border_width is not None:
         config['box_border_width'] = max(1, min(4, float(box_border_width)))
     if label_colors is not None:
-        config['label_colors'] = _normalize_label_colors(label_colors)
+        config['label_colors'] = _normalize_label_colors(label_colors, extend=True)
+    if label_color_map is not None:
+        config['label_color_map'] = _normalize_label_color_map(label_color_map)
     return save_config(config)

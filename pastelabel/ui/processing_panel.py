@@ -430,6 +430,9 @@ class ProcessingPanel(QWidget):
             return sorted(labels)
         if hasattr(self._editor, 'global_labels') and self._editor.global_labels:
             return sorted(self._editor.global_labels)
+        worker = getattr(self._editor, '_background_label_scan_worker', None)
+        if worker is not None and worker.isRunning():
+            return []
         total = len(self._editor.background_images)
         for i, img_path in enumerate(self._editor.background_images):
             jp = os.path.splitext(img_path)[0] + ".json"
@@ -470,7 +473,16 @@ class ProcessingPanel(QWidget):
         self._exp_scan_label.setVisible(True)
         self._exp_scan_label.setLabel(tr("识别中..."))
         QApplication.processEvents()
-        labels = self._scan_labels_from_json()
+        if getattr(self._editor, '_background_label_scan_pending', False):
+            return
+        if (self._editor.background_images
+                and getattr(self._editor, '_background_label_scan_completed', False)):
+            labels = sorted(self._editor.global_labels)
+        else:
+            labels = self._scan_labels_from_json()
+            worker = getattr(self._editor, '_background_label_scan_worker', None)
+            if worker is not None and worker.isRunning():
+                return
         self._exp_scan_label.setVisible(False)
         if not labels:
             msg = QLabel(tr("未检测到标签"))

@@ -45,8 +45,9 @@ class TestShortcutConfig:
 
 class TestLabelColors:
 
-    def test_has_16_colors(self):
-        assert len(config.LABEL_COLORS) == 16
+    def test_has_at_least_30_distinct_colors(self):
+        assert len(config.LABEL_COLORS) >= 30
+        assert len(set(config.LABEL_COLORS)) >= 30
 
     def test_all_hex_format(self):
         for c in config.LABEL_COLORS:

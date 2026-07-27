@@ -3,37 +3,57 @@
 """
 import os
 import json
+import concurrent.futures
 from PyQt5.QtWidgets import (
     QApplication, QFileDialog, QListWidgetItem, QMessageBox
 )
 from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QSize, QThread, QTimer, pyqtSignal
 
 from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
 from ..core.utils import PathUtils, natural_sort_key, create_thumbnail
 from ..ui.i18n import t as tr
 
 
+def _scan_single_json(json_path):
+    """Parse a single LabelMe JSON and return its labels, or None on error."""
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return None
+    shapes = data.get("shapes") if isinstance(data, dict) else None
+    if not isinstance(shapes, list):
+        return None
+    labels = set()
+    for shape in shapes:
+        label = shape.get("label") if isinstance(shape, dict) else None
+        if isinstance(label, str) and label.strip():
+            labels.add(label)
+    return labels
+
+
 def scan_dataset_labels(image_paths, is_interrupted=None):
     """Return valid LabelMe labels from the JSON files beside image paths."""
     labels = set()
+    pending = []
     for image_path in image_paths:
         if is_interrupted and is_interrupted():
             break
-        json_path = f"{os.path.splitext(image_path)[0]}.json"
-        try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception:
-            continue
+        pending.append(f"{os.path.splitext(image_path)[0]}.json")
+        if len(pending) >= 500:
+            break
+    if not pending:
+        return labels
 
-        shapes = data.get("shapes") if isinstance(data, dict) else None
-        if not isinstance(shapes, list):
-            continue
-        for shape in shapes:
-            label = shape.get("label") if isinstance(shape, dict) else None
-            if isinstance(label, str) and label.strip():
-                labels.add(label)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [pool.submit(_scan_single_json, jp) for jp in pending]
+        for future in concurrent.futures.as_completed(futures):
+            if is_interrupted and is_interrupted():
+                break
+            result = future.result()
+            if result:
+                labels.update(result)
     return labels
 
 
@@ -47,9 +67,13 @@ class DatasetLabelScanWorker(QThread):
         self._image_paths = tuple(image_paths)
 
     def run(self):
-        labels = scan_dataset_labels(self._image_paths, self.isInterruptionRequested)
-        if not self.isInterruptionRequested():
-            self.labels_scanned.emit(self._generation, self._image_paths, labels)
+        try:
+            labels = scan_dataset_labels(self._image_paths, self.isInterruptionRequested)
+            if not self.isInterruptionRequested():
+                self.labels_scanned.emit(self._generation, self._image_paths, labels)
+        except Exception:
+            if not self.isInterruptionRequested():
+                self.labels_scanned.emit(self._generation, self._image_paths, set())
 
 
 class ImageLoaderMixin:
@@ -57,6 +81,10 @@ class ImageLoaderMixin:
 
     def _start_background_replacement(self):
         """Invalidate scans and labels before replacing the background dataset."""
+        if hasattr(self, '_background_load_timer') and self._background_load_timer:
+            self._background_load_timer.stop()
+            self._background_load_timer = None
+            self._pending_image_files = None
         self._background_label_scan_generation += 1
         self.global_labels.clear()
         self._background_label_scan_pending = True
@@ -160,47 +188,83 @@ class ImageLoaderMixin:
         self.canvas_items.clear()
 
         try:
-            for file_name in sorted(os.listdir(folder_path), key=natural_sort_key):
-                ext = os.path.splitext(file_name)[1].lower()
-                if ext in SUPPORTED_IMAGE_EXTENSIONS:
-                    file_path = os.path.join(folder_path, file_name)
-                    new_index = len(self.background_images)
-                    self.background_images.append(file_path)
-                    display_path = PathUtils.to_display_path(file_path)
-                    item = QListWidgetItem(display_path)
-                    item.setData(Qt.UserRole, new_index)
-                    item.setData(Qt.UserRole + 1, file_path)
-                    self.background_list.addItem(item)
+            all_files = sorted(os.listdir(folder_path), key=natural_sort_key)
+        except OSError:
+            QMessageBox.warning(self, tr("警告"), tr("无法读取文件夹"))
+            self._finish_background_replacement_without_scan()
+            self.update_file_count()
+            return
 
-                    self.canvas_items_dict[new_index] = []
-                    self.detection_boxes_dict[new_index] = []
-                    if load_first and self.current_background is None:
-                        self.current_background_index = new_index
-                        self.current_background = self._get_cached_pixmap(file_path)
-                        self.canvas_items = []
-                        self._load_detection_boxes_for_index(new_index, file_path)
-                        self.background_list.setCurrentRow(new_index)
-                        self.canvas.reset_view()
-                        self.update_label_list()
-                        self.canvas.update()
-                    QApplication.processEvents()
+        image_files = []
+        for file_name in all_files:
+            ext = os.path.splitext(file_name)[1].lower()
+            if ext in SUPPORTED_IMAGE_EXTENSIONS:
+                image_files.append(os.path.join(folder_path, file_name))
 
-            if self.background_images:
-                if load_first:
-                    self.update_label_list()
-                    self.update_file_count()
-                else:
-                    self.current_background_index = -1
-                    self.update_label_list()
-                    self.update_file_count()
-                self._start_dataset_label_scan()
-            else:
-                QMessageBox.warning(self, tr("警告"), tr("该文件夹中没有找到支持的图片文件"))
-                self.update_file_count()
-        finally:
-            if not self.background_images:
-                self._finish_background_replacement_without_scan()
+        if not image_files:
+            QMessageBox.warning(self, tr("警告"), tr("该文件夹中没有找到支持的图片文件"))
+            self._finish_background_replacement_without_scan()
+            self.update_file_count()
+            return
+
+        first_path = image_files[0]
+        self.background_images.append(first_path)
+        display_path = PathUtils.to_display_path(first_path)
+        item = QListWidgetItem(display_path)
+        item.setData(Qt.UserRole, 0)
+        item.setData(Qt.UserRole + 1, first_path)
+        self.background_list.addItem(item)
+        self.canvas_items_dict[0] = []
+        self.detection_boxes_dict[0] = []
+
+        if load_first:
+            self.current_background_index = 0
+            self.current_background = self._get_cached_pixmap(first_path)
+            self.canvas_items = []
+            self._load_detection_boxes_for_index(0, first_path)
+            self.background_list.setCurrentRow(0)
+            self.canvas.reset_view()
+            self.canvas.update()
+        self.update_label_list()
+
+        QApplication.processEvents()
+
+        if len(image_files) > 1:
+            self._pending_image_files = image_files
+            self._pending_image_index = 1
+            if not hasattr(self, '_background_load_timer') or not self._background_load_timer:
+                self._background_load_timer = QTimer(self)
+                self._background_load_timer.timeout.connect(self._load_next_background_batch)
+            self._background_load_timer.setInterval(30)
+            self._background_load_timer.start()
+        else:
+            self._start_dataset_label_scan()
+            self.update_file_count()
             self.background_list.viewport().update()
+
+    def _load_next_background_batch(self):
+        """Load next batch of background images into the list."""
+        BATCH_SIZE = 50
+        for _ in range(BATCH_SIZE):
+            if self._pending_image_index >= len(self._pending_image_files):
+                self._background_load_timer.stop()
+                self._pending_image_files = None
+                self._start_dataset_label_scan()
+                self.update_file_count()
+                self.background_list.viewport().update()
+                return
+            file_path = self._pending_image_files[self._pending_image_index]
+            idx = self._pending_image_index
+            self.background_images.append(file_path)
+            display_path = PathUtils.to_display_path(file_path)
+            item = QListWidgetItem(display_path)
+            item.setData(Qt.UserRole, idx)
+            item.setData(Qt.UserRole + 1, file_path)
+            self.background_list.addItem(item)
+            self.canvas_items_dict[idx] = []
+            self.detection_boxes_dict[idx] = []
+            self._pending_image_index += 1
+        QApplication.processEvents()
 
     def upload_small_images(self):
         """上传贴图"""
@@ -507,6 +571,10 @@ class ImageLoaderMixin:
 
     def _cleanup_background_label_scan_worker(self):
         """Request a bounded shutdown before the window releases its worker."""
+        if hasattr(self, '_background_load_timer') and self._background_load_timer:
+            self._background_load_timer.stop()
+            self._background_load_timer = None
+            self._pending_image_files = None
         workers = set(getattr(self, '_background_label_scan_workers', set()))
         worker = getattr(self, '_background_label_scan_worker', None)
         if worker is not None:

@@ -48,6 +48,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.installEventFilterRecursive(self)
         self.setup_shortcuts()
         self.setAcceptDrops(True)
+        if hasattr(self, 'auto_save_b_checkbox'):
+            self.auto_save_b_checkbox.setChecked(self.edit_mode == 'annotate')
+            self.auto_save_p_checkbox.setChecked(self.edit_mode == 'paste')
 
     def _load_settings(self):
         """从配置文件加载主题和语言设置"""
@@ -432,6 +435,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.canvas_items.clear()
         self.detection_boxes.clear()
         self.global_labels.clear()
+        self._background_label_scan_pending = False
+        self._background_label_scan_completed = False
+        self._background_label_scan_in_progress = False
         self.current_background = None
         self.current_background_index = -1
         self.selected_item = None
@@ -544,6 +550,12 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.canvas.update()
         self._apply_mode_visibility_defaults()
         self._update_mode_seg_style(animated=animated)
+        if hasattr(self, 'auto_save_b_checkbox'):
+            is_annotate = self.edit_mode == 'annotate'
+            self.auto_save_b_checkbox.setChecked(is_annotate)
+            self.auto_save_p_checkbox.setChecked(not is_annotate)
+            self.auto_save_b_checkbox.setText(f"{tr('自动保存B')}({tr('标注')})" if is_annotate else tr("自动保存B"))
+            self.auto_save_p_checkbox.setText(f"{tr('自动保存P')}({tr('贴图')})" if not is_annotate else tr("自动保存P"))
         from PyQt5.QtCore import QTimer
         mode_text = "Annotate" if self.edit_mode == 'annotate' else "Paste"
         self.status_label.setText(f"Mode: {mode_text}")
@@ -752,7 +764,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def _show_label_stats(self):
         """显示标签统计弹窗"""
-        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView, QPushButton
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView, QPushButton, QWidget
         from .dialog_helpers import center_on_parent
         from .theme import ThemeManager
         from . import i18n
@@ -788,14 +800,28 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
         layout = QVBoxLayout(dialog)
 
-        bg_label = QLabel(tr("背景图标签"))
-        bg_label.setStyleSheet("font-weight: bold; font-size: 13px;")
-        layout.addWidget(bg_label)
+        bg_header = QPushButton(f"▼  {tr('背景图标签')}")
+        bg_header.setFlat(True)
+        bg_header.setCursor(Qt.PointingHandCursor)
+        bg_header.setStyleSheet("border: none; text-align: left; font-weight: bold; font-size: 13px; padding: 2px 0;")
+        bg_header.setFixedHeight(24)
+        layout.addWidget(bg_header)
 
         bg_stats = {}
-        for idx, file_path in enumerate(self.background_images):
-            boxes = self.detection_boxes_dict.get(idx, [])
-            for box in boxes:
+        import concurrent.futures
+        from ..engine.image_loader import _scan_single_json
+        json_paths = [f"{os.path.splitext(p)[0]}.json" for p in self.background_images]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            futures = [pool.submit(_scan_single_json, jp) for jp in json_paths]
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                if result:
+                    for lbl in result:
+                        bg_stats[lbl] = bg_stats.get(lbl, 0) + 1
+        for lbl in self.global_labels:
+            bg_stats[lbl] = bg_stats.get(lbl, 0)
+        for idx in range(len(self.background_images)):
+            for box in self.detection_boxes_dict.get(idx, []):
                 lbl = box.get("label", "")
                 if lbl:
                     bg_stats[lbl] = bg_stats.get(lbl, 0) + 1
@@ -811,11 +837,25 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self._set_label_color_button(color_button, self.get_label_color(label))
             color_button.clicked.connect(lambda _, value=label, button=color_button: self._change_label_color(value, dialog, button))
             bg_table.setCellWidget(row, 2, color_button)
-        layout.addWidget(bg_table)
+        bg_container = QWidget()
+        bg_cl = QVBoxLayout(bg_container)
+        bg_cl.setContentsMargins(0, 0, 0, 0)
+        bg_cl.addWidget(bg_table)
+        layout.addWidget(bg_container)
+        bg_expanded = True
+        def _toggle_bg():
+            nonlocal bg_expanded
+            bg_expanded = not bg_expanded
+            bg_container.setVisible(bg_expanded)
+            bg_header.setText(f"{'▼' if bg_expanded else '▶'}  {tr('背景图标签')}")
+        bg_header.clicked.connect(_toggle_bg)
 
-        paste_label = QLabel(tr("贴图标签_list"))
-        paste_label.setStyleSheet("font-weight: bold; font-size: 13px;")
-        layout.addWidget(paste_label)
+        paste_header = QPushButton(f"▼  {tr('贴图标签_list')}")
+        paste_header.setFlat(True)
+        paste_header.setCursor(Qt.PointingHandCursor)
+        paste_header.setStyleSheet("border: none; text-align: left; font-weight: bold; font-size: 13px; padding: 2px 0;")
+        paste_header.setFixedHeight(24)
+        layout.addWidget(paste_header)
 
         paste_stats = self._get_session_paste_stats()
 
@@ -830,7 +870,18 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self._set_label_color_button(color_button, self.get_label_color(label))
             color_button.clicked.connect(lambda _, value=label, button=color_button: self._change_label_color(value, dialog, button))
             paste_table.setCellWidget(row, 2, color_button)
-        layout.addWidget(paste_table)
+        paste_container = QWidget()
+        paste_cl = QVBoxLayout(paste_container)
+        paste_cl.setContentsMargins(0, 0, 0, 0)
+        paste_cl.addWidget(paste_table)
+        layout.addWidget(paste_container)
+        paste_expanded = True
+        def _toggle_paste():
+            nonlocal paste_expanded
+            paste_expanded = not paste_expanded
+            paste_container.setVisible(paste_expanded)
+            paste_header.setText(f"{'▼' if paste_expanded else '▶'}  {tr('贴图标签_list')}")
+        paste_header.clicked.connect(_toggle_paste)
 
         total = QLabel(
             f"{tr('总计')}: {tr('背景图标签')} {sum(bg_stats.values())} {tr('个')} | "
@@ -996,6 +1047,11 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.draw_box_btn.setToolTip(tr("绘制检测框"))
         self.auto_save_b_checkbox.setText(tr("自动保存B"))
         self.auto_save_p_checkbox.setText(tr("自动保存P"))
+        if hasattr(self, 'edit_mode'):
+            self.auto_save_b_checkbox.setText(
+                f"{tr('自动保存B')}({tr('标注')})" if self.edit_mode == 'annotate' else tr("自动保存B"))
+            self.auto_save_p_checkbox.setText(
+                f"{tr('自动保存P')}({tr('贴图')})" if self.edit_mode == 'paste' else tr("自动保存P"))
         self.show_labels_checkbox.setText(tr("显示BOX"))
         self.show_label_names_checkbox.setText(tr("显示Label"))
         self.auto_label_checkbox.setText(tr("贴图标签"))
@@ -1211,6 +1267,14 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         if not self._cleanup_background_label_scan_worker():
             event.ignore()
             return
+        if hasattr(self, '_processing_panel') and self._processing_panel:
+            self._processing_panel.close()
+        if self.current_background_index >= 0:
+            self.canvas_items_dict[self.current_background_index] = self.canvas_items.copy()
+            self.detection_boxes_dict[self.current_background_index] = self.detection_boxes.copy()
+            self.save_current_json()
+        if hasattr(self, '_save_memory_record_on_close'):
+            self._save_memory_record_on_close()
         event.accept()
 
     def get_image_info(self):

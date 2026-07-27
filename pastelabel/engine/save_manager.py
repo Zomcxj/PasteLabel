@@ -132,6 +132,7 @@ class SaveManager(QObject):
         for pixmap, rect, label in self.editor.canvas_items:
             painter.drawPixmap(rect.toRect(), pixmap)
         painter.end()
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         if not result.save(file_path):
             from ..core.exception_hook import _write_log
             _write_log(f"自动保存B失败: {file_path}")
@@ -171,6 +172,7 @@ class SaveManager(QObject):
             painter.drawPixmap(rect.toRect(), pixmap)
         
         painter.end()
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         save_success = result.save(file_path)
         
         if save_success:
@@ -181,6 +183,22 @@ class SaveManager(QObject):
     def save_current_json(self):
         """仅保存当前图的标注 JSON，供切图和关闭窗口时兜底。"""
         if self.editor._is_delete_view:
+            return
+        mode = getattr(self.editor, 'edit_mode', 'annotate')
+        if mode == 'annotate' and not self.editor.detection_boxes:
+            return
+        if mode == 'paste' and not self.editor.canvas_items:
+            return
+        if mode == 'annotate':
+            idx = self.editor.current_background_index
+            if idx < 0:
+                return
+            orig_path = self.editor.background_images[idx]
+            json_path = f"{os.path.splitext(orig_path)[0]}.json"
+            base_name = os.path.basename(orig_path)
+            self.save_json(json_path, base_name, '',
+                           image_width=self.editor.current_background.width(),
+                           image_height=self.editor.current_background.height())
             return
         save_info = self.get_save_info()
         if not save_info:
@@ -245,6 +263,7 @@ class SaveManager(QObject):
                 painter.drawPixmap(rect.toRect(), p_pixmap)
             
             painter.end()
+            os.makedirs(os.path.dirname(save_file_path), exist_ok=True)
             if not result.save(save_file_path):
                 from ..core.exception_hook import _write_log
                 _write_log(f"批量保存失败: {save_file_path}")
@@ -370,6 +389,7 @@ class SaveManager(QObject):
                 )
                 json_data["shapes"].append(shape)
         
+        os.makedirs(os.path.dirname(json_path), exist_ok=True)
         try:
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=2)

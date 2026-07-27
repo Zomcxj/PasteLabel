@@ -191,6 +191,9 @@ class ProcessingPanel(QWidget):
         self._spinner_timer = QTimer(self)
         self._spinner_timer.timeout.connect(self._spinner_tick)
         self._spinner_btn = None
+        self._scan_check_timer = QTimer(self)
+        self._scan_check_timer.setInterval(800)
+        self._scan_check_timer.timeout.connect(self._update_labels_list)
         self._refresh_texts()
 
     def _build_path_selector(self, layout):
@@ -435,6 +438,8 @@ class ProcessingPanel(QWidget):
             return []
         total = len(self._editor.background_images)
         for i, img_path in enumerate(self._editor.background_images):
+            if i >= 500:
+                break
             jp = os.path.splitext(img_path)[0] + ".json"
             if os.path.exists(jp):
                 try:
@@ -468,22 +473,54 @@ class ProcessingPanel(QWidget):
                 QApplication.processEvents()
         return sorted(labels)
 
+    def _fast_labels(self):
+        """Return labels from already-loaded data without file I/O, or None."""
+        if (getattr(self._editor, '_background_label_scan_completed', False)
+                and getattr(self._editor, 'global_labels', None)):
+            return sorted(self._editor.global_labels)
+        labels = set()
+        for boxes in self._editor.detection_boxes_dict.values():
+            for b in boxes:
+                lbl = b.get("label", "")
+                if lbl:
+                    labels.add(lbl)
+        if labels:
+            return sorted(labels)
+        return None
+
     def _update_labels_list(self):
         self._clear_grid()
-        self._exp_scan_label.setVisible(True)
-        self._exp_scan_label.setLabel(tr("识别中..."))
-        QApplication.processEvents()
-        if getattr(self._editor, '_background_label_scan_pending', False):
+        pending = getattr(self._editor, '_background_label_scan_pending', False)
+        completed = getattr(self._editor, '_background_label_scan_completed', False)
+        labels = self._fast_labels()
+        if labels is not None:
+            if hasattr(self, '_scan_check_timer'):
+                self._scan_check_timer.stop()
+            self._exp_scan_label.setVisible(False)
+        elif completed:
+            if hasattr(self, '_scan_check_timer'):
+                self._scan_check_timer.stop()
+            self._exp_scan_label.setVisible(False)
+        elif pending:
+            self._exp_scan_label.setVisible(True)
+            self._exp_scan_label.setLabel(tr("识别中..."))
+            QApplication.processEvents()
+            if hasattr(self, '_scan_check_timer') and not self._scan_check_timer.isActive():
+                self._scan_check_timer.start()
             return
-        if (self._editor.background_images
-                and getattr(self._editor, '_background_label_scan_completed', False)):
-            labels = sorted(self._editor.global_labels)
         else:
             labels = self._scan_labels_from_json()
             worker = getattr(self._editor, '_background_label_scan_worker', None)
             if worker is not None and worker.isRunning():
+                self._exp_scan_label.setVisible(True)
+                self._exp_scan_label.setLabel(tr("识别中..."))
+                QApplication.processEvents()
+                if hasattr(self, '_scan_check_timer') and not self._scan_check_timer.isActive():
+                    self._scan_check_timer.start()
                 return
-        self._exp_scan_label.setVisible(False)
+            if hasattr(self, '_scan_check_timer'):
+                self._scan_check_timer.stop()
+            self._exp_scan_label.setVisible(False)
         if not labels:
             msg = QLabel(tr("未检测到标签"))
             msg.setStyleSheet("color: gray; padding: 4px;")

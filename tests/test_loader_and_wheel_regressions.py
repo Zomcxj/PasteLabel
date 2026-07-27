@@ -8,8 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_load_background_folder_initializes_first_image_inside_loop():
     source = (ROOT / "pastelabel" / "engine" / "image_loader.py").read_text(encoding="utf-8")
 
-    assert "if load_first and self.current_background is None:" in source
-    assert "self.current_background = self._get_cached_pixmap(file_path)" in source
+    assert "if load_first:" in source
+    assert "self.current_background = self._get_cached_pixmap(first_path)" in source
 
 
 def test_load_background_folder_does_not_block_background_list_during_label_scan():

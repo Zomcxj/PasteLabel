@@ -70,14 +70,13 @@ class PathUtils:
     @staticmethod
     def get_output_dir(original_file_path):
         """
-        生成输出目录路径
+        生成输出目录路径（不创建目录，由实际保存时创建）
         :param original_file_path: 原始文件路径
         :return: 输出目录路径
         """
         from .config import OUTPUT_DIR_SUFFIX
         background_dir = os.path.dirname(original_file_path)
         output_dir = f"{background_dir}{OUTPUT_DIR_SUFFIX}"
-        os.makedirs(output_dir, exist_ok=True)
         return output_dir
     
     @staticmethod

@@ -131,32 +131,40 @@ jobs:
         shell: bash
         run: |
           printf '%s\n' \
-            "PasteLabel v1.1.0 — 数据处理与导出" \
+            "PasteLabel v1.1.1 — 后台扫描与颜色持久化" \
             "" \
             "🆕 新功能" \
-            "• 数据处理面板（浮动窗口），通过工具栏「导出」按钮打开" \
-            "• 数据增强：12 种图像变换（水平翻转、垂直翻转、亮度、对比度、色相、饱和度、明度、高斯噪声、椒盐噪声、随机平移、随机旋转、随机缩放），可配置参数范围，支持全部增强和随机几项模式，可调图片比例" \
-            "• YOLO 导出：LabelMe JSON → YOLO 格式（images/ + labels/ + classes.txt），支持选择导出标签类别、跳过空标签、自动检测增强后图片" \
-            "• 数据集划分：按 train/val/test 比例自动划分到 divide/ 目录，默认 0.8/0.1/0.1，比例自动约束" \
-            "• 一键流水线：增强→导出→划分串联执行，支持整体中断" \
-            "• 每个步骤支持中断（■）和清空输出文件" \
-            "• 画布加载动画，加载大量图片时显示旋转字符" \
+            "• 背景导入 JSON 标签扫描移至后台线程（DatasetLabelScanWorker），不再阻塞 UI" \
+            "• 30 个不同默认标签颜色 + 按标签名持久化的 label_color_map，重启不丢失" \
+            "• 标签统计编辑器颜色选择后自动写入 color_map 并持久化" \
+            "• 扫描期间手动新增的类别不会被扫描结果覆盖（改用 update 合并）" \
+            "• 大数据集首图立即显示，后续图片分批定时加载（50 张/30ms），UI 不卡顿" \
+            "• 标签统计弹窗支持表格折叠/展开（▼/▶ 按钮在标题左侧）" \
+            "• 统计弹窗全量扫描所有 JSON 文件，显示完整数据集标签数" \
             "" \
             "🐛 修复" \
-            "• 放大器改用屏幕坐标，center 模式不调位不 clamp" \
-            "• 绘制模式下禁止贴图与检测框进入编辑态" \
-            "" \
-            "📖 文档" \
-            "• 用户指南重写，数据处理作为独立章节" \
-            "• 新增「设置说明」文档，包含快捷键与参数完整列表" \
-            "• README 新增数据处理截图、文档导航更新" \
-            "• 项目结构文档同步更新" \
-            "• 中英文国际化新增数据处理相关文案" \
+            "• 背景导入不再显示『识别中』遮罩和冻结背景列表，首图与列表项立即可见" \
+            "• 重新导入背景数据集不再等待旧扫描线程（generation + 路径快照拦截旧结果）" \
+            "• 重导入时可见的处理面板立即清空旧类别并显示当前扫描状态" \
+            "• 关闭窗口有界等待所有扫描线程（2s），拒绝退出而非野蛮销毁" \
+            "• 数据处理面板『识别中』卡死：Worker 崩溃时 try/except 兜底，pending 必归 False" \
+            "• 数据处理面板『识别中』不刷新：800ms 定时轮询，扫描完成后自动显示标签" \
+            "• 记忆记录不保存：closeEvent 补全 _save_memory_record_on_close()" \
+            "• 标注模式不再创建 _paste_output 目录，JSON 保存在原图同目录" \
+            "• 贴图模式无贴图时不保存 JSON（按模式守卫）" \
+            "• 标注模式默认勾选 auto_save_B，贴图模式默认勾选 auto_save_P" \
+            "• 切图空数据时不再创建 _paste_output 目录" \
+            "• 标签统计弹窗未导入 QWidget 导致崩溃" \
             "" \
             "⚙️ 代码" \
-            "• 新增 yolo_exporter、splitter、augmenter 模块" \
-            "• 新增 processing_panel UI" \
-            "• 新增 test_data_pipeline、test_export_all 测试" \
+            "• 新增 DatasetLabelScanWorker(QThread) 及 generation/path 过期检测" \
+            "• 新增 test_background_label_scan.py（17 tests）" \
+            "• 新增 test_label_color_map_regressions.py（颜色持久化回归）" \
+            "• 旧 16 色 palette 自动扩展到 30 色，兼容已有配置" \
+            "• 覆盖所有文本文件的 .gitattributes eol=lf" \
+            "• 扫描函数改为 ThreadPoolExecutor(8) 并行读 JSON" \
+            "• 扫描最多前 500 个文件，秒级出结果" \
+            "• 数据处理面板新增 _fast_labels() 从 detection_boxes_dict 快速获取已有标签" \
             > release-notes.md
 
           gh release delete "$TAG" --repo "${{ github.repository }}" --yes 2>/dev/null || true

@@ -65,6 +65,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
         self.shortcut_config = settings.get('shortcuts', {})
         self.label_colors = settings.get('label_colors', [])
+        self.label_color_map = settings.get('label_color_map', {})
+        self._label_color_map_palette = tuple(self.label_colors)
         self._max_labels = settings.get('max_labels', 3)
         self.label_cache_slots = settings.get('label_cache_slots', [])
         self.active_label_cache_slot = 0
@@ -133,6 +135,11 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._last_paste_start = -1
         self._last_paste_count = 0
         self.global_labels = set()
+        self._background_label_scan_generation = 0
+        self._background_label_scan_worker = None
+        self._background_label_scan_workers = set()
+        self._background_label_scan_pending = False
+        self._background_label_scan_completed = False
 
         self.prefix_input = QLineEdit()
         self.prefix_input.setText(DEFAULT_PREFIX)
@@ -151,9 +158,23 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.undo_manager = UndoManager()
 
     def get_label_color(self, label):
-        """使用本窗口当前标签集合按名称排序后的色板槽位。"""
+        """获取标签颜色并缓存首次分配，避免标签顺序影响已有颜色。"""
         from ..core import config_manager
-        return config_manager.get_label_color(self._get_session_labels(), label, self.label_colors)
+        color = config_manager.get_label_color(
+            self._get_session_labels(), label, self.label_colors,
+            self.label_color_map if (
+                not hasattr(self, '_label_color_map_palette')
+                or tuple(self.label_colors) == self._label_color_map_palette
+            ) else {},
+        )
+        if label and label not in self.label_color_map:
+            self.label_color_map[label] = color
+            config_manager.save_all(
+                label_colors=self.label_colors,
+                label_color_map=self.label_color_map,
+            )
+            self._label_color_map_palette = tuple(self.label_colors)
+        return color
 
     def _get_session_labels(self):
         """收集当前打开文件夹中用于共享色板的全部标签。"""
@@ -827,12 +848,11 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         )
 
     def _change_label_color(self, label, parent, color_button=None):
-        """修改当前排序类别对应的全局色板槽位。"""
+        """修改指定类别的颜色。"""
         from ..core import config_manager
         from PyQt5.QtGui import QColor
         from .dialog_helpers import ThemedColorDialog
-        ordered_labels = sorted({value for value in self._get_session_labels() if value})
-        if label not in ordered_labels or not self.label_colors:
+        if not label:
             return
         dialog = ThemedColorDialog(parent)
         dialog.setWindowTitle(tr("颜色"))
@@ -842,8 +862,11 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         color = dialog.currentColor()
         if not color.isValid():
             return
-        self.label_colors[ordered_labels.index(label) % len(self.label_colors)] = color.name()
-        config_manager.save_all(label_colors=self.label_colors)
+        self.label_color_map[label] = color.name()
+        config_manager.save_all(
+            label_colors=self.label_colors,
+            label_color_map=self.label_color_map,
+        )
         if color_button is not None:
             self._set_label_color_button(color_button, color.name())
         self.canvas.update()
@@ -1183,6 +1206,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             hwnd = int(box.winId())
             set_titlebar_dark(hwnd, True)
             box.exec_()
+            event.ignore()
+            return
+        if not self._cleanup_background_label_scan_worker():
             event.ignore()
             return
         event.accept()

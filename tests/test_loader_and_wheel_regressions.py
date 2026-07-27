@@ -12,15 +12,14 @@ def test_load_background_folder_initializes_first_image_inside_loop():
     assert "self.current_background = self._get_cached_pixmap(file_path)" in source
 
 
-def test_load_background_folder_defers_background_list_updates_until_first_image_ready():
+def test_load_background_folder_does_not_block_background_list_during_label_scan():
     source = (ROOT / "pastelabel" / "engine" / "image_loader.py").read_text(encoding="utf-8")
+    method_source = source[source.index("    def load_background_folder("):source.index("    def upload_small_images(")]
 
-    freeze_pos = source.index("self.background_list.setUpdatesEnabled(False)")
-    current_background_pos = source.index("self.current_background = self._get_cached_pixmap(file_path)")
-    current_row_pos = source.index("self.background_list.setCurrentRow(new_index)")
-    restore_pos = source.index("self.background_list.setUpdatesEnabled(True)")
-
-    assert freeze_pos < current_background_pos < current_row_pos < restore_pos
+    assert "self._show_loading_spinner()" not in method_source
+    assert "self._hide_loading_spinner()" not in method_source
+    assert "self.background_list.setUpdatesEnabled(False)" not in method_source
+    assert "self.background_list.setUpdatesEnabled(True)" not in method_source
 
 
 def test_ctrl_wheel_scales_background_before_selected_objects():

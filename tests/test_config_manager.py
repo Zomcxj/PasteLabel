@@ -209,8 +209,40 @@ class TestSaveLoadRoundtrip:
         try:
             palette = ['#123456', '#abcdef']
             config_manager.save_all(label_colors=palette)
-            assert config_manager.load_all()['label_colors'] == palette
-            assert config_manager.load_config()['label_colors'] == palette
+            saved_palette = config_manager.load_all()['label_colors']
+            assert saved_palette[:2] == palette
+            assert len(saved_palette) >= 30
+            assert len(set(saved_palette[:30])) == 30
+            assert config_manager.load_config()['label_colors'] == saved_palette
+        finally:
+            config_manager.CONFIG_PATH = original
+
+    def test_legacy_valid_palette_is_extended_to_thirty_distinct_colors(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            custom = ['#123456', '#abcdef']
+            config_manager.save_config({'label_colors': custom})
+
+            palette = config_manager.load_all()['label_colors']
+            assert palette[:2] == custom
+            assert len(palette) >= 30
+            assert len(set(palette[:30])) == 30
+        finally:
+            config_manager.CONFIG_PATH = original
+
+    def test_label_color_map_is_normalized_and_roundtrips_through_save_all(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            config_manager.save_all(label_color_map={
+                'person': '#abcdef',
+                42: '#123456',
+                'invalid': 'blue',
+                'empty': '',
+            })
+
+            expected = {'person': '#abcdef', '42': '#123456'}
+            assert config_manager.load_all()['label_color_map'] == expected
+            assert config_manager.load_config()['label_color_map'] == expected
         finally:
             config_manager.CONFIG_PATH = original
 
@@ -219,14 +251,46 @@ def test_label_color_stable_by_label_name():
     palette = ['#111111', '#222222']
     labels = ['zebra', 'apple', 'mango']
 
-    assert config_manager.get_label_color(labels, 'apple', palette) == '#111111'
-    assert config_manager.get_label_color(labels, 'mango', palette) == '#111111'
-    assert config_manager.get_label_color(labels, 'zebra', palette) == '#222222'
+    assert config_manager.get_label_color(labels, 'apple', palette, {}) == '#111111'
+    assert config_manager.get_label_color(labels, 'mango', palette, {}) == '#111111'
+    assert config_manager.get_label_color(labels, 'zebra', palette, {}) == '#222222'
 
     # adding new label does not shift existing colors
     labels2 = ['zebra', 'apple', 'mango', 'newlabel']
-    assert config_manager.get_label_color(labels2, 'apple', palette) == '#111111'
-    assert config_manager.get_label_color(labels2, 'zebra', palette) == '#222222'
+    assert config_manager.get_label_color(labels2, 'apple', palette, {}) == '#111111'
+    assert config_manager.get_label_color(labels2, 'zebra', palette, {}) == '#222222'
+
+
+def test_default_label_palette_has_at_least_thirty_distinct_hex_colors():
+    assert len(config.LABEL_COLORS) >= 30
+    assert len(set(config.LABEL_COLORS)) >= 30
+    assert all(len(color) == 7 and color.startswith('#') for color in config.LABEL_COLORS)
+
+
+def test_label_color_map_overrides_default_allocation():
+    labels = ['person', 'car']
+    palette = ['#111111', '#222222']
+
+    assert config_manager.get_label_color(
+        labels, 'person', palette, {'person': '#abcdef'},
+    ) == '#abcdef'
+
+
+def test_default_palette_assigns_first_thirty_labels_distinct_colors():
+    labels = [f'label-{index}' for index in range(30)]
+    colors = [config_manager.get_label_color(labels, label, label_color_map={}) for label in labels]
+
+    assert len(set(colors)) == 30
+
+
+def test_saved_label_color_map_takes_precedence_when_no_explicit_map_is_given(tmp_path):
+    original = _with_temp_config(tmp_path)
+    try:
+        config_manager.save_all(label_color_map={'person': '#abcdef'})
+
+        assert config_manager.get_label_color(['person'], 'person') == '#abcdef'
+    finally:
+        config_manager.CONFIG_PATH = original
 
     def test_crosshair_settings_roundtrip_through_save_all(self, tmp_path):
         original = _with_temp_config(tmp_path)

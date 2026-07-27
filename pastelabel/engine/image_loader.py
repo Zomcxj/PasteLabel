@@ -7,15 +7,76 @@ from PyQt5.QtWidgets import (
     QApplication, QFileDialog, QListWidgetItem, QMessageBox
 )
 from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal
 
 from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
 from ..core.utils import PathUtils, natural_sort_key, create_thumbnail
 from ..ui.i18n import t as tr
 
 
+def scan_dataset_labels(image_paths, is_interrupted=None):
+    """Return valid LabelMe labels from the JSON files beside image paths."""
+    labels = set()
+    for image_path in image_paths:
+        if is_interrupted and is_interrupted():
+            break
+        json_path = f"{os.path.splitext(image_path)[0]}.json"
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception:
+            continue
+
+        shapes = data.get("shapes") if isinstance(data, dict) else None
+        if not isinstance(shapes, list):
+            continue
+        for shape in shapes:
+            label = shape.get("label") if isinstance(shape, dict) else None
+            if isinstance(label, str) and label.strip():
+                labels.add(label)
+    return labels
+
+
+class DatasetLabelScanWorker(QThread):
+    """Scan a fixed dataset snapshot outside the UI thread."""
+    labels_scanned = pyqtSignal(int, tuple, object)
+
+    def __init__(self, generation, image_paths, parent=None):
+        super().__init__(parent)
+        self._generation = generation
+        self._image_paths = tuple(image_paths)
+
+    def run(self):
+        labels = scan_dataset_labels(self._image_paths, self.isInterruptionRequested)
+        if not self.isInterruptionRequested():
+            self.labels_scanned.emit(self._generation, self._image_paths, labels)
+
+
 class ImageLoaderMixin:
     """图片加载混入类 - 加载背景图、贴图、检测框"""
+
+    def _start_background_replacement(self):
+        """Invalidate scans and labels before replacing the background dataset."""
+        self._background_label_scan_generation += 1
+        self.global_labels.clear()
+        self._background_label_scan_pending = True
+        self._background_label_scan_completed = False
+        if (hasattr(self, '_processing_panel') and self._processing_panel
+                and self._processing_panel.isVisible()):
+            self._update_processing_panel_labels()
+        worker = getattr(self, '_background_label_scan_worker', None)
+        if worker is not None:
+            worker.requestInterruption()
+            self._background_label_scan_worker = None
+
+    def _finish_background_replacement_without_scan(self):
+        """Clear scan state when replacement produced no dataset to scan."""
+        self._background_label_scan_in_progress = False
+        self._background_label_scan_pending = False
+        self._background_label_scan_completed = False
+        if (hasattr(self, '_processing_panel') and self._processing_panel
+                and self._processing_panel.isVisible()):
+            self._update_processing_panel_labels()
 
     def _get_cached_pixmap(self, file_path):
         """获取缓存的pixmap，缓存最近10张"""
@@ -41,6 +102,7 @@ class ImageLoaderMixin:
         )
         if files:
             self._memory_background_path = os.path.dirname(files[0])
+            self._start_background_replacement()
             self.background_images.clear()
             self.background_list.clear()
             self.current_background = None
@@ -59,17 +121,22 @@ class ImageLoaderMixin:
                     self.background_list.addItem(item)
 
                     self.canvas_items_dict[new_index] = []
-                    self.detection_boxes_dict[new_index] = self.load_detection_boxes(file)
+                    self.detection_boxes_dict[new_index] = []
 
                     if self.current_background is None:
                         self.current_background = pixmap
                         self.current_background_index = new_index
                         self.canvas_items = []
-                        self.detection_boxes = self.detection_boxes_dict[new_index].copy()
+                        self._load_detection_boxes_for_index(new_index, file)
                         self.update_label_list()
                         self.canvas.background_scale = 1.0
                         self.canvas.is_manual_scale = False
                         self.canvas.update()
+
+            if self.background_images:
+                self._start_dataset_label_scan()
+            else:
+                self._finish_background_replacement_without_scan()
 
         self.update_file_count()
 
@@ -83,6 +150,7 @@ class ImageLoaderMixin:
     def load_background_folder(self, folder_path, load_first=True):
         """从指定文件夹加载背景图，供文件夹按钮和记忆记录复用。"""
         self._memory_background_path = folder_path
+        self._start_background_replacement()
 
         self.background_images.clear()
         self.background_list.clear()
@@ -91,9 +159,6 @@ class ImageLoaderMixin:
         self.canvas_items_dict.clear()
         self.canvas_items.clear()
 
-        self._show_loading_spinner()
-
-        self.background_list.setUpdatesEnabled(False)
         try:
             for file_name in sorted(os.listdir(folder_path), key=natural_sort_key):
                 ext = os.path.splitext(file_name)[1].lower()
@@ -122,20 +187,19 @@ class ImageLoaderMixin:
 
             if self.background_images:
                 if load_first:
-                    self._aggregate_all_labels()
                     self.update_label_list()
                     self.update_file_count()
                 else:
                     self.current_background_index = -1
-                    self._aggregate_all_labels()
                     self.update_label_list()
                     self.update_file_count()
+                self._start_dataset_label_scan()
             else:
                 QMessageBox.warning(self, tr("警告"), tr("该文件夹中没有找到支持的图片文件"))
                 self.update_file_count()
         finally:
-            self._hide_loading_spinner()
-            self.background_list.setUpdatesEnabled(True)
+            if not self.background_images:
+                self._finish_background_replacement_without_scan()
             self.background_list.viewport().update()
 
     def upload_small_images(self):
@@ -394,16 +458,73 @@ class ImageLoaderMixin:
             error_msg = traceback.format_exc()
             self._log_error(f"select_background 错误: {e}\n{error_msg}")
 
-    def _aggregate_all_labels(self):
-        """汇总所有背景图的JSON标签到全局标签"""
-        self.global_labels.clear()
-        for idx, file_path in enumerate(self.background_images):
-            boxes = self.load_detection_boxes(file_path)
-            self.detection_boxes_dict[idx] = boxes
-            for box in boxes:
-                if "label" in box and box["label"]:
-                    self.global_labels.add(box["label"])
-            QApplication.processEvents()
+    def _start_dataset_label_scan(self):
+        """Start a label-only scan for the current immutable image list."""
+        image_paths = tuple(self.background_images)
+        worker = DatasetLabelScanWorker(
+            self._background_label_scan_generation, image_paths, self
+        )
+        worker.labels_scanned.connect(self._apply_dataset_labels)
+        worker.finished.connect(lambda worker=worker: self._on_dataset_label_scan_finished(worker))
+        worker.finished.connect(worker.deleteLater)
+        if not hasattr(self, '_background_label_scan_workers'):
+            self._background_label_scan_workers = set()
+        self._background_label_scan_workers.add(worker)
+        self._background_label_scan_worker = worker
+        self._background_label_scan_in_progress = True
+        self._background_label_scan_pending = True
+        self._background_label_scan_completed = False
+        worker.start()
+
+    def _on_dataset_label_scan_finished(self, worker):
+        """Release finished workers and clear pending state after cancellation."""
+        self._background_label_scan_workers.discard(worker)
+        if worker is not self._background_label_scan_worker:
+            return
+        self._background_label_scan_worker = None
+        self._background_label_scan_in_progress = False
+        if (worker.isInterruptionRequested()
+                and getattr(self, '_background_label_scan_pending', False)):
+            self._background_label_scan_pending = False
+            self._background_label_scan_completed = False
+            if (hasattr(self, '_processing_panel') and self._processing_panel
+                    and self._processing_panel.isVisible()):
+                self._update_processing_panel_labels()
+
+    def _apply_dataset_labels(self, generation, image_paths, labels):
+        """Apply only the latest worker result for the unchanged dataset."""
+        if (generation != self._background_label_scan_generation
+                or tuple(self.background_images) != tuple(image_paths)):
+            return
+        self._background_label_scan_in_progress = False
+        self._background_label_scan_pending = False
+        self.global_labels.update(labels)
+        self._background_label_scan_completed = True
+        self.update_label_list()
+        if (hasattr(self, '_processing_panel') and self._processing_panel
+                and self._processing_panel.isVisible()):
+            self._update_processing_panel_labels()
+
+    def _cleanup_background_label_scan_worker(self):
+        """Request a bounded shutdown before the window releases its worker."""
+        workers = set(getattr(self, '_background_label_scan_workers', set()))
+        worker = getattr(self, '_background_label_scan_worker', None)
+        if worker is not None:
+            workers.add(worker)
+        for worker in workers:
+            worker.requestInterruption()
+        for worker in workers:
+            if worker.isRunning():
+                worker.wait(2000)
+        running_workers = {worker for worker in workers if worker.isRunning()}
+        self._background_label_scan_workers = running_workers
+        if running_workers:
+            return False
+        self._background_label_scan_worker = None
+        self._background_label_scan_in_progress = False
+        self._background_label_scan_pending = False
+        self._background_label_scan_completed = False
+        return True
 
     def update_file_count(self):
         """更新文件计数显示和标题栏"""

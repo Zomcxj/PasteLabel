@@ -48,9 +48,11 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.installEventFilterRecursive(self)
         self.setup_shortcuts()
         self.setAcceptDrops(True)
+        self._apply_paste_label_visibility()
         if hasattr(self, 'auto_save_b_checkbox'):
             self.auto_save_b_checkbox.setChecked(self.edit_mode == 'annotate')
             self.auto_save_p_checkbox.setChecked(self.edit_mode == 'paste')
+        self._apply_paste_label_visibility()
 
     def _load_settings(self):
         """从配置文件加载主题和语言设置"""
@@ -138,6 +140,13 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._last_paste_start = -1
         self._last_paste_count = 0
         self.global_labels = set()
+        self.background_dataset_labels = set()
+        self._bg_label_list_mode = 'stats'
+        self.pressed_box_index = None
+        self._bg_annotation_filter = 'all'  # all | annotated | unannotated | empty
+        self._bg_filter_saved_index = 0
+        self._cached_bg_label_stats = []
+        self._cached_bg_label_stats_path = ""
         self._background_label_scan_generation = 0
         self._background_label_scan_worker = None
         self._background_label_scan_workers = set()
@@ -355,10 +364,36 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.save_manager.label_list_changed.connect(self.update_label_list)
         self._is_delete_view = False
 
+    def _build_bg_label_stats_snapshot(self):
+        """Build background label stats snapshot for memory / stats restore."""
+        from ..engine.image_loader import collect_background_label_counts
+
+        counts = collect_background_label_counts(list(self.background_images or []))
+        for lbl in getattr(self, 'background_dataset_labels', set()) or set():
+            counts.setdefault(lbl, 0)
+        for lbl in getattr(self, 'global_labels', set()) or set():
+            if lbl in counts or lbl in (getattr(self, 'background_dataset_labels', set()) or set()):
+                counts.setdefault(lbl, 0)
+        stats = []
+        for label, count in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
+            color = ''
+            if hasattr(self, 'get_label_color'):
+                try:
+                    color = self.get_label_color(label)
+                except Exception:
+                    color = self.label_color_map.get(label, '') if hasattr(self, 'label_color_map') else ''
+            elif hasattr(self, 'label_color_map'):
+                color = self.label_color_map.get(label, '')
+            stats.append({'label': label, 'count': int(count), 'color': color or ''})
+        return stats
+
     def _save_memory_record_on_close(self):
         """关闭时保存当前素材来源路径组合。"""
         from ..core import config_manager
 
+        bg_stats = self._build_bg_label_stats_snapshot()
+        self._cached_bg_label_stats = bg_stats
+        self._cached_bg_label_stats_path = self._memory_background_path or ''
         record = {
             'note': '',
             'background_path': self._memory_background_path,
@@ -367,6 +402,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             'background_index': self.current_background_index if self.current_background_index >= 0 else 0,
             'edit_mode': getattr(self, 'edit_mode', 'paste'),
             'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'bg_label_stats': bg_stats,
         }
         for existing in config_manager.load_memory_records():
             if all(existing.get(k) == record[k] for k in ('background_path', 'paste_path', 'label_path')):
@@ -420,6 +456,30 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             edit_mode = 'annotate' if label_path and not paste_path else 'paste'
         self._set_edit_mode(edit_mode, animated=False)
 
+        stats = record.get('bg_label_stats') or []
+        if isinstance(stats, list):
+            self._cached_bg_label_stats = list(stats)
+            self._cached_bg_label_stats_path = bg_path or ''
+            restored = {
+                str(item.get('label', '')).strip()
+                for item in stats
+                if isinstance(item, dict) and str(item.get('label', '')).strip()
+            }
+            if restored:
+                if not hasattr(self, 'background_dataset_labels'):
+                    self.background_dataset_labels = set()
+                self.background_dataset_labels.update(restored)
+                self.global_labels.update(restored)
+                for item in stats:
+                    if not isinstance(item, dict):
+                        continue
+                    label = str(item.get('label', '')).strip()
+                    color = str(item.get('color', '') or '').strip()
+                    if label and color and hasattr(self, 'label_color_map'):
+                        self.label_color_map.setdefault(label, color)
+                if hasattr(self, 'update_label_list'):
+                    self.update_label_list()
+
         self.update_file_count()
         if target_background_index is not None:
             self.switch_background_to_index(target_background_index)
@@ -435,6 +495,12 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.canvas_items.clear()
         self.detection_boxes.clear()
         self.global_labels.clear()
+        if hasattr(self, 'background_dataset_labels'):
+            self.background_dataset_labels.clear()
+        else:
+            self.background_dataset_labels = set()
+        self._cached_bg_label_stats = []
+        self._cached_bg_label_stats_path = ""
         self._background_label_scan_pending = False
         self._background_label_scan_completed = False
         self._background_label_scan_in_progress = False
@@ -550,6 +616,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.canvas.update()
         self._apply_mode_visibility_defaults()
         self._update_mode_seg_style(animated=animated)
+        self._apply_paste_label_visibility()
         if hasattr(self, 'auto_save_b_checkbox'):
             is_annotate = self.edit_mode == 'annotate'
             self.auto_save_b_checkbox.setChecked(is_annotate)
@@ -561,6 +628,222 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.status_label.setText(f"Mode: {mode_text}")
         QTimer.singleShot(2000, lambda: self.status_label.setText(""))
 
+    def _apply_paste_label_visibility(self):
+        """Annotate: hide paste label column + paste list; paste: show both."""
+        show = getattr(self, 'edit_mode', 'paste') != 'annotate'
+        if hasattr(self, 'paste_label_column'):
+            self.paste_label_column.setVisible(show)
+        else:
+            if hasattr(self, 'paste_label_list'):
+                self.paste_label_list.setVisible(show)
+            if hasattr(self, 'paste_label_header_lbl'):
+                self.paste_label_header_lbl.setVisible(show)
+
+        paste_group = getattr(self, 'paste_group', None)
+        paste_header = getattr(self, 'paste_group_header', None)
+        if paste_group is not None:
+            paste_group.setVisible(show)
+            if show and paste_header is not None:
+                paste_header._expanded = True
+                key = paste_header.property('title_key') or '贴图列表'
+                paste_header.setText(f"▼  {tr(key)}")
+                for section in getattr(self, '_side_sections', []) or []:
+                    if section.get('header') is paste_header:
+                        section['content'].setVisible(True)
+                        break
+            if hasattr(self, '_update_side_panel_stretches'):
+                self._update_side_panel_stretches()
+
+    def _toggle_bg_label_list_mode(self):
+        """Switch background label list between stats counts and per-box rows."""
+        current = getattr(self, '_bg_label_list_mode', 'stats')
+        self._bg_label_list_mode = 'all' if current == 'stats' else 'stats'
+        self._refresh_bg_label_mode_button()
+        self.update_label_list()
+
+    def _refresh_bg_label_mode_button(self):
+        btn = getattr(self, 'bg_label_mode_btn', None)
+        if btn is None:
+            return
+        from PyQt5.QtCore import QSize
+        from PyQt5.QtGui import QIcon
+        mode = getattr(self, '_bg_label_list_mode', 'stats')
+        # stats: show "rows" icon (click → list); list: show "bars" icon (click → stats)
+        if mode == 'all':
+            btn.setIcon(QIcon(self._bg_label_mode_icon('stats')))
+            btn.setToolTip(tr("切换到统计计数"))
+        else:
+            btn.setIcon(QIcon(self._bg_label_mode_icon('list')))
+            btn.setToolTip(tr("切换到每框一行"))
+        btn.setText("")
+        btn.setIconSize(QSize(14, 14))
+
+    def _bg_label_mode_icon(self, kind):
+        """Paint a tiny mode glyph: list rows or count bars."""
+        from PyQt5.QtGui import QPixmap, QPainter, QColor, QPen
+        from PyQt5.QtCore import Qt
+        size = 14
+        pm = QPixmap(size, size)
+        pm.fill(Qt.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.Antialiasing)
+        color = QColor("#c0c4cc")
+        if hasattr(self, 'theme_manager') and getattr(self, 'is_dark_theme', True) is False:
+            color = QColor("#5a5e66")
+        p.setPen(QPen(color, 1.6))
+        if kind == 'list':
+            # three equal horizontal rows
+            for y in (3, 7, 11):
+                p.drawLine(2, y, 12, y)
+        else:
+            # three vertical bars of different height (stats)
+            p.setBrush(color)
+            p.setPen(Qt.NoPen)
+            p.drawRect(2, 8, 2, 5)
+            p.drawRect(6, 4, 2, 9)
+            p.drawRect(10, 6, 2, 7)
+        p.end()
+        return pm
+
+    def _cycle_bg_annotation_filter(self):
+        """Cycle background list filter: all → annotated → unannotated → empty."""
+        order = ('all', 'annotated', 'unannotated', 'empty')
+        current = getattr(self, '_bg_annotation_filter', 'all')
+        try:
+            idx = order.index(current)
+        except ValueError:
+            idx = 0
+        next_mode = order[(idx + 1) % len(order)]
+        if current == 'all' and next_mode != 'all':
+            self._bg_filter_saved_index = self.current_background_index
+        self._bg_annotation_filter = next_mode
+        self._refresh_bg_filter_button()
+        self._apply_bg_annotation_filter(navigate=True)
+
+    def _refresh_bg_filter_button(self):
+        btn = getattr(self, 'bg_filter_btn', None)
+        if btn is None:
+            return
+        mode = getattr(self, '_bg_annotation_filter', 'all')
+        tips = {
+            'all': tr("筛选：全部"),
+            'annotated': tr("筛选：已标注"),
+            'unannotated': tr("筛选：未标注"),
+            'empty': tr("筛选：空标签"),
+        }
+        from PyQt5.QtCore import QSize
+        from ..engine.image_loader import _status_icon
+        icon_key = mode if mode in ('all', 'annotated', 'unannotated', 'empty') else 'all'
+        btn.setText("")
+        btn.setIcon(_status_icon(icon_key, size=14))
+        btn.setIconSize(QSize(14, 14))
+        btn.setToolTip(tips.get(mode, tips['all']))
+        in_delete = getattr(self, '_is_delete_view', False)
+        btn.setVisible(not in_delete)
+
+    def _apply_bg_annotation_filter(self, navigate=False):
+        """Hide list rows that do not match the current annotation filter."""
+        if getattr(self, '_is_delete_view', False):
+            return
+        bg_list = getattr(self, 'background_list', None)
+        if bg_list is None:
+            return
+        mode = getattr(self, '_bg_annotation_filter', 'all')
+        first_visible_row = None
+        for row in range(bg_list.count()):
+            item = bg_list.item(row)
+            if item is None:
+                continue
+            status = item.data(Qt.UserRole + 2)
+            if status is None:
+                path = item.data(Qt.UserRole + 1)
+                if not path:
+                    idx = item.data(Qt.UserRole)
+                    if isinstance(idx, int) and 0 <= idx < len(self.background_images):
+                        path = self.background_images[idx]
+                from ..engine.image_loader import annotation_status_for_image, decorate_background_list_item
+                if path:
+                    status = decorate_background_list_item(item, path, item.data(Qt.UserRole))
+                else:
+                    status = 'unannotated'
+            visible = (mode == 'all') or (status == mode)
+            item.setHidden(not visible)
+            if visible and first_visible_row is None:
+                first_visible_row = row
+
+        if not navigate:
+            return
+
+        if mode in ('unannotated', 'empty'):
+            target_row = first_visible_row
+        else:
+            # all / annotated: restore remembered work position when possible
+            saved = getattr(self, '_bg_filter_saved_index', self.current_background_index)
+            target_row = self._find_bg_list_row_for_index(saved)
+            if target_row is None or (bg_list.item(target_row) and bg_list.item(target_row).isHidden()):
+                if mode == 'annotated':
+                    target_row = first_visible_row
+                else:
+                    target_row = self._find_bg_list_row_for_index(saved)
+                    if target_row is None:
+                        target_row = first_visible_row
+
+        if target_row is None:
+            return
+        item = bg_list.item(target_row)
+        if item is None:
+            return
+        bg_list.setCurrentRow(target_row)
+        self.select_background(item)
+
+    def _find_bg_list_row_for_index(self, image_index):
+        bg_list = getattr(self, 'background_list', None)
+        if bg_list is None or not isinstance(image_index, int):
+            return None
+        for row in range(bg_list.count()):
+            item = bg_list.item(row)
+            if item is None:
+                continue
+            if item.data(Qt.UserRole) == image_index:
+                return row
+        if 0 <= image_index < bg_list.count():
+            return image_index
+        return None
+
+    def _refresh_background_item_status(self, image_index=None, image_path=None):
+        """Refresh status icon for one background list row after save/load."""
+        if getattr(self, '_is_delete_view', False):
+            return
+        bg_list = getattr(self, 'background_list', None)
+        if bg_list is None:
+            return
+        from ..engine.image_loader import decorate_background_list_item
+        if image_path is None and isinstance(image_index, int):
+            if 0 <= image_index < len(self.background_images):
+                image_path = self.background_images[image_index]
+        if not image_path:
+            return
+        target_row = self._find_bg_list_row_for_index(image_index) if isinstance(image_index, int) else None
+        if target_row is None:
+            for row in range(bg_list.count()):
+                item = bg_list.item(row)
+                if item and item.data(Qt.UserRole + 1) == image_path:
+                    target_row = row
+                    break
+        if target_row is None:
+            return
+        item = bg_list.item(target_row)
+        if item is None:
+            return
+        idx = item.data(Qt.UserRole)
+        if idx is None:
+            idx = image_index
+        decorate_background_list_item(item, image_path, idx)
+        mode = getattr(self, '_bg_annotation_filter', 'all')
+        status = item.data(Qt.UserRole + 2)
+        visible = (mode == 'all') or (status == mode)
+        item.setHidden(not visible)
+
     def _toggle_view_path(self):
         """切换工作路径/移除路径视图"""
         from . import i18n
@@ -570,6 +853,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.view_toggle_btn.setText(_tr("移除路径"))
             self._saved_work_index = self.current_background_index
             self._show_delete_view()
+            self._refresh_bg_filter_button()
             saved_del = getattr(self, '_saved_delete_idx', 0)
             if self._delete_files and saved_del < len(self._delete_files):
                 self._delete_current_idx = saved_del
@@ -591,6 +875,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self._saved_delete_idx = getattr(self, '_delete_current_idx', 0)
             saved = getattr(self, '_saved_work_index', 0)
             self._show_work_view()
+            self._refresh_bg_filter_button()
             if self.background_images and saved < len(self.background_images):
                 self.current_background_index = saved
                 from PyQt5.QtGui import QPixmap
@@ -603,8 +888,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                     self.canvas.repaint()
                     self.update_label_list()
                 self.update_file_count()
-                if saved < self.background_list.count():
-                    self.background_list.setCurrentRow(saved)
+                row = self._find_bg_list_row_for_index(saved)
+                if row is not None:
+                    self.background_list.setCurrentRow(row)
             for sc in getattr(self, '_shortcuts', []):
                 sc.setEnabled(True)
             if hasattr(self, 'draw_box_btn'):
@@ -619,15 +905,20 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.background_list.clear()
         from ..core.utils import PathUtils
         from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
+        from ..engine.image_loader import decorate_background_list_item
         for i, path in enumerate(self.background_images):
             ext = os.path.splitext(path)[1].lower()
             if ext in SUPPORTED_IMAGE_EXTENSIONS:
                 from PyQt5.QtWidgets import QListWidgetItem
                 item = QListWidgetItem(PathUtils.to_display_path(path))
-                item.setData(Qt.UserRole, i)
+                decorate_background_list_item(item, path, i)
                 self.background_list.addItem(item)
+        self._refresh_bg_filter_button()
+        self._apply_bg_annotation_filter(navigate=False)
         if 0 <= self.current_background_index < self.background_list.count():
-            self.background_list.setCurrentRow(self.current_background_index)
+            row = self._find_bg_list_row_for_index(self.current_background_index)
+            if row is not None:
+                self.background_list.setCurrentRow(row)
             self.update_file_count()
         elif self.background_images:
             self.current_background_index = 0
@@ -762,9 +1053,51 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._show_delete_view()
         self.update_file_count()
 
+    def _collect_bg_stats_for_dialog(self):
+        """Background label counts: prefer memory cache, else scan sidecar JSONs."""
+        cached = getattr(self, '_cached_bg_label_stats', None) or []
+        current_path = getattr(self, '_memory_background_path', '') or ''
+        # Prefer any non-empty live cache (renames/canvas edits update it without path).
+        if cached:
+            bg_stats = {}
+            for item in cached:
+                if not isinstance(item, dict):
+                    continue
+                label = str(item.get('label', '') or '').strip()
+                if not label:
+                    continue
+                try:
+                    count = max(0, int(item.get('count', 0) or 0))
+                except (TypeError, ValueError):
+                    count = 0
+                bg_stats[label] = count
+                color = str(item.get('color', '') or '').strip()
+                if color and hasattr(self, 'label_color_map'):
+                    self.label_color_map.setdefault(label, color)
+            if bg_stats:
+                return bg_stats
+
+        from ..engine.image_loader import collect_background_label_counts
+        bg_stats = collect_background_label_counts(list(self.background_images or []))
+        for lbl in getattr(self, 'background_dataset_labels', set()) or set():
+            bg_stats.setdefault(lbl, 0)
+        for lbl in self.global_labels:
+            if lbl in bg_stats or lbl in (getattr(self, 'background_dataset_labels', set()) or set()):
+                bg_stats.setdefault(lbl, 0)
+        self._cached_bg_label_stats = [
+            {'label': label, 'count': count, 'color': self.get_label_color(label)}
+            for label, count in sorted(bg_stats.items(), key=lambda x: (-x[1], x[0]))
+        ]
+        self._cached_bg_label_stats_path = current_path
+        return bg_stats
+
     def _show_label_stats(self):
         """显示标签统计弹窗"""
-        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView, QPushButton, QWidget
+        from PyQt5.QtWidgets import (
+            QDialog, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
+            QHeaderView, QPushButton, QWidget, QAbstractItemView,
+        )
+        from PyQt5.QtCore import Qt as QtCore
         from .dialog_helpers import center_on_parent
         from .theme import ThemeManager
         from . import i18n
@@ -807,36 +1140,66 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         bg_header.setFixedHeight(24)
         layout.addWidget(bg_header)
 
-        bg_stats = {}
-        import concurrent.futures
-        from ..engine.image_loader import _scan_single_json
-        json_paths = [f"{os.path.splitext(p)[0]}.json" for p in self.background_images]
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            futures = [pool.submit(_scan_single_json, jp) for jp in json_paths]
-            for future in concurrent.futures.as_completed(futures):
-                result = future.result()
-                if result:
-                    for lbl in result:
-                        bg_stats[lbl] = bg_stats.get(lbl, 0) + 1
-        for lbl in self.global_labels:
-            bg_stats[lbl] = bg_stats.get(lbl, 0)
-        for idx in range(len(self.background_images)):
-            for box in self.detection_boxes_dict.get(idx, []):
-                lbl = box.get("label", "")
-                if lbl:
-                    bg_stats[lbl] = bg_stats.get(lbl, 0) + 1
+        bg_stats = self._collect_bg_stats_for_dialog()
 
         bg_table = QTableWidget(len(bg_stats), 3)
         bg_table.setHorizontalHeaderLabels([tr("类别"), tr("数量"), tr("颜色")])
         bg_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        bg_table.setEditTriggers(
+            QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed | QAbstractItemView.SelectedClicked
+        )
         for row, (label, count) in enumerate(sorted(bg_stats.items(), key=lambda x: -x[1])):
             label_item = QTableWidgetItem(label)
+            label_item.setFlags(label_item.flags() | QtCore.ItemIsEditable)
+            label_item.setData(QtCore.UserRole, label)
             bg_table.setItem(row, 0, label_item)
-            bg_table.setItem(row, 1, QTableWidgetItem(str(count)))
+            count_item = QTableWidgetItem(str(count))
+            count_item.setFlags(count_item.flags() & ~QtCore.ItemIsEditable)
+            bg_table.setItem(row, 1, count_item)
             color_button = QPushButton()
             self._set_label_color_button(color_button, self.get_label_color(label))
             color_button.clicked.connect(lambda _, value=label, button=color_button: self._change_label_color(value, dialog, button))
             bg_table.setCellWidget(row, 2, color_button)
+
+        def _on_bg_label_changed(item):
+            if item is None or item.column() != 0:
+                return
+            old_label = item.data(QtCore.UserRole) or ''
+            new_label = (item.text() or '').strip()
+            if not old_label:
+                return
+            if not new_label or new_label == old_label:
+                bg_table.blockSignals(True)
+                item.setText(old_label)
+                bg_table.blockSignals(False)
+                return
+            existing = {
+                (bg_table.item(r, 0).text() if bg_table.item(r, 0) else '')
+                for r in range(bg_table.rowCount()) if r != item.row()
+            }
+            if new_label in existing:
+                bg_table.blockSignals(True)
+                item.setText(old_label)
+                bg_table.blockSignals(False)
+                return
+            if self.label_manager.rename_detection_label(old_label, new_label):
+                item.setData(QtCore.UserRole, new_label)
+                # Rebuild table from live cache so counts/colors/merged rows stay in sync.
+                self._reload_stats_bg_table(bg_table, dialog)
+                if hasattr(self, 'update_label_list'):
+                    self.update_label_list()
+                if (hasattr(self, '_processing_panel') and self._processing_panel
+                        and self._processing_panel.isVisible()):
+                    self._update_processing_panel_labels()
+                self.canvas.update()
+            else:
+                bg_table.blockSignals(True)
+                item.setText(old_label)
+                bg_table.blockSignals(False)
+
+        bg_table.itemChanged.connect(_on_bg_label_changed)
+        dialog._bg_table = bg_table
+        dialog._on_bg_label_changed = _on_bg_label_changed
         bg_container = QWidget()
         bg_cl = QVBoxLayout(bg_container)
         bg_cl.setContentsMargins(0, 0, 0, 0)
@@ -862,14 +1225,62 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         paste_table = QTableWidget(len(paste_stats), 3)
         paste_table.setHorizontalHeaderLabels([tr("类别"), tr("数量"), tr("颜色")])
         paste_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        paste_table.setEditTriggers(
+            QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed | QAbstractItemView.SelectedClicked
+        )
         for row, (label, count) in enumerate(sorted(paste_stats.items(), key=lambda x: -x[1])):
             label_item = QTableWidgetItem(label)
+            label_item.setFlags(label_item.flags() | QtCore.ItemIsEditable)
+            label_item.setData(QtCore.UserRole, label)
             paste_table.setItem(row, 0, label_item)
-            paste_table.setItem(row, 1, QTableWidgetItem(str(count)))
+            count_item = QTableWidgetItem(str(count))
+            count_item.setFlags(count_item.flags() & ~QtCore.ItemIsEditable)
+            paste_table.setItem(row, 1, count_item)
             color_button = QPushButton()
             self._set_label_color_button(color_button, self.get_label_color(label))
             color_button.clicked.connect(lambda _, value=label, button=color_button: self._change_label_color(value, dialog, button))
             paste_table.setCellWidget(row, 2, color_button)
+
+        def _on_paste_label_changed(item):
+            if item is None or item.column() != 0:
+                return
+            old_label = item.data(QtCore.UserRole) or ''
+            new_label = (item.text() or '').strip()
+            if not old_label:
+                return
+            if not new_label or new_label == old_label:
+                paste_table.blockSignals(True)
+                item.setText(old_label)
+                paste_table.blockSignals(False)
+                return
+            existing = {
+                (paste_table.item(r, 0).text() if paste_table.item(r, 0) else '')
+                for r in range(paste_table.rowCount()) if r != item.row()
+            }
+            if new_label in existing:
+                paste_table.blockSignals(True)
+                item.setText(old_label)
+                paste_table.blockSignals(False)
+                return
+            if self.label_manager.rename_paste_label(old_label, new_label):
+                item.setData(QtCore.UserRole, new_label)
+                color_btn = paste_table.cellWidget(item.row(), 2)
+                if color_btn is not None:
+                    try:
+                        color_btn.clicked.disconnect()
+                    except TypeError:
+                        pass
+                    color_btn.clicked.connect(
+                        lambda _, value=new_label, button=color_btn: self._change_label_color(value, dialog, button)
+                    )
+                    self._set_label_color_button(color_btn, self.get_label_color(new_label))
+                self.canvas.update()
+            else:
+                paste_table.blockSignals(True)
+                item.setText(old_label)
+                paste_table.blockSignals(False)
+
+        paste_table.itemChanged.connect(_on_paste_label_changed)
         paste_container = QWidget()
         paste_cl = QVBoxLayout(paste_container)
         paste_cl.setContentsMargins(0, 0, 0, 0)
@@ -891,6 +1302,30 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         layout.addWidget(total)
 
         dialog.exec_()
+
+    def _reload_stats_bg_table(self, bg_table, dialog):
+        """Rebuild stats dialog background table from live cache after rename/color."""
+        from PyQt5.QtWidgets import QTableWidgetItem, QPushButton
+        from PyQt5.QtCore import Qt as QtCore
+        bg_stats = self._collect_bg_stats_for_dialog()
+        rows = sorted(bg_stats.items(), key=lambda x: (-x[1], x[0]))
+        bg_table.blockSignals(True)
+        bg_table.setRowCount(len(rows))
+        for row, (label, count) in enumerate(rows):
+            label_item = QTableWidgetItem(label)
+            label_item.setFlags(label_item.flags() | QtCore.ItemIsEditable)
+            label_item.setData(QtCore.UserRole, label)
+            bg_table.setItem(row, 0, label_item)
+            count_item = QTableWidgetItem(str(count))
+            count_item.setFlags(count_item.flags() & ~QtCore.ItemIsEditable)
+            bg_table.setItem(row, 1, count_item)
+            color_button = QPushButton()
+            self._set_label_color_button(color_button, self.get_label_color(label))
+            color_button.clicked.connect(
+                lambda _, value=label, button=color_button: self._change_label_color(value, dialog, button)
+            )
+            bg_table.setCellWidget(row, 2, color_button)
+        bg_table.blockSignals(False)
 
     def _set_label_color_button(self, button, color):
         button.setText(color)
@@ -918,6 +1353,11 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             label_colors=self.label_colors,
             label_color_map=self.label_color_map,
         )
+        cached = getattr(self, '_cached_bg_label_stats', None)
+        if isinstance(cached, list):
+            for item in cached:
+                if isinstance(item, dict) and item.get('label') == label:
+                    item['color'] = color.name()
         if color_button is not None:
             self._set_label_color_button(color_button, color.name())
         self.canvas.update()
@@ -1068,6 +1508,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         if hasattr(self, 'view_stats_btn'):
             self.view_stats_btn.setText(tr("统计"))
             self.view_stats_btn.setToolTip(tr("标签统计"))
+        if hasattr(self, '_refresh_bg_label_mode_button'):
+            self._refresh_bg_label_mode_button()
         if hasattr(self, 'view_toggle_btn'):
             if self._is_delete_view:
                 self.view_toggle_btn.setText(tr("移除路径"))
@@ -1087,11 +1529,19 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
             self.step_label.setText(tr("步长："))
         self.lang_btn.setToolTip(tr("切换中英文"))
         self.theme_btn.setToolTip(tr("切换深色/浅色主题"))
-        if hasattr(self, 'bg_list_group'):
+        for header_name in ('bg_list_header', 'label_group_header', 'paste_group_header'):
+            header = getattr(self, header_name, None)
+            if header is None:
+                continue
+            key = header.property('title_key') or ''
+            expanded = getattr(header, '_expanded', True)
+            if key:
+                header.setText(f"{'▼' if expanded else '▶'}  {tr(key)}")
+        if hasattr(self, 'bg_list_group') and hasattr(self.bg_list_group, 'setTitle'):
             self.bg_list_group.setTitle(tr("背景图列表"))
-        if hasattr(self, 'label_group'):
+        if hasattr(self, 'label_group') and hasattr(self.label_group, 'setTitle'):
             self.label_group.setTitle(tr("标签管理"))
-        if hasattr(self, 'paste_group'):
+        if hasattr(self, 'paste_group') and hasattr(self.paste_group, 'setTitle'):
             self.paste_group.setTitle(tr("贴图列表"))
         if hasattr(self, 'bg_label_header_lbl'):
             self.bg_label_header_lbl.setText(tr("背景图标签"))
@@ -1349,9 +1799,9 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 self.background_images.append(file)
                 display_path = PathUtils.to_display_path(file)
                 from PyQt5.QtWidgets import QListWidgetItem
+                from ..engine.image_loader import decorate_background_list_item
                 item = QListWidgetItem(display_path)
-                item.setData(Qt.UserRole, new_index)
-                item.setData(Qt.UserRole + 1, file)
+                decorate_background_list_item(item, file, new_index)
                 self.background_list.addItem(item)
                 self.canvas_items_dict[new_index] = []
                 self.detection_boxes_dict[new_index] = self.load_detection_boxes(file)

@@ -50,3 +50,79 @@ def test_deduplicate_rectangles_keeps_rectangles_below_98_percent_iou():
     )
 
     assert kept == boxes
+
+
+class _FakeBg:
+    def width(self):
+        return 100
+
+    def height(self):
+        return 80
+
+
+def test_save_current_json_annotate_skips_never_annotated(tmp_path):
+    img = tmp_path / "a.jpg"
+    img.write_bytes(b"x")
+
+    class Editor:
+        _is_delete_view = False
+        edit_mode = "annotate"
+        detection_boxes = []
+        canvas_items = []
+        current_background_index = 0
+        background_images = [str(img)]
+        current_background = _FakeBg()
+        saved = []
+
+        def __init__(self):
+            pass
+
+    editor = Editor()
+    mgr = SaveManager(editor)
+    mgr.save_json = lambda *a, **k: editor.saved.append((a, k))
+    mgr.save_current_json()
+    assert editor.saved == []
+
+
+def test_save_current_json_annotate_saves_when_has_boxes(tmp_path):
+    img = tmp_path / "b.jpg"
+    img.write_bytes(b"x")
+
+    class Editor:
+        _is_delete_view = False
+        edit_mode = "annotate"
+        detection_boxes = [{"label": "Car", "x": 0, "y": 0, "width": 1, "height": 1}]
+        canvas_items = []
+        current_background_index = 0
+        background_images = [str(img)]
+        current_background = _FakeBg()
+        saved = []
+
+    editor = Editor()
+    mgr = SaveManager(editor)
+    mgr.save_json = lambda *a, **k: editor.saved.append((a, k))
+    mgr.save_current_json()
+    assert len(editor.saved) == 1
+    assert editor.saved[0][0][0] == str(img)
+
+
+def test_save_current_json_annotate_saves_empty_when_json_exists(tmp_path):
+    img = tmp_path / "c.jpg"
+    img.write_bytes(b"x")
+    (tmp_path / "c.json").write_text('{"shapes":[]}', encoding="utf-8")
+
+    class Editor:
+        _is_delete_view = False
+        edit_mode = "annotate"
+        detection_boxes = []
+        canvas_items = []
+        current_background_index = 0
+        background_images = [str(img)]
+        current_background = _FakeBg()
+        saved = []
+
+    editor = Editor()
+    mgr = SaveManager(editor)
+    mgr.save_json = lambda *a, **k: editor.saved.append((a, k))
+    mgr.save_current_json()
+    assert len(editor.saved) == 1

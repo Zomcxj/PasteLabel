@@ -1,6 +1,8 @@
 """对话框辅助函数：统一标题栏主题和按钮文字。"""
-from PyQt5.QtCore import QTimer
-from PyQt5.QtWidgets import QDialog, QInputDialog, QMessageBox, QColorDialog, QLabel, QPushButton
+from PyQt5.QtCore import QTimer, QPoint
+from PyQt5.QtWidgets import (
+    QDialog, QInputDialog, QMessageBox, QColorDialog, QLabel, QPushButton, QApplication,
+)
 
 from . import i18n
 from .dwm import set_titlebar_dark
@@ -24,10 +26,31 @@ def center_on_parent(dialog, parent=None):
 
 
 class ThemedInputDialog(QInputDialog):
+    def __init__(self, parent=None, anchor_pos=None):
+        super().__init__(parent)
+        self._anchor_pos = anchor_pos  # global QPoint; None = center on parent
+
     def showEvent(self, event):
         super().showEvent(event)
-        center_on_parent(self)
+        if self._anchor_pos is not None:
+            self._move_near_anchor(self._anchor_pos)
+        else:
+            center_on_parent(self)
         sync_titlebar(self)
+
+    def _move_near_anchor(self, pos):
+        if not isinstance(pos, QPoint):
+            center_on_parent(self)
+            return
+        screen = QApplication.screenAt(pos)
+        if screen is None:
+            screen = QApplication.primaryScreen()
+        x, y = pos.x() + 8, pos.y() + 8
+        if screen is not None:
+            available = screen.availableGeometry()
+            x = max(available.left(), min(x, available.right() - self.width()))
+            y = max(available.top(), min(y, available.bottom() - self.height()))
+        self.move(x, y)
 
 
 class ThemedMessageBox(QMessageBox):
@@ -76,8 +99,9 @@ class ThemedColorDialog(QColorDialog):
                 widget.setText(i18n.t(translations[text]))
 
 
-def get_text(parent, title, label, text=""):
-    dialog = ThemedInputDialog(parent)
+def get_text(parent, title, label, text="", anchor_pos=None):
+    """Show themed text input. If anchor_pos (global QPoint) is set, open near cursor."""
+    dialog = ThemedInputDialog(parent, anchor_pos=anchor_pos)
     dialog.setWindowTitle(i18n.t(title))
     dialog.setLabelText(i18n.t(label))
     dialog.setTextValue(text)

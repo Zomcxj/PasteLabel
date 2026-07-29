@@ -181,24 +181,40 @@ class SaveManager(QObject):
         SaveTipDialog.show_save_tip(self.editor, file_path, save_success and os.path.exists(file_path))
 
     def save_current_json(self):
-        """仅保存当前图的标注 JSON，供切图和关闭窗口时兜底。"""
+        """仅保存当前图的标注 JSON，供切图和关闭窗口时兜底。
+
+        Annotate mode: save when there are boxes, or when all boxes were
+        cleared but a sidecar JSON already exists (persist empty / 空标签).
+        Never create a brand-new empty JSON for never-annotated images.
+        """
         if self.editor._is_delete_view:
             return
         mode = getattr(self.editor, 'edit_mode', 'annotate')
-        if mode == 'annotate' and not self.editor.detection_boxes:
-            return
         if mode == 'paste' and not self.editor.canvas_items:
             return
         if mode == 'annotate':
             idx = self.editor.current_background_index
-            if idx < 0:
+            if idx < 0 or not self.editor.background_images:
+                return
+            if idx >= len(self.editor.background_images):
                 return
             orig_path = self.editor.background_images[idx]
             json_path = f"{os.path.splitext(orig_path)[0]}.json"
+            has_boxes = bool(self.editor.detection_boxes)
+            json_exists = os.path.exists(json_path)
+            # Has labels → save; all deleted but had JSON → save empty; never annotated → skip
+            if not has_boxes and not json_exists:
+                return
+            if self.editor.current_background is None:
+                return
             base_name = os.path.basename(orig_path)
-            self.save_json(json_path, base_name, '',
-                           image_width=self.editor.current_background.width(),
-                           image_height=self.editor.current_background.height())
+            # Pass image path; save_json derives sibling .json itself.
+            self.save_json(
+                orig_path, base_name, '',
+                canvas_items=[],
+                image_width=self.editor.current_background.width(),
+                image_height=self.editor.current_background.height(),
+            )
             return
         save_info = self.get_save_info()
         if not save_info:
@@ -393,6 +409,9 @@ class SaveManager(QObject):
         try:
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=2)
+            refresh = getattr(self.editor, '_refresh_background_item_status', None)
+            if callable(refresh):
+                refresh(index_to_use, image_path)
         except Exception as e:
             from ..core.exception_hook import _write_log
             _write_log(f"保存 JSON 失败: {json_path}, 错误: {e}")

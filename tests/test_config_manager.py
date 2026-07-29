@@ -360,6 +360,30 @@ def test_saved_label_color_map_takes_precedence_when_no_explicit_map_is_given(tm
         finally:
             config_manager.save_config(original)
 
+    def test_memory_record_preserves_bg_label_stats(self):
+        original = config_manager.load_memory_records()
+        try:
+            config_manager.save_memory_records([{
+                'note': 'stats',
+                'background_path': 'bg_stats',
+                'paste_path': '',
+                'label_path': '',
+                'bg_label_stats': [
+                    {'label': 'cat', 'count': 3, 'color': '#ff0000'},
+                    {'label': '', 'count': 1, 'color': '#000'},
+                    {'label': 'dog', 'count': 'bad', 'color': '#00ff00'},
+                ],
+            }])
+            loaded = config_manager.load_memory_records()
+            assert loaded[0]['bg_label_stats'] == [
+                {'label': 'cat', 'count': 3, 'color': '#ff0000'},
+                {'label': 'dog', 'count': 0, 'color': '#00ff00'},
+            ]
+            bare = config_manager._normalize_memory_record({'background_path': 'x'})
+            assert bare['bg_label_stats'] == []
+        finally:
+            config_manager.save_memory_records(original)
+
 
 class TestDefaults:
 

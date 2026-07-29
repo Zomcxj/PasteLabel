@@ -14,6 +14,99 @@ from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
 from ..core.utils import PathUtils, natural_sort_key, create_thumbnail
 from ..ui.i18n import t as tr
 
+# background list item UserRole keys (Qt.ItemDataRole.UserRole == 0x0100)
+BG_ROLE_INDEX = 0x0100
+BG_ROLE_PATH = 0x0101
+BG_ROLE_STATUS = 0x0102
+
+STATUS_UNANNOTATED = "unannotated"
+STATUS_ANNOTATED = "annotated"
+STATUS_EMPTY = "empty"
+
+_STATUS_ICON_CACHE = {}
+
+
+def annotation_status_for_image(image_path):
+    """Classify sidecar LabelMe JSON: unannotated / annotated / empty."""
+    if not image_path:
+        return STATUS_UNANNOTATED
+    json_path = os.path.splitext(image_path)[0] + ".json"
+    if not os.path.exists(json_path):
+        return STATUS_UNANNOTATED
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return STATUS_EMPTY
+    shapes = data.get("shapes") if isinstance(data, dict) else None
+    if isinstance(shapes, list) and len(shapes) > 0:
+        return STATUS_ANNOTATED
+    return STATUS_EMPTY
+
+
+def _status_icon(status, size=12):
+    """Small circular status icon for background list rows / filter button."""
+    cache_key = (status, size)
+    if cache_key in _STATUS_ICON_CACHE:
+        return _STATUS_ICON_CACHE[cache_key]
+    from PyQt5.QtGui import QColor, QPainter, QPen
+    pm = QPixmap(size, size)
+    pm.fill(Qt.transparent)
+    painter = QPainter(pm)
+    painter.setRenderHint(QPainter.Antialiasing)
+    if status == "all":
+        # three mini dots: green / gray / orange
+        for i, color in enumerate(("#2ecc71", "#95a5a6", "#e67e22")):
+            painter.setBrush(QColor(color))
+            painter.setPen(Qt.NoPen)
+            x = 1 + i * max(3, size // 3)
+            painter.drawEllipse(x, size // 2 - 2, 4, 4)
+    elif status == STATUS_ANNOTATED:
+        painter.setBrush(QColor("#2ecc71"))
+        painter.setPen(QPen(QColor("#1e8449"), 1))
+        painter.drawEllipse(1, 1, size - 2, size - 2)
+    elif status == STATUS_EMPTY:
+        painter.setBrush(Qt.transparent)
+        painter.setPen(QPen(QColor("#e67e22"), 1.5))
+        painter.drawEllipse(1, 1, size - 2, size - 2)
+        painter.setBrush(QColor("#e67e22"))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(4, 4, size - 8, size - 8)
+    else:
+        painter.setBrush(Qt.transparent)
+        painter.setPen(QPen(QColor("#95a5a6"), 1.5))
+        painter.drawEllipse(1, 1, size - 2, size - 2)
+    painter.end()
+    icon = QIcon(pm)
+    _STATUS_ICON_CACHE[cache_key] = icon
+    return icon
+
+
+def decorate_background_list_item(item, image_path, index=None):
+    """Attach path/index/status metadata and status icon to a list item."""
+    if item is None:
+        return STATUS_UNANNOTATED
+    if index is not None and hasattr(item, 'setData'):
+        item.setData(BG_ROLE_INDEX, index)
+    if image_path and hasattr(item, 'setData'):
+        item.setData(BG_ROLE_PATH, image_path)
+    status = annotation_status_for_image(image_path)
+    if hasattr(item, 'setData'):
+        item.setData(BG_ROLE_STATUS, status)
+    if hasattr(item, 'setIcon'):
+        try:
+            item.setIcon(_status_icon(status))
+        except Exception:
+            pass
+    tips = {
+        STATUS_ANNOTATED: tr("已标注"),
+        STATUS_EMPTY: tr("空标签"),
+        STATUS_UNANNOTATED: tr("未标注"),
+    }
+    if hasattr(item, 'setToolTip'):
+        item.setToolTip(tips.get(status, ""))
+    return status
+
 
 def _scan_single_json(json_path):
     """Parse a single LabelMe JSON and return its labels, or None on error."""
@@ -57,6 +150,47 @@ def scan_dataset_labels(image_paths, is_interrupted=None):
     return labels
 
 
+def _count_labels_in_json(json_path):
+    """Parse a LabelMe JSON and return {label: shape_count}, or None on error."""
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return None
+    shapes = data.get("shapes") if isinstance(data, dict) else None
+    if not isinstance(shapes, list):
+        return None
+    counts = {}
+    for shape in shapes:
+        label = shape.get("label") if isinstance(shape, dict) else None
+        if isinstance(label, str) and label.strip():
+            label = label.strip()
+            counts[label] = counts.get(label, 0) + 1
+    return counts
+
+
+def collect_background_label_counts(image_paths, is_interrupted=None):
+    """Count every shape occurrence across background sidecar JSONs."""
+    counts = {}
+    pending = []
+    for image_path in image_paths:
+        if is_interrupted and is_interrupted():
+            break
+        pending.append(f"{os.path.splitext(image_path)[0]}.json")
+    if not pending:
+        return counts
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [pool.submit(_count_labels_in_json, jp) for jp in pending]
+        for future in concurrent.futures.as_completed(futures):
+            if is_interrupted and is_interrupted():
+                break
+            result = future.result()
+            if result:
+                for lbl, n in result.items():
+                    counts[lbl] = counts.get(lbl, 0) + int(n or 0)
+    return counts
+
+
 class DatasetLabelScanWorker(QThread):
     """Scan a fixed dataset snapshot outside the UI thread."""
     labels_scanned = pyqtSignal(int, tuple, object)
@@ -87,6 +221,12 @@ class ImageLoaderMixin:
             self._pending_image_files = None
         self._background_label_scan_generation += 1
         self.global_labels.clear()
+        if hasattr(self, 'background_dataset_labels'):
+            self.background_dataset_labels.clear()
+        else:
+            self.background_dataset_labels = set()
+        self._cached_bg_label_stats = []
+        self._cached_bg_label_stats_path = ""
         self._background_label_scan_pending = True
         self._background_label_scan_completed = False
         if (hasattr(self, '_processing_panel') and self._processing_panel
@@ -144,8 +284,7 @@ class ImageLoaderMixin:
                     self.background_images.append(file)
                     display_path = PathUtils.to_display_path(file)
                     item = QListWidgetItem(display_path)
-                    item.setData(Qt.UserRole, new_index)
-                    item.setData(Qt.UserRole + 1, file)
+                    decorate_background_list_item(item, file, new_index)
                     self.background_list.addItem(item)
 
                     self.canvas_items_dict[new_index] = []
@@ -211,8 +350,7 @@ class ImageLoaderMixin:
         self.background_images.append(first_path)
         display_path = PathUtils.to_display_path(first_path)
         item = QListWidgetItem(display_path)
-        item.setData(Qt.UserRole, 0)
-        item.setData(Qt.UserRole + 1, first_path)
+        decorate_background_list_item(item, first_path, 0)
         self.background_list.addItem(item)
         self.canvas_items_dict[0] = []
         self.detection_boxes_dict[0] = []
@@ -251,6 +389,9 @@ class ImageLoaderMixin:
                 self._pending_image_files = None
                 self._start_dataset_label_scan()
                 self.update_file_count()
+                apply_filter = getattr(self, '_apply_bg_annotation_filter', None)
+                if callable(apply_filter):
+                    apply_filter(navigate=False)
                 self.background_list.viewport().update()
                 return
             file_path = self._pending_image_files[self._pending_image_index]
@@ -258,8 +399,11 @@ class ImageLoaderMixin:
             self.background_images.append(file_path)
             display_path = PathUtils.to_display_path(file_path)
             item = QListWidgetItem(display_path)
-            item.setData(Qt.UserRole, idx)
-            item.setData(Qt.UserRole + 1, file_path)
+            decorate_background_list_item(item, file_path, idx)
+            mode = getattr(self, '_bg_annotation_filter', 'all')
+            status = item.data(BG_ROLE_STATUS)
+            if mode != 'all' and status != mode:
+                item.setHidden(True)
             self.background_list.addItem(item)
             self.canvas_items_dict[idx] = []
             self.detection_boxes_dict[idx] = []
@@ -562,6 +706,10 @@ class ImageLoaderMixin:
             return
         self._background_label_scan_in_progress = False
         self._background_label_scan_pending = False
+        labels = set(labels or ())
+        if not hasattr(self, 'background_dataset_labels'):
+            self.background_dataset_labels = set()
+        self.background_dataset_labels = set(labels)
         self.global_labels.update(labels)
         self._background_label_scan_completed = True
         self.update_label_list()

@@ -154,11 +154,11 @@ class ThemeManager:
             }}
             QScrollBar:vertical {{
                 background: transparent;
-                width: 10px;
+                width: 5px;
             }}
             QScrollBar::handle:vertical {{
                 background: rgba(128, 128, 128, 150);
-                border-radius: 5px;
+                border-radius: 2px;
                 min-height: 20px;
             }}
             QScrollBar::handle:vertical:hover {{
@@ -172,11 +172,11 @@ class ThemeManager:
             }}
             QScrollBar:horizontal {{
                 background: transparent;
-                height: 10px;
+                height: 5px;
             }}
             QScrollBar::handle:horizontal {{
                 background: rgba(128, 128, 128, 150);
-                border-radius: 5px;
+                border-radius: 2px;
                 min-width: 20px;
             }}
             QScrollBar::handle:horizontal:hover {{
@@ -324,6 +324,11 @@ class ThemeManager:
                 left: 10px;
                 padding: 0 4px;
                 color: {t['text_primary']};
+            }}
+            QFrame#sideCollapsible {{
+                border: 1px solid {t['groupbox_border']};
+                border-radius: 6px;
+                background-color: transparent;
             }}
             QToolTip {{
                 background-color: {t['tooltip_bg']};

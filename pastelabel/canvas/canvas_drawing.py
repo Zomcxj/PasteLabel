@@ -65,9 +65,7 @@ class CanvasDrawingMixin:
             self._reset_drawing_state()
             return
 
-        label_items = []
-        for i in range(self._editor.label_list.count()):
-            label_items.append(self._editor.label_list.item(i).text())
+        label_items = self._label_choices_for_draw()
 
         selected_label = LabelSelectionDialog.select_label(
             self, label_items, anchor_rect=self.temp_draw_box
@@ -77,6 +75,21 @@ class CanvasDrawingMixin:
             self._create_detection_box(x, y, width, height, selected_label)
 
         self._reset_drawing_state()
+
+    def _label_choices_for_draw(self):
+        """Labels offered after drawing a box (dataset-wide, not only current list)."""
+        if hasattr(self, '_collect_dataset_labels'):
+            labels = self._collect_dataset_labels()
+            if labels:
+                return list(labels)
+        label_items = []
+        label_list = getattr(self._editor, 'label_list', None)
+        if label_list is not None:
+            for i in range(label_list.count()):
+                item = label_list.item(i)
+                if item is not None:
+                    label_items.append(item.text())
+        return label_items
 
     def _constrain_to_background(self, pos, background_rect):
         constrained = pos
@@ -97,6 +110,20 @@ class CanvasDrawingMixin:
 
         if self._editor.current_background_index >= 0:
             self._sync_all_detection_boxes_to_dict()
+
+        pure = (label or "").strip()
+        if pure:
+            gl = getattr(self._editor, 'global_labels', None)
+            if isinstance(gl, set):
+                gl.add(pure)
+            bg = getattr(self._editor, 'background_dataset_labels', None)
+            if isinstance(bg, set):
+                bg.add(pure)
+            lm = getattr(self._editor, 'label_manager', None)
+            if lm is not None and hasattr(lm, '_seed_stats_cache_from_disk_and_memory'):
+                lm._seed_stats_cache_from_disk_and_memory()
+            elif pure and hasattr(self._editor, 'get_label_color'):
+                self._editor.get_label_color(pure)
 
         self._editor.update_label_list()
         self._save_current_detection_boxes()

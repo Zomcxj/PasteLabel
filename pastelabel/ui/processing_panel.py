@@ -423,16 +423,11 @@ class ProcessingPanel(QWidget):
         self._pipe_section = section
 
     def _scan_labels_from_json(self):
+        """Scan background image sidecar JSONs only (no detection boxes / paste)."""
         labels = set()
-        for boxes in self._editor.detection_boxes_dict.values():
-            for b in boxes:
-                lbl = b.get("label", "")
-                if lbl:
-                    labels.add(lbl)
-        if labels:
-            return sorted(labels)
-        if hasattr(self._editor, 'global_labels') and self._editor.global_labels:
-            return sorted(self._editor.global_labels)
+        bg_labels = getattr(self._editor, 'background_dataset_labels', None)
+        if bg_labels:
+            return sorted(bg_labels)
         worker = getattr(self._editor, '_background_label_scan_worker', None)
         if worker is not None and worker.isRunning():
             return []
@@ -447,45 +442,24 @@ class ProcessingPanel(QWidget):
                         data = json.load(f)
                     for sh in data.get("shapes", []):
                         lbl = sh.get("label", "")
-                        if lbl:
-                            labels.add(lbl)
+                        if isinstance(lbl, str) and lbl.strip():
+                            labels.add(lbl.strip())
                 except Exception:
                     pass
             if total > 2 and i % 5 == 0:
                 QApplication.processEvents()
-        if labels:
-            return sorted(labels)
-        work_dir = self._path_edit.text().strip()
-        if not work_dir:
-            work_dir = self._get_session_dir()
-        if work_dir and os.path.isdir(work_dir):
-            jsons = [f for f in os.listdir(work_dir) if f.lower().endswith('.json')]
-            for fname in jsons:
-                try:
-                    with open(os.path.join(work_dir, fname), encoding='utf-8') as f:
-                        data = json.load(f)
-                    for sh in data.get("shapes", []):
-                        lbl = sh.get("label", "")
-                        if lbl:
-                            labels.add(lbl)
-                except Exception:
-                    pass
-                QApplication.processEvents()
+        if labels and hasattr(self._editor, 'background_dataset_labels'):
+            self._editor.background_dataset_labels = set(labels)
         return sorted(labels)
 
     def _fast_labels(self):
-        """Return labels from already-loaded data without file I/O, or None."""
-        if (getattr(self._editor, '_background_label_scan_completed', False)
-                and getattr(self._editor, 'global_labels', None)):
-            return sorted(self._editor.global_labels)
-        labels = set()
-        for boxes in self._editor.detection_boxes_dict.values():
-            for b in boxes:
-                lbl = b.get("label", "")
-                if lbl:
-                    labels.add(lbl)
-        if labels:
-            return sorted(labels)
+        """Return background-dataset labels only, or None if not ready."""
+        completed = getattr(self._editor, '_background_label_scan_completed', False)
+        bg_labels = getattr(self._editor, 'background_dataset_labels', None)
+        if completed:
+            return sorted(bg_labels or ())
+        if bg_labels:
+            return sorted(bg_labels)
         return None
 
     def _update_labels_list(self):

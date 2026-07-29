@@ -16,13 +16,15 @@ from .dwm import set_titlebar_dark
 
 
 class LabelSelectionDialog(QDialog):
-    """标签选择对话框"""
+    """标签选择对话框（标注绘制 / 修改标签共用）。"""
 
-    def __init__(self, parent=None, labels=None, anchor_rect=None):
+    def __init__(self, parent=None, labels=None, anchor_rect=None,
+                 title=None, initial_text="", anchor_pos=None):
         super().__init__(parent)
         tr = i18n.t
-        self.setWindowTitle(tr("选择标签"))
+        self.setWindowTitle(tr(title) if title else tr("选择标签"))
         self.anchor_rect = anchor_rect
+        self.anchor_pos = anchor_pos  # global QPoint; used when no anchor_rect
         self.setMinimumWidth(267)
 
         if labels is None:
@@ -37,14 +39,25 @@ class LabelSelectionDialog(QDialog):
 
         self.new_label_input = QLineEdit()
         self.new_label_input.setPlaceholderText(tr("或输入新标签："))
+        if initial_text:
+            self.new_label_input.setText(str(initial_text))
+            self.new_label_input.selectAll()
         top_layout.addWidget(self.new_label_input, 1)
         layout.addLayout(top_layout)
 
         layout.addWidget(QLabel(tr("现有标签：")))
         self.label_list = QListWidget()
+        seen = set()
+        current_row = 0
+        pure_initial = self._extract_pure_label(initial_text) if initial_text else ""
         for label in labels:
             pure_label = self._extract_pure_label(label)
+            if not pure_label or pure_label in seen:
+                continue
+            seen.add(pure_label)
             self.label_list.addItem(pure_label)
+            if pure_initial and pure_label == pure_initial:
+                current_row = self.label_list.count() - 1
         layout.addWidget(self.label_list)
 
         self.setLayout(layout)
@@ -55,7 +68,7 @@ class LabelSelectionDialog(QDialog):
         self.label_list.itemDoubleClicked.connect(self.accept)
 
         if self.label_list.count() > 0:
-            self.label_list.setCurrentRow(0)
+            self.label_list.setCurrentRow(current_row)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -63,13 +76,17 @@ class LabelSelectionDialog(QDialog):
         self._sync_titlebar()
 
     def _position_dialog(self):
-        """优先把标签选择框显示在新标注框的右下角。"""
-        if self.anchor_rect is None or self.parent() is None:
+        """优先 anchor_rect（画布框）→ anchor_pos（光标）→ 父窗口居中。"""
+        from PyQt5.QtCore import QPoint
+
+        if self.anchor_rect is not None and self.parent() is not None:
+            anchor_pos = self.anchor_rect.bottomRight().toPoint()
+            pos = self.parent().mapToGlobal(anchor_pos)
+        elif isinstance(self.anchor_pos, QPoint):
+            pos = QPoint(self.anchor_pos.x() + 8, self.anchor_pos.y() + 8)
+        else:
             center_on_parent(self)
             return
-
-        anchor_pos = self.anchor_rect.bottomRight().toPoint()
-        pos = self.parent().mapToGlobal(anchor_pos)
 
         screen = QApplication.screenAt(pos)
         if screen is None:
@@ -101,9 +118,16 @@ class LabelSelectionDialog(QDialog):
         return ""
     
     @staticmethod
-    def select_label(parent, labels, anchor_rect=None):
+    def select_label(parent, labels, anchor_rect=None, title=None,
+                     initial_text="", anchor_pos=None):
         """静态方法：显示标签选择对话框并返回选中的标签"""
-        dialog = LabelSelectionDialog(parent, labels, anchor_rect=anchor_rect)
+        dialog = LabelSelectionDialog(
+            parent, labels,
+            anchor_rect=anchor_rect,
+            title=title,
+            initial_text=initial_text,
+            anchor_pos=anchor_pos,
+        )
         if dialog.exec_():
             return dialog.get_selected_label()
         return None

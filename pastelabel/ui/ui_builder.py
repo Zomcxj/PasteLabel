@@ -653,6 +653,8 @@ class UIBuilderMixin:
 
     def _create_splitter(self):
         """创建分割器"""
+        from PyQt5.QtWidgets import QSizePolicy
+
         canvas_widget = QWidget()
         canvas_layout = QVBoxLayout(canvas_widget)
         canvas_layout.setContentsMargins(0, 0, 0, 0)
@@ -669,6 +671,10 @@ class UIBuilderMixin:
         control_widget = self._create_control_panel()
         control_widget.setFixedWidth(350)
 
+        # Both Expanding so heights match (vertical stretch, shared top edge).
+        canvas_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        control_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+
         container = QWidget()
         container_layout = QHBoxLayout(container)
         container_layout.setContentsMargins(0, 0, 0, 0)
@@ -683,21 +689,90 @@ class UIBuilderMixin:
         control_widget = QWidget()
         control_layout = QVBoxLayout(control_widget)
         control_layout.setSpacing(6)
-        control_layout.setContentsMargins(6, 6, 6, 6)
+        # Top 0 matches canvas top edge (sides/bottom keep inset).
+        control_layout.setContentsMargins(6, 0, 6, 6)
+        self._side_control_layout = control_layout
+        self._side_sections = []
 
         self._create_background_list_section(control_layout)
         self._create_label_list_section(control_layout)
         self._create_small_list_section(control_layout)
-        self._create_bottom_buttons(control_layout)
+        self._update_side_panel_stretches()
 
         return control_widget
 
+    def _update_side_panel_stretches(self):
+        """Equal height among expanded sections; collapsed keep header only."""
+        from PyQt5.QtWidgets import QSizePolicy
+
+        layout = getattr(self, '_side_control_layout', None)
+        sections = getattr(self, '_side_sections', None) or []
+        if layout is None or not sections:
+            return
+        for section in sections:
+            outer = section['outer']
+            content = section['content']
+            is_open = getattr(section['header'], '_expanded', True)
+            content.setVisible(is_open)
+            if is_open:
+                outer.setMinimumHeight(0)
+                outer.setMaximumHeight(16777215)
+                outer.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+                layout.setStretchFactor(outer, 1)
+            else:
+                outer.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+                header_h = section['header'].sizeHint().height()
+                margins = outer.layout().contentsMargins() if outer.layout() else None
+                extra = (margins.top() + margins.bottom()) if margins else 12
+                outer.setFixedHeight(max(28, header_h + extra))
+                layout.setStretchFactor(outer, 0)
+
+    def _make_side_collapsible(self, title_key):
+        """Create a collapsible side section with arrow on the left of the title."""
+        outer = QFrame()
+        outer.setObjectName("sideCollapsible")
+        outer_layout = QVBoxLayout(outer)
+        outer_layout.setContentsMargins(6, 6, 6, 6)
+        outer_layout.setSpacing(4)
+
+        header = QPushButton(f"▼  {tr(title_key)}")
+        header.setFlat(True)
+        header.setCursor(Qt.PointingHandCursor)
+        header.setStyleSheet(
+            "border: none; text-align: left; font-weight: bold; padding: 2px 0;"
+        )
+        header.setFixedHeight(22)
+        header.setProperty("title_key", title_key)
+        header._expanded = True
+        outer_layout.addWidget(header)
+
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(4)
+        outer_layout.addWidget(content, 1)
+
+        def _toggle():
+            header._expanded = not getattr(header, '_expanded', True)
+            key = header.property("title_key") or title_key
+            header.setText(f"{'▼' if header._expanded else '▶'}  {tr(key)}")
+            self._update_side_panel_stretches()
+
+        header.clicked.connect(_toggle)
+        if not hasattr(self, '_side_sections'):
+            self._side_sections = []
+        self._side_sections.append({
+            'outer': outer,
+            'content': content,
+            'header': header,
+        })
+        return outer, content_layout, header
+
     def _create_background_list_section(self, layout):
         """创建背景图列表区域"""
-        self.bg_list_group = QGroupBox(tr("背景图列表"))
-        group = self.bg_list_group
-        group_layout = QVBoxLayout(group)
-        group_layout.setContentsMargins(6, 14, 6, 6)
+        group, group_layout, header = self._make_side_collapsible("背景图列表")
+        self.bg_list_group = group
+        self.bg_list_header = header
 
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
@@ -705,13 +780,13 @@ class UIBuilderMixin:
 
         self.prev_img_btn = QPushButton("◀")
         self.prev_img_btn.setObjectName("navBtn")
-        self.prev_img_btn.setFixedWidth(36)
+        self.prev_img_btn.setFixedWidth(40)
         self.prev_img_btn.setFixedHeight(22)
         header_layout.addWidget(self.prev_img_btn)
 
         self.next_img_btn = QPushButton("▶")
         self.next_img_btn.setObjectName("navBtn")
-        self.next_img_btn.setFixedWidth(36)
+        self.next_img_btn.setFixedWidth(40)
         self.next_img_btn.setFixedHeight(22)
         header_layout.addWidget(self.next_img_btn)
 
@@ -724,7 +799,7 @@ class UIBuilderMixin:
         self.step_spin = QSpinBox()
         self.step_spin.setRange(1, 10)
         self.step_spin.setValue(1)
-        self.step_spin.setFixedWidth(60)
+        self.step_spin.setFixedWidth(52)
         self.step_spin.setFixedHeight(22)
         self.step_spin.setAlignment(Qt.AlignCenter)
         self.step_spin.setButtonSymbols(QSpinBox.PlusMinus)
@@ -734,10 +809,19 @@ class UIBuilderMixin:
 
         self.view_toggle_btn = QPushButton(tr("工作路径"))
         self.view_toggle_btn.setObjectName("warningBtn")
-        self.view_toggle_btn.setMinimumWidth(60)
+        self.view_toggle_btn.setMinimumWidth(52)
         self.view_toggle_btn.setFixedHeight(22)
         self.view_toggle_btn.clicked.connect(self._toggle_view_path)
         header_layout.addWidget(self.view_toggle_btn, 1)
+
+        self.bg_filter_btn = QPushButton("")
+        self.bg_filter_btn.setObjectName("navBtn")
+        self.bg_filter_btn.setFixedSize(28, 22)
+        self.bg_filter_btn.setToolTip(tr("筛选：全部"))
+        self.bg_filter_btn.clicked.connect(self._cycle_bg_annotation_filter)
+        header_layout.addWidget(self.bg_filter_btn)
+        if hasattr(self, '_refresh_bg_filter_button'):
+            self._refresh_bg_filter_button()
 
         self.prev_img_btn.clicked.connect(lambda: self.switch_background(-1))
         self.next_img_btn.clicked.connect(lambda: self.switch_background(1))
@@ -748,38 +832,50 @@ class UIBuilderMixin:
         self.background_list = DragOutListWidget()
         self.background_list.setObjectName("bgList")
         self.background_list.itemClicked.connect(self.select_background)
-        self.background_list.setMinimumHeight(80)
-        group_layout.addWidget(self.background_list)
+        self.background_list.setMinimumHeight(0)
+        group_layout.addWidget(self.background_list, 1)
 
-        layout.addWidget(group)
+        layout.addWidget(group, 1)
 
     def _create_label_list_section(self, layout):
         """创建标签列表区域"""
-        self.label_group = QGroupBox(tr("标签管理"))
-        group = self.label_group
-        group_layout = QVBoxLayout(group)
-        group_layout.setContentsMargins(6, 14, 6, 6)
+        group, group_layout, header = self._make_side_collapsible("标签管理")
+        self.label_group = group
+        self.label_group_header = header
 
         label_layout = QHBoxLayout()
 
         original_label_layout = QVBoxLayout()
         self.bg_label_header_lbl = QLabel(tr("背景图标签"))
         original_label_header = QHBoxLayout()
+        original_label_header.setContentsMargins(0, 0, 0, 0)
+        original_label_header.setSpacing(2)
         original_label_header.addWidget(self.bg_label_header_lbl)
+        self.bg_label_mode_btn = QPushButton("")
+        self.bg_label_mode_btn.setObjectName("navBtn")
+        self.bg_label_mode_btn.setFixedSize(22, 20)
+        self.bg_label_mode_btn.setToolTip(tr("切换到每框一行"))
+        self.bg_label_mode_btn.clicked.connect(self._toggle_bg_label_list_mode)
+        original_label_header.addWidget(self.bg_label_mode_btn)
         original_label_header.addStretch()
         original_label_layout.addLayout(original_label_header)
+        if hasattr(self, '_refresh_bg_label_mode_button'):
+            self._refresh_bg_label_mode_button()
 
         self.label_list = QListWidget()
         self.label_list.setObjectName("labelList")
-        self.label_list.setMinimumHeight(100)
+        self.label_list.setMinimumHeight(0)
         self.label_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.label_list.customContextMenuRequested.connect(self.label_manager.show_label_context_menu)
         self.label_list.itemPressed.connect(self.label_list_item_pressed)
         self.label_list.itemClicked.connect(self.label_list_item_clicked)
         self.pressed_label = None
+        self.pressed_box_index = None
         original_label_layout.addWidget(self.label_list)
 
-        paste_label_layout = QVBoxLayout()
+        self.paste_label_column = QWidget()
+        paste_label_layout = QVBoxLayout(self.paste_label_column)
+        paste_label_layout.setContentsMargins(0, 0, 0, 0)
         self.paste_label_header_lbl = QLabel(tr("贴图标签_list"))
         paste_label_header = QHBoxLayout()
         paste_label_header.addWidget(self.paste_label_header_lbl)
@@ -788,7 +884,7 @@ class UIBuilderMixin:
 
         self.paste_label_list = QListWidget()
         self.paste_label_list.setObjectName("pasteLabelList")
-        self.paste_label_list.setMinimumHeight(100)
+        self.paste_label_list.setMinimumHeight(0)
         self.paste_label_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.paste_label_list.customContextMenuRequested.connect(
             self.label_manager.show_paste_label_context_menu
@@ -799,20 +895,17 @@ class UIBuilderMixin:
         self.paste_label_list.itemClicked.connect(self.label_list_item_clicked)
         paste_label_layout.addWidget(self.paste_label_list)
 
-        label_layout.addLayout(original_label_layout)
-        label_layout.addLayout(paste_label_layout)
-        label_layout.setStretch(0, 1)
-        label_layout.setStretch(1, 1)
+        label_layout.addLayout(original_label_layout, 1)
+        label_layout.addWidget(self.paste_label_column, 1)
         group_layout.addLayout(label_layout)
 
-        layout.addWidget(group)
+        layout.addWidget(group, 1)
 
     def _create_small_list_section(self, layout):
         """创建贴图列表区域"""
-        self.paste_group = QGroupBox(tr("贴图列表"))
-        group = self.paste_group
-        group_layout = QVBoxLayout(group)
-        group_layout.setContentsMargins(6, 14, 6, 6)
+        group, group_layout, header = self._make_side_collapsible("贴图列表")
+        self.paste_group = group
+        self.paste_group_header = header
 
         small_list_layout = QHBoxLayout()
 
@@ -843,11 +936,14 @@ class UIBuilderMixin:
 
         self.small_list = QListWidget()
         self.small_list.setObjectName("smallList")
+        self.small_list.setMinimumHeight(0)
         self.small_list.itemClicked.connect(self.add_small_to_canvas)
         self._configure_small_list()
-        group_layout.addWidget(self.small_list)
+        group_layout.addWidget(self.small_list, 1)
 
-        layout.addWidget(group)
+        self._create_bottom_buttons(group_layout)
+
+        layout.addWidget(group, 1)
 
     def _create_paste_params(self, layout):
         """创建贴图参数设置"""

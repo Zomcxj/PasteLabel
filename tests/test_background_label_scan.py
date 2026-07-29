@@ -8,6 +8,41 @@ from pastelabel.ui.main_window import ImageEditor
 from pastelabel.ui.processing_panel import ProcessingPanel
 
 
+def test_collect_background_label_counts_counts_each_shape(tmp_path):
+    """Stats must count every shape, not unique labels per file."""
+    from pastelabel.engine.image_loader import collect_background_label_counts
+
+    img = tmp_path / "a.png"
+    img.touch()
+    (tmp_path / "a.json").write_text(json.dumps({
+        "shapes": [
+            {"label": "cat"}, {"label": "cat"}, {"label": "dog"},
+        ],
+    }), encoding="utf-8")
+
+    counts = collect_background_label_counts([str(img)])
+    assert counts == {"cat": 2, "dog": 1}
+
+
+def test_collect_bg_stats_for_dialog_uses_nonempty_cache_without_path():
+    """Live cache updates must show in stats even if path gate fails."""
+    editor = type("E", (), {})()
+    editor._cached_bg_label_stats = [
+        {"label": "kitty", "count": 7, "color": "#abc"},
+        {"label": "dog", "count": 1, "color": "#def"},
+    ]
+    editor._cached_bg_label_stats_path = ""
+    editor._memory_background_path = r"D:\dataset"
+    editor.background_images = []
+    editor.global_labels = set()
+    editor.background_dataset_labels = set()
+    editor.label_color_map = {}
+    editor.get_label_color = lambda label: "#000"
+
+    result = ImageEditor._collect_bg_stats_for_dialog(editor)
+    assert result == {"kitty": 7, "dog": 1}
+
+
 def test_scan_dataset_labels_collects_only_non_empty_string_labels(tmp_path):
     first_image = tmp_path / "first.png"
     second_image = tmp_path / "second.jpg"
@@ -32,6 +67,7 @@ def test_apply_dataset_labels_ignores_stale_generation_and_path_snapshot():
     editor._background_label_scan_generation = 2
     editor.background_images = ["current.png"]
     editor.global_labels = {"old"}
+    editor.background_dataset_labels = {"old"}
     editor.update_calls = 0
     editor.panel_calls = 0
     editor.update_label_list = lambda: setattr(editor, "update_calls", editor.update_calls + 1)
@@ -42,6 +78,7 @@ def test_apply_dataset_labels_ignores_stale_generation_and_path_snapshot():
     editor._apply_dataset_labels(2, ("other.png",), {"wrong"})
 
     assert editor.global_labels == {"old"}
+    assert editor.background_dataset_labels == {"old"}
     assert editor.update_calls == 0
     assert editor.panel_calls == 0
 
@@ -50,12 +87,14 @@ def test_start_background_replacement_invalidates_scans_and_clears_labels():
     editor = type("Editor", (ImageLoaderMixin,), {})()
     editor._background_label_scan_generation = 2
     editor.global_labels = set()
+    editor.background_dataset_labels = {"old"}
     editor._background_label_scan_completed = True
 
     editor._start_background_replacement()
 
     assert editor._background_label_scan_generation == 3
     assert editor.global_labels == set()
+    assert editor.background_dataset_labels == set()
     assert editor._background_label_scan_completed is False
 
 
@@ -63,6 +102,7 @@ def test_start_background_replacement_refreshes_visible_processing_panel():
     editor = type("Editor", (ImageLoaderMixin,), {})()
     editor._background_label_scan_generation = 2
     editor.global_labels = {"old"}
+    editor.background_dataset_labels = {"old"}
     editor._background_label_scan_completed = True
     editor.panel_calls = 0
     editor._processing_panel = type("Panel", (), {"isVisible": lambda self: True})()
@@ -73,6 +113,7 @@ def test_start_background_replacement_refreshes_visible_processing_panel():
     editor._start_background_replacement()
 
     assert editor.global_labels == set()
+    assert editor.background_dataset_labels == set()
     assert editor.panel_calls == 1
 
 
@@ -96,6 +137,7 @@ def test_start_background_replacement_interrupts_running_worker_without_waiting(
     worker = Worker()
     editor._background_label_scan_generation = 2
     editor.global_labels = {"old"}
+    editor.background_dataset_labels = {"old"}
     editor._background_label_scan_worker = worker
     editor._background_label_scan_workers = {worker}
     editor._background_label_scan_pending = True
@@ -109,6 +151,7 @@ def test_start_background_replacement_interrupts_running_worker_without_waiting(
     assert editor._background_label_scan_pending is True
     assert editor._background_label_scan_generation == 3
     assert editor.global_labels == set()
+    assert editor.background_dataset_labels == set()
 
 
 def test_apply_dataset_labels_updates_current_dataset_and_visible_panel_only():
@@ -116,6 +159,7 @@ def test_apply_dataset_labels_updates_current_dataset_and_visible_panel_only():
     editor._background_label_scan_generation = 3
     editor.background_images = ["current.png"]
     editor.global_labels = set()
+    editor.background_dataset_labels = set()
     editor.detection_boxes_dict = {0: [{"label": "untouched"}]}
     editor.update_calls = 0
     editor.panel_calls = 0
@@ -126,6 +170,7 @@ def test_apply_dataset_labels_updates_current_dataset_and_visible_panel_only():
     editor._apply_dataset_labels(3, ("current.png",), {"cat", "dog"})
 
     assert editor.global_labels == {"cat", "dog"}
+    assert editor.background_dataset_labels == {"cat", "dog"}
     assert editor.update_calls == 1
     assert editor.panel_calls == 1
     assert editor.detection_boxes_dict == {0: [{"label": "untouched"}]}
@@ -137,12 +182,14 @@ def test_apply_dataset_labels_preserves_labels_added_while_scan_is_pending():
     editor._background_label_scan_pending = True
     editor.background_images = ["current.png"]
     editor.global_labels = {"Manual"}
+    editor.background_dataset_labels = set()
     editor.update_label_list = lambda: None
     editor._processing_panel = None
 
     editor._apply_dataset_labels(3, ("current.png",), {"Disk"})
 
     assert editor.global_labels == {"Disk", "Manual"}
+    assert editor.background_dataset_labels == {"Disk"}
 
 
 def test_apply_dataset_labels_clears_pending_state_and_refreshes_panel():
@@ -151,6 +198,7 @@ def test_apply_dataset_labels_clears_pending_state_and_refreshes_panel():
     editor._background_label_scan_pending = True
     editor.background_images = ["current.png"]
     editor.global_labels = set()
+    editor.background_dataset_labels = set()
     editor.update_calls = 0
     editor.panel_calls = 0
     editor.update_label_list = lambda: setattr(editor, "update_calls", editor.update_calls + 1)
@@ -319,6 +367,7 @@ def test_processing_panel_uses_existing_labels_while_background_scan_is_running(
     panel = ProcessingPanel.__new__(ProcessingPanel)
     panel._editor = type("Editor", (), {
         "detection_boxes_dict": {}, "global_labels": set(),
+        "background_dataset_labels": set(),
         "background_images": ["missing.png"],
         "_background_label_scan_worker": type("Worker", (), {"isRunning": lambda self: True})(),
     })()
@@ -334,6 +383,7 @@ def test_processing_panel_does_not_scan_json_while_background_result_is_pending(
     panel = ProcessingPanel.__new__(ProcessingPanel)
     panel._editor = type("Editor", (), {
         "detection_boxes_dict": {}, "global_labels": set(),
+        "background_dataset_labels": set(),
         "background_images": ["missing.png"],
         "_background_label_scan_pending": True,
     })()
@@ -350,6 +400,7 @@ def test_processing_panel_does_not_scan_json_after_empty_background_result(monke
     panel = ProcessingPanel.__new__(ProcessingPanel)
     panel._editor = type("Editor", (), {
         "detection_boxes_dict": {}, "global_labels": set(),
+        "background_dataset_labels": set(),
         "background_images": ["missing.png"],
         "_background_label_scan_completed": True,
     })()
@@ -370,6 +421,30 @@ def test_processing_panel_does_not_scan_json_after_empty_background_result(monke
     panel._update_labels_list()
 
     assert spinner.visible == [False]
+
+
+def test_processing_panel_fast_labels_ignores_detection_boxes_and_uses_background_dataset_only():
+    panel = ProcessingPanel.__new__(ProcessingPanel)
+    panel._editor = type("Editor", (), {
+        "detection_boxes_dict": {0: [{"label": "paste_pollution"}]},
+        "global_labels": {"paste_pollution", "cat"},
+        "background_dataset_labels": {"cat"},
+        "_background_label_scan_completed": True,
+    })()
+
+    assert panel._fast_labels() == ["cat"]
+
+
+def test_processing_panel_fast_labels_empty_after_completed_scan():
+    panel = ProcessingPanel.__new__(ProcessingPanel)
+    panel._editor = type("Editor", (), {
+        "detection_boxes_dict": {0: [{"label": "box"}]},
+        "global_labels": {"box"},
+        "background_dataset_labels": set(),
+        "_background_label_scan_completed": True,
+    })()
+
+    assert panel._fast_labels() == []
 
 
 def test_cleanup_background_label_scan_worker_interrupts_without_waiting_finished_worker():

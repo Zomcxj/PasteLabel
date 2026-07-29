@@ -249,6 +249,9 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 self.is_dragging_box = True
                 self.setCursor(Qt.ClosedHandCursor)
                 self.update_status_label()
+                sync = getattr(self._editor, 'sync_label_list_to_box', None)
+                if callable(sync):
+                    sync(i)
                 self.update()
                 return True
 
@@ -283,6 +286,9 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.resize_handle = None
         self.setCursor(Qt.ArrowCursor)
         self.update_status_label()
+        clear_list = getattr(self._editor, 'clear_label_list_selection', None)
+        if callable(clear_list):
+            clear_list()
         self.update()
 
     def _toggle_box_selection(self, box_index):
@@ -299,6 +305,13 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.is_dragging_box = False
         self.is_resizing_box = False
         self.resize_handle = None
+        sync = getattr(self._editor, 'sync_label_list_to_box', None)
+        if callable(sync) and self.selected_box is not None:
+            sync(self.selected_box)
+        elif self.selected_box is None:
+            clear_list = getattr(self._editor, 'clear_label_list_selection', None)
+            if callable(clear_list):
+                clear_list()
 
     def _current_modifiers(self):
         app = getattr(self._editor, 'app', None)
@@ -497,6 +510,9 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 self._editor.selected_item = None
                 self.selected_item_size = None
                 self.update_status_label()
+                sync = getattr(self._editor, 'sync_label_list_to_box', None)
+                if callable(sync):
+                    sync(i)
             self.hover_resize_target = 'box'
             self.hover_resize_handle = handle
             self.setCursor(Qt.PointingHandCursor)
@@ -537,6 +553,9 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                     self._editor.selected_item = None
                     self.selected_item_size = None
                     self.update_status_label()
+                    sync = getattr(self._editor, 'sync_label_list_to_box', None)
+                    if callable(sync):
+                        sync(i)
 
                 if handle:
                     self.hover_resize_target = 'box'

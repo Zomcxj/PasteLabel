@@ -55,9 +55,37 @@ class CanvasMenuMixin:
                 return i
         return None
 
+    def _collect_dataset_labels(self):
+        """All labels known for the current background dataset (for box context menu)."""
+        labels = set()
+        bg = getattr(self._editor, 'background_dataset_labels', None) or set()
+        if isinstance(bg, (set, list, tuple)):
+            labels.update(x for x in bg if isinstance(x, str) and x.strip())
+        gl = getattr(self._editor, 'global_labels', None) or set()
+        if isinstance(gl, (set, list, tuple)):
+            labels.update(x for x in gl if isinstance(x, str) and x.strip())
+        for boxes in (getattr(self._editor, 'detection_boxes_dict', {}) or {}).values():
+            for box in boxes or []:
+                lab = box.get('label') if isinstance(box, dict) else None
+                if isinstance(lab, str) and lab.strip():
+                    labels.add(lab)
+        for box in getattr(self._editor, 'detection_boxes', []) or []:
+            lab = box.get('label') if isinstance(box, dict) else None
+            if isinstance(lab, str) and lab.strip():
+                labels.add(lab)
+        label_list = getattr(self._editor, 'label_list', None)
+        if label_list is not None:
+            for i in range(label_list.count()):
+                item = label_list.item(i)
+                if item is None:
+                    continue
+                pure = extract_label_name(item.text())
+                if pure:
+                    labels.add(pure)
+        return sorted(labels, key=lambda x: x.casefold())
+
     def _show_box_label_menu(self, box_index, mouse_pos):
         """检测框右键修改标签菜单"""
-        from ..core.utils import extract_label_name
         menu = QMenu(self)
 
         current_label = self._editor.detection_boxes[box_index].get("label", "")
@@ -76,13 +104,7 @@ class CanvasMenuMixin:
 
         menu.addSeparator()
 
-        label_items = []
-        for i in range(self._editor.label_list.count()):
-            label = self._editor.label_list.item(i).text()
-            pure_label = extract_label_name(label)
-            label_items.append(pure_label)
-
-        for label in label_items:
+        for label in self._collect_dataset_labels():
             if label == current_label:
                 continue
             action = QAction(label, self)
@@ -94,40 +116,92 @@ class CanvasMenuMixin:
         menu.exec_(QPoint(self.mapToGlobal(mouse_pos)))
 
     def _modify_box_label(self, box_index):
-        """修改检测框标签"""
+        """修改检测框标签（按标签名全局改名：颜色 + 统计缓存一并更新）。"""
         if self._editor._is_delete_view:
             return
+        if not (0 <= box_index < len(self._editor.detection_boxes)):
+            return
         current_label = self._editor.detection_boxes[box_index].get("label", "")
-        new_label, ok = dialog_helpers.get_text(
-            self, "修改标签", "请输入新的标签名称:", text=current_label
+        anchor = None
+        try:
+            from PyQt5.QtGui import QCursor
+            anchor = QCursor.pos()
+        except Exception:
+            anchor = None
+        labels = self._collect_dataset_labels()
+        if current_label and current_label not in labels:
+            labels = [current_label] + list(labels)
+        from ..ui.dialogs import LabelSelectionDialog
+        new_label = LabelSelectionDialog.select_label(
+            self, labels, title="修改标签", initial_text=current_label,
+            anchor_pos=anchor,
         )
-        if ok and new_label.strip():
-            new_label = new_label.strip()
-            old_label = current_label
+        if not new_label or not str(new_label).strip():
+            return
+        new_label = str(new_label).strip()
+        if new_label == current_label:
+            return
+        lm = getattr(self._editor, 'label_manager', None)
+        if lm is not None and hasattr(lm, 'rename_detection_label'):
+            lm.rename_detection_label(current_label, new_label, rewrite_disk=True)
+        else:
             for box in self._editor.detection_boxes:
-                if box.get("label") == old_label:
+                if box.get("label") == current_label:
                     box["label"] = new_label
             for idx in self._editor.detection_boxes_dict:
                 for box in self._editor.detection_boxes_dict[idx]:
-                    if box.get("label") == old_label:
+                    if box.get("label") == current_label:
                         box["label"] = new_label
             if self._editor.current_background_index >= 0:
                 self._editor.detection_boxes_dict[self._editor.current_background_index] = \
-                    self._editor.detection_boxes.copy()
-            self._editor.update_label_list()
-            self.update()
+                    list(self._editor.detection_boxes)
+        self._editor.update_label_list()
+        self.update()
 
     def _change_box_label(self, box_index, new_label):
-        """切换检测框标签"""
+        """切换单个检测框标签到数据集中已有标签。"""
         if self._editor._is_delete_view:
             return
-        if 0 <= box_index < len(self._editor.detection_boxes):
-            self._editor.detection_boxes[box_index]["label"] = new_label
-            if self._editor.current_background_index >= 0:
-                self._editor.detection_boxes_dict[self._editor.current_background_index] = \
-                    self._editor.detection_boxes.copy()
-            self._editor.update_label_list()
-            self.update()
+        if not (0 <= box_index < len(self._editor.detection_boxes)):
+            return
+        old_label = self._editor.detection_boxes[box_index].get("label", "")
+        new_label = (new_label or "").strip()
+        if not new_label or new_label == old_label:
+            return
+        lm = getattr(self._editor, 'label_manager', None)
+        target_exists = True
+        if lm is not None and hasattr(lm, '_label_already_exists'):
+            target_exists = lm._label_already_exists(new_label)
+        self._editor.detection_boxes[box_index]["label"] = new_label
+        if self._editor.current_background_index >= 0:
+            self._editor.detection_boxes_dict[self._editor.current_background_index] = \
+                list(self._editor.detection_boxes)
+        gl = getattr(self._editor, 'global_labels', None)
+        if isinstance(gl, set):
+            gl.add(new_label)
+        still_used = any(
+            box.get("label") == old_label
+            for boxes in (getattr(self._editor, 'detection_boxes_dict', {}) or {}).values()
+            for box in (boxes or [])
+        ) or any(
+            box.get("label") == old_label
+            for box in (getattr(self._editor, 'detection_boxes', []) or [])
+        )
+        if isinstance(gl, set) and not still_used and old_label in gl:
+            gl.discard(old_label)
+        if lm is not None:
+            if hasattr(lm, '_apply_rename_color'):
+                lm._apply_rename_color(
+                    old_label, new_label, target_exists, move_if_unused=not still_used,
+                )
+            if hasattr(lm, '_sync_cached_stats_label_rename'):
+                lm._sync_cached_stats_label_rename(old_label, new_label, delta=1)
+            if hasattr(lm, '_save_detection_json_for_index'):
+                lm._save_detection_json_for_index(self._editor.current_background_index)
+        elif hasattr(self._editor, 'get_label_color'):
+            self._editor.get_label_color(new_label)
+        self._editor.update_label_list()
+        self.update()
 
     def _show_restore_context_menu(self, mouse_pos):
         menu = QMenu(self)
@@ -168,11 +242,56 @@ class CanvasMenuMixin:
     def _show_background_context_menu(self, mouse_pos):
         menu = QMenu(self)
 
+        delete_labels_action = QAction(tr("删除标签文件"), self)
+        delete_labels_action.triggered.connect(self._delete_current_label_file)
+        menu.addAction(delete_labels_action)
+
         remove_action = QAction(tr("移除图片"), self)
         remove_action.triggered.connect(self._remove_current_background)
         menu.addAction(remove_action)
 
         menu.exec_(QPoint(self.mapToGlobal(mouse_pos)))
+
+    def _delete_current_label_file(self):
+        """Delete the current image's sidecar LabelMe JSON and clear in-memory boxes."""
+        if self._editor._is_delete_view:
+            return
+        idx = self._editor.current_background_index
+        if idx < 0 or idx >= len(self._editor.background_images):
+            return
+        file_path = self._editor.background_images[idx]
+        json_path = os.path.splitext(file_path)[0] + ".json"
+        has_boxes = bool(self._editor.detection_boxes)
+        has_json = os.path.isfile(json_path)
+        if not has_boxes and not has_json:
+            return
+
+        reply = dialog_helpers.question(
+            self._editor,
+            tr("确认删除"),
+            f"{tr('确定要删除当前图片的标签文件吗？')}",
+            dialog_helpers.QMessageBox.Yes | dialog_helpers.QMessageBox.No,
+            dialog_helpers.QMessageBox.No,
+        )
+        if reply != dialog_helpers.QMessageBox.Yes:
+            return
+
+        self._editor.detection_boxes = []
+        self._editor.detection_boxes_dict[idx] = []
+        self.selected_box = None
+        self.selected_boxes = []
+        if has_json:
+            try:
+                os.remove(json_path)
+            except OSError:
+                from ..core.exception_hook import _write_log
+                _write_log(f"删除标签文件失败: {json_path}")
+
+        refresh = getattr(self._editor, "_refresh_background_item_status", None)
+        if callable(refresh):
+            refresh(idx, file_path)
+        self._editor.update_label_list()
+        self.update()
 
     def _remove_current_background(self):
         """从画布移除当前背景图（移到删除文件夹）"""

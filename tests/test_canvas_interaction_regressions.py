@@ -213,6 +213,7 @@ def test_mode_switch_clears_paste_and_detection_box_selection():
     })()
     editor._apply_mode_visibility_defaults = lambda: None
     editor._update_mode_seg_style = lambda animated=False: None
+    editor._apply_paste_label_visibility = lambda: None
 
     ImageEditor._set_edit_mode(editor, "paste")
 

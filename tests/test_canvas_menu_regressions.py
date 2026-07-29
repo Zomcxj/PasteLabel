@@ -41,3 +41,339 @@ def test_right_click_ignores_boxes_when_labels_hidden():
 
     assert canvas._handle_right_click(object()) is True
     assert canvas.calls == ["background_menu"]
+
+
+def test_collect_dataset_labels_includes_bg_and_global():
+    class Editor:
+        background_dataset_labels = {"zebra", "apple"}
+        global_labels = {"mango"}
+        detection_boxes = [{"label": "banana"}]
+        detection_boxes_dict = {0: [{"label": "car"}]}
+        label_list = None
+
+    class Canvas(CanvasMenuMixin):
+        def __init__(self):
+            self._editor = Editor()
+
+    labels = Canvas()._collect_dataset_labels()
+    assert labels == ["apple", "banana", "car", "mango", "zebra"]
+
+
+def test_draw_label_choices_use_dataset_when_label_list_empty():
+    """Annotate draw on empty image must offer dataset labels, not only label_list."""
+    from pastelabel.canvas.canvas_drawing import CanvasDrawingMixin
+
+    class FakeList:
+        def count(self):
+            return 0
+
+        def item(self, i):
+            return None
+
+    class Editor:
+        label_list = FakeList()
+        background_dataset_labels = {"dog", "cat"}
+        global_labels = set()
+        detection_boxes = []
+        detection_boxes_dict = {}
+
+    class Canvas(CanvasDrawingMixin, CanvasMenuMixin):
+        def __init__(self):
+            self._editor = Editor()
+
+    labels = Canvas()._label_choices_for_draw()
+    assert set(labels) >= {"cat", "dog"}
+
+
+def test_canvas_modify_box_label_updates_stats_like_label_manager(monkeypatch):
+    """Canvas '修改标签' must update stats cache same as 标签管理 rename."""
+    from pastelabel.engine.label_manager import LabelManager
+    from pastelabel.ui.main_window import ImageEditor
+
+    class FakeSignal:
+        def emit(self):
+            pass
+
+    class Editor:
+        def __init__(self):
+            self._is_delete_view = False
+            self.current_background_index = 0
+            self.global_labels = {"cat", "dog"}
+            self.background_dataset_labels = {"cat", "dog"}
+            self.label_color_map = {"cat": "#ff0000", "dog": "#00ff00"}
+            self.label_colors = []
+            self._memory_background_path = r"D:\data"
+            self._cached_bg_label_stats = [
+                {"label": "cat", "count": 3, "color": "#ff0000"},
+                {"label": "dog", "count": 1, "color": "#00ff00"},
+            ]
+            self._cached_bg_label_stats_path = r"D:\data"
+            self.detection_boxes = [
+                {"label": "cat", "x": 0, "y": 0, "width": 1, "height": 1},
+            ]
+            self.detection_boxes_dict = {
+                0: list(self.detection_boxes),
+                1: [
+                    {"label": "cat"},
+                    {"label": "cat"},
+                    {"label": "dog"},
+                ],
+            }
+            self.background_images = ["a.png", "b.png"]
+            self.label_manager = None
+
+        def update_label_list(self):
+            pass
+
+        def get_label_color(self, label):
+            return self.label_color_map.get(label, "#ffffff")
+
+        def save_json(self, *a, **k):
+            pass
+
+    class Canvas(CanvasMenuMixin):
+        def __init__(self, editor):
+            self._editor = editor
+
+        def update(self):
+            pass
+
+    monkeypatch.setattr(
+        "pastelabel.core.config_manager.save_all",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "pastelabel.ui.dialogs.LabelSelectionDialog.select_label",
+        staticmethod(lambda *a, **k: "kitty"),
+    )
+    editor = Editor()
+    lm = LabelManager(editor)
+    lm.label_list_changed = FakeSignal()
+    lm.data_changed = FakeSignal()
+    editor.label_manager = lm
+
+    Canvas(editor)._modify_box_label(0)
+
+    stats = ImageEditor._collect_bg_stats_for_dialog(editor)
+    assert stats.get("kitty") == 3
+    assert "cat" not in stats or stats.get("cat", 0) == 0
+    assert stats.get("dog") == 1
+
+
+def test_change_box_label_syncs_stats_cache_and_keeps_target_color(monkeypatch):
+    """Canvas switch-to-existing must update stats and not steal target color."""
+    class FakeLM:
+        def __init__(self, editor):
+            self.editor = editor
+            self.saved = []
+
+        def _save_detection_json_for_index(self, index):
+            self.saved.append(index)
+
+        def _label_already_exists(self, label):
+            from pastelabel.engine.label_manager import LabelManager
+            return LabelManager._label_already_exists(self, label)
+
+        def _apply_rename_color(self, *a, **kw):
+            from pastelabel.engine.label_manager import LabelManager
+            return LabelManager._apply_rename_color(self, *a, **kw)
+
+        def _sync_cached_stats_label_rename(self, *a, **kw):
+            from pastelabel.engine.label_manager import LabelManager
+            return LabelManager._sync_cached_stats_label_rename(self, *a, **kw)
+
+        def _seed_stats_cache_from_disk_and_memory(self, *a, **kw):
+            from pastelabel.engine.label_manager import LabelManager
+            return LabelManager._seed_stats_cache_from_disk_and_memory(self, *a, **kw)
+
+    class Editor:
+        _is_delete_view = False
+        current_background_index = 0
+        global_labels = {"cat", "dog"}
+        background_dataset_labels = {"cat", "dog"}
+        label_color_map = {"cat": "#ff0000", "dog": "#00ff00"}
+        label_colors = []
+        _cached_bg_label_stats = [
+            {"label": "cat", "count": 1, "color": "#ff0000"},
+            {"label": "dog", "count": 2, "color": "#00ff00"},
+        ]
+        detection_boxes = [
+            {"label": "cat", "x": 0, "y": 0, "width": 1, "height": 1},
+            {"label": "dog", "x": 1, "y": 1, "width": 1, "height": 1},
+        ]
+        detection_boxes_dict = {}
+        background_images = []
+        lists_updated = 0
+
+        def __init__(self):
+            self.detection_boxes_dict = {0: list(self.detection_boxes)}
+            self.label_manager = FakeLM(self)
+
+        def update_label_list(self):
+            self.lists_updated += 1
+
+        def get_label_color(self, label):
+            return self.label_color_map.get(label, "#ffffff")
+
+    class Canvas(CanvasMenuMixin):
+        def __init__(self):
+            self._editor = Editor()
+            self.updated = False
+
+        def update(self):
+            self.updated = True
+
+    monkeypatch.setattr(
+        "pastelabel.core.config_manager.save_all",
+        lambda **kwargs: None,
+    )
+    canvas = Canvas()
+    canvas._change_box_label(0, "dog")
+
+    assert canvas._editor.detection_boxes[0]["label"] == "dog"
+    assert canvas._editor.label_color_map.get("dog") == "#00ff00"
+    stats = {s["label"]: s for s in canvas._editor._cached_bg_label_stats}
+    assert "cat" not in stats or stats.get("cat", {}).get("count", 0) == 0
+    assert stats["dog"]["count"] == 3
+    assert stats["dog"]["color"] == "#00ff00"
+    assert canvas._editor.lists_updated == 1
+    assert canvas.updated is True
+
+
+def test_canvas_change_box_stats_include_unloaded_images(tmp_path, monkeypatch):
+    """Canvas single-box change must not drop counts for images only on disk."""
+    import json
+    from pastelabel.engine.label_manager import LabelManager
+    from pastelabel.ui.main_window import ImageEditor
+
+    img0 = tmp_path / "a.png"
+    img1 = tmp_path / "b.png"
+    img0.write_bytes(b"x")
+    img1.write_bytes(b"x")
+    (tmp_path / "a.json").write_text(json.dumps({
+        "shapes": [
+            {"label": "cat", "points": [[0, 0], [1, 1]]},
+            {"label": "dog", "points": [[0, 0], [1, 1]]},
+        ],
+    }), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps({
+        "shapes": [
+            {"label": "cat", "points": [[0, 0], [1, 1]]},
+            {"label": "cat", "points": [[0, 0], [1, 1]]},
+            {"label": "cat", "points": [[0, 0], [1, 1]]},
+        ],
+    }), encoding="utf-8")
+
+    class FakeSignal:
+        def emit(self):
+            pass
+
+    class Editor:
+        def __init__(self):
+            self._is_delete_view = False
+            self.current_background_index = 0
+            self.global_labels = {"cat", "dog"}
+            self.background_dataset_labels = {"cat", "dog"}
+            self.label_color_map = {"cat": "#ff0000", "dog": "#00ff00"}
+            self.label_colors = []
+            self._memory_background_path = str(tmp_path)
+            self._cached_bg_label_stats = []  # never opened stats
+            self._cached_bg_label_stats_path = ""
+            self.detection_boxes = [
+                {"label": "cat", "x": 0, "y": 0, "width": 1, "height": 1},
+                {"label": "dog", "x": 0, "y": 0, "width": 1, "height": 1},
+            ]
+            # Only image 0 loaded; image 1 lives on disk only.
+            self.detection_boxes_dict = {0: list(self.detection_boxes)}
+            self.background_images = [str(img0), str(img1)]
+            self.label_manager = None
+
+        def update_label_list(self):
+            pass
+
+        def get_label_color(self, label):
+            return self.label_color_map.get(label, "#ffffff")
+
+        def save_json(self, *args, **kwargs):
+            import os
+            idx = kwargs.get("current_index", self.current_background_index)
+            path = self.background_images[idx]
+            jp = os.path.splitext(path)[0] + ".json"
+            boxes = self.detection_boxes_dict.get(idx, self.detection_boxes)
+            with open(jp, "w", encoding="utf-8") as f:
+                json.dump({
+                    "shapes": [
+                        {"label": b["label"], "points": [[0, 0], [1, 1]]}
+                        for b in boxes
+                    ],
+                }, f)
+
+    class Canvas(CanvasMenuMixin):
+        def __init__(self, editor):
+            self._editor = editor
+
+        def update(self):
+            pass
+
+    monkeypatch.setattr(
+        "pastelabel.core.config_manager.save_all",
+        lambda **kwargs: None,
+    )
+    editor = Editor()
+    lm = LabelManager(editor)
+    lm.label_list_changed = FakeSignal()
+    lm.data_changed = FakeSignal()
+    editor.label_manager = lm
+
+    Canvas(editor)._change_box_label(0, "dog")  # one cat → dog on image 0
+
+    # img0: dog, dog; img1: cat×3 → cat=3, dog=2
+    stats = ImageEditor._collect_bg_stats_for_dialog(editor)
+    assert stats.get("cat") == 3
+    assert stats.get("dog") == 2
+
+
+def test_delete_current_label_file_removes_json_and_clears_boxes(tmp_path, monkeypatch):
+    img = tmp_path / "a.jpg"
+    img.write_bytes(b"x")
+    json_path = tmp_path / "a.json"
+    json_path.write_text('{"shapes":[{"label":"Car","points":[[0,0],[1,1]]}]}', encoding="utf-8")
+
+    class Editor:
+        _is_delete_view = False
+        current_background_index = 0
+        background_images = [str(img)]
+        detection_boxes = [{"label": "Car", "x": 0, "y": 0, "width": 1, "height": 1}]
+        detection_boxes_dict = {0: [{"label": "Car", "x": 0, "y": 0, "width": 1, "height": 1}]}
+        refreshed = []
+
+        def update_label_list(self):
+            pass
+
+        def _refresh_background_item_status(self, idx, path):
+            self.refreshed.append((idx, path))
+
+    class Canvas(CanvasMenuMixin):
+        def __init__(self):
+            self._editor = Editor()
+            self.selected_box = 0
+            self.selected_boxes = [0]
+            self.updated = False
+
+        def update(self):
+            self.updated = True
+
+    from pastelabel.canvas import canvas_menu as cm
+    monkeypatch.setattr(
+        cm.dialog_helpers,
+        "question",
+        lambda *a, **kw: cm.dialog_helpers.QMessageBox.Yes,
+    )
+    canvas = Canvas()
+    canvas._delete_current_label_file()
+
+    assert canvas._editor.detection_boxes == []
+    assert canvas._editor.detection_boxes_dict[0] == []
+    assert not json_path.exists()
+    assert canvas._editor.refreshed == [(0, str(img))]
+    assert canvas.updated is True

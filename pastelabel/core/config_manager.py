@@ -171,6 +171,26 @@ def _normalize_memory_path(value):
     return os.path.normpath(value) if value else ''
 
 
+def _normalize_bg_label_stats(value):
+    """Normalize background label stats snapshot for memory records."""
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get('label', '') or '').strip()
+        if not label:
+            continue
+        try:
+            count = max(0, int(item.get('count', 0) or 0))
+        except (TypeError, ValueError):
+            count = 0
+        color = str(item.get('color', '') or '').strip()
+        result.append({'label': label, 'count': count, 'color': color})
+    return result
+
+
 def _normalize_memory_record(record):
     try:
         background_index = max(0, int(record.get('background_index', 0) or 0))
@@ -187,6 +207,7 @@ def _normalize_memory_record(record):
         'background_index': background_index,
         'edit_mode': edit_mode,
         'updated_at': str(record.get('updated_at', '') or ''),
+        'bg_label_stats': _normalize_bg_label_stats(record.get('bg_label_stats', [])),
     }
 
 

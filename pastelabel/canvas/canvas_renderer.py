@@ -257,7 +257,11 @@ class CanvasRendererMixin:
             box_height = box["height"] * self.background_scale
 
             is_selected = (i == self.selected_box or i in getattr(self, 'selected_boxes', []))
-            is_pressed_label = self._is_pressed_label(box)
+            pressed_box = getattr(self._editor, 'pressed_box_index', None)
+            is_pressed_label = (
+                (isinstance(pressed_box, int) and pressed_box == i)
+                or self._is_pressed_label(box)
+            )
 
             self._draw_single_detection_box(
                 painter, box_x, box_y, box_width, box_height,
@@ -265,7 +269,7 @@ class CanvasRendererMixin:
             )
 
     def _is_pressed_label(self, box):
-        """检查检测框是否是当前按下的标签"""
+        """检查检测框是否是当前按下的标签名（统计模式按住）。"""
         if not hasattr(self._editor, 'pressed_label') or self._editor.pressed_label is None:
             return False
         return box.get('label') == self._editor.pressed_label

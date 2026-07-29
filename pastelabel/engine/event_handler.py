@@ -278,8 +278,55 @@ class EventHandlerMixin:
             if not self.background_images:
                 return
             step = getattr(self, '_nav_step', 1)
-            new_index = self.current_background_index + direction * step
+            new_index = self._next_visible_background_index(direction, step)
+            if new_index is None:
+                return
             self.switch_background_to_index(new_index)
+
+    def _next_visible_background_index(self, direction, step=1):
+        """Find next background index skipping rows hidden by annotation filter."""
+        if not self.background_images:
+            return None
+        n = len(self.background_images)
+        cur = self.current_background_index
+        step = max(1, int(step or 1))
+        direction = 1 if direction >= 0 else -1
+        bg_list = getattr(self, 'background_list', None)
+        mode = getattr(self, '_bg_annotation_filter', 'all')
+        if mode == 'all' or bg_list is None:
+            target = cur + direction * step
+            if target < 0 or target >= n:
+                return None
+            return target
+
+        # Walk visible rows only
+        visible_indexes = []
+        for row in range(bg_list.count()):
+            item = bg_list.item(row)
+            if item is None or item.isHidden():
+                continue
+            idx = item.data(Qt.UserRole)
+            if isinstance(idx, int) and 0 <= idx < n:
+                visible_indexes.append(idx)
+        if not visible_indexes:
+            return None
+        try:
+            pos = visible_indexes.index(cur)
+        except ValueError:
+            # current hidden: jump to nearest in direction
+            if direction > 0:
+                for idx in visible_indexes:
+                    if idx > cur:
+                        return idx
+                return visible_indexes[0]
+            for idx in reversed(visible_indexes):
+                if idx < cur:
+                    return idx
+            return visible_indexes[-1]
+        new_pos = pos + direction * step
+        if new_pos < 0 or new_pos >= len(visible_indexes):
+            return None
+        return visible_indexes[new_pos]
 
     def switch_background_to_index(self, new_index):
         """切换到指定索引的背景图"""
@@ -331,15 +378,37 @@ class EventHandlerMixin:
         self.canvas.update()
 
     def label_list_item_pressed(self, item):
-        """标签列表按下项目 - 记录按下的标签用于高亮检测框"""
+        """标签列表按下：按住高亮对应框；松开由 clicked 清除。两种模式一致。"""
         try:
             if item is None:
                 return
+            try:
+                owner = item.listWidget() if hasattr(item, 'listWidget') else None
+            except Exception:
+                owner = None
+            paste_list = getattr(self, 'paste_label_list', None)
+            if owner is not None and paste_list is not None and owner is paste_list:
+                item_text = item.text()
+                self.pressed_label = (
+                    extract_label_name(item_text) if " (" in item_text else item_text
+                )
+                self.pressed_box_index = None
+                self.canvas.update()
+                return
+
+            mode = getattr(self, '_bg_label_list_mode', 'stats')
+            if mode == 'all':
+                box_index = item.data(0x0100) if hasattr(item, 'data') else None
+                if isinstance(box_index, int) and 0 <= box_index < len(self.detection_boxes):
+                    self.pressed_label = None
+                    self.pressed_box_index = box_index
+                    self.canvas.update()
+                    return
             item_text = item.text()
-            if " (" in item_text:
-                self.pressed_label = extract_label_name(item_text)
-            else:
-                self.pressed_label = item_text
+            self.pressed_label = (
+                extract_label_name(item_text) if " (" in item_text else item_text
+            )
+            self.pressed_box_index = None
             self.canvas.update()
         except Exception as e:
             import traceback
@@ -347,14 +416,66 @@ class EventHandlerMixin:
             self._log_error(f"label_list_item_pressed 错误: {e}\n{error_msg}")
 
     def label_list_item_clicked(self, item):
-        """标签列表点击项目释放 - 清除高亮"""
+        """标签列表松开：取消按住高亮（两种模式一致）。"""
         try:
             self.pressed_label = None
+            self.pressed_box_index = None
             self.canvas.update()
         except Exception as e:
             import traceback
             error_msg = traceback.format_exc()
             self._log_error(f"label_list_item_clicked 错误: {e}\n{error_msg}")
+
+    def clear_label_list_selection(self):
+        label_list = getattr(self, 'label_list', None)
+        if label_list is None:
+            return
+        label_list.blockSignals(True)
+        try:
+            label_list.clearSelection()
+            label_list.setCurrentRow(-1)
+        finally:
+            label_list.blockSignals(False)
+
+    def sync_label_list_to_box(self, box_index):
+        """画布选中检测框时，同步右侧标签列表高亮对应行。"""
+        label_list = getattr(self, 'label_list', None)
+        if label_list is None:
+            return
+        if not isinstance(box_index, int) or not (0 <= box_index < len(self.detection_boxes)):
+            return
+        mode = getattr(self, '_bg_label_list_mode', 'stats')
+        label_list.blockSignals(True)
+        try:
+            label_list.clearSelection()
+            target_row = -1
+            if mode == 'all':
+                for row in range(label_list.count()):
+                    item = label_list.item(row)
+                    if item is None:
+                        continue
+                    data = item.data(0x0100)
+                    if data == box_index or data == int(box_index):
+                        target_row = row
+                        break
+            else:
+                label = self.detection_boxes[box_index].get('label', '')
+                pure = extract_label_name(str(label)) if label else ''
+                for row in range(label_list.count()):
+                    item = label_list.item(row)
+                    if item is None:
+                        continue
+                    if extract_label_name(item.text()) == pure:
+                        target_row = row
+                        break
+            if target_row >= 0:
+                label_list.setCurrentRow(target_row)
+                item = label_list.item(target_row)
+                if item is not None:
+                    item.setSelected(True)
+                label_list.scrollToItem(item)
+        finally:
+            label_list.blockSignals(False)
 
     def closeEvent(self, event):
         """关闭窗口事件 - 直接关闭，不弹确认框"""

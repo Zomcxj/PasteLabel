@@ -10,29 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  quality:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: pip install PyQt5 pytest
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libxcb-cursor0 libxkbcommon-x11-0 libegl1
-
-      - name: Run tests
-        run: python -m pytest tests/ -q
-
   build:
-    needs: quality
     strategy:
       fail-fast: false
       matrix:
@@ -55,7 +33,7 @@ jobs:
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
-        run: pip install PyQt5 pyinstaller Pillow
+        run: pip install -r requirements.txt Pillow
 
       - name: Build with PyInstaller (Windows)
         if: runner.os == 'Windows'

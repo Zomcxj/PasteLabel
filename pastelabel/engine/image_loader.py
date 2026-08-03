@@ -134,8 +134,6 @@ def scan_dataset_labels(image_paths, is_interrupted=None):
         if is_interrupted and is_interrupted():
             break
         pending.append(f"{os.path.splitext(image_path)[0]}.json")
-        if len(pending) >= 500:
-            break
     if not pending:
         return labels
 

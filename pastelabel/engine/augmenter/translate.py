@@ -27,12 +27,22 @@ class RandomTranslate(BaseTransform):
         painter.drawImage(dx, dy, image)
         painter.end()
         new_boxes = []
+        w = image_width
+        h = image_height
         for b in boxes:
+            x1 = max(0, b["x"] + dx)
+            y1 = max(0, b["y"] + dy)
+            x2 = min(w, b["x"] + b["width"] + dx)
+            y2 = min(h, b["y"] + b["height"] + dy)
+            new_w = x2 - x1
+            new_h = y2 - y1
+            if new_w < 1 or new_h < 1:
+                continue
             new_boxes.append({
-                "x": max(0, b["x"] + dx),
-                "y": max(0, b["y"] + dy),
-                "width": b["width"],
-                "height": b["height"],
+                "x": x1,
+                "y": y1,
+                "width": new_w,
+                "height": new_h,
                 "label": b["label"]
             })
         return result, new_boxes

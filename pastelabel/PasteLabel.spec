@@ -4,7 +4,7 @@ import sys
 
 _root = os.getcwd()
 
-_ffi_dll = os.path.join(_root, '..', 'Library', 'bin', 'ffi.dll')
+_ffi_dll = os.path.join(sys.prefix, 'Library', 'bin', 'ffi.dll')
 _binaries = []
 if os.path.exists(_ffi_dll):
     _binaries.append((_ffi_dll, '.'))
@@ -16,13 +16,13 @@ a = Analysis(
     pathex=[_root],
     binaries=_binaries,
     datas=[(os.path.join(_root, 'ico_image'), 'ico_image')],
-    hiddenimports=['pastelabel', 'pastelabel.ui', 'pastelabel.ui.main_window', 'pastelabel.ui.ui_builder', 'pastelabel.ui.settings_dialog', 'pastelabel.ui.theme', 'pastelabel.ui.dwm', 'pastelabel.ui.dialogs', 'pastelabel.ui.i18n', 'pastelabel.ui.processing_panel', 'pastelabel.engine', 'pastelabel.engine.save_manager', 'pastelabel.engine.undo_manager', 'pastelabel.engine.label_manager', 'pastelabel.engine.image_loader', 'pastelabel.engine.paste_engine', 'pastelabel.engine.event_handler', 'pastelabel.engine.augmenter', 'pastelabel.engine.augmenter.base', 'pastelabel.engine.augmenter.color', 'pastelabel.engine.augmenter.flipt', 'pastelabel.engine.augmenter.noise', 'pastelabel.engine.augmenter.translate', 'pastelabel.engine.augmenter.rotate', 'pastelabel.engine.augmenter.scale', 'pastelabel.engine.yolo_exporter', 'pastelabel.engine.splitter', 'pastelabel.canvas', 'pastelabel.canvas.canvas', 'pastelabel.canvas.canvas_renderer', 'pastelabel.canvas.canvas_interaction', 'pastelabel.canvas.canvas_drawing', 'pastelabel.canvas.canvas_menu', 'pastelabel.core', 'pastelabel.core.config', 'pastelabel.core.config_manager', 'pastelabel.core.utils', 'pastelabel.core.editor_protocol', 'pastelabel.core.exception_hook', 'numpy', 'pkgutil'],
+    hiddenimports=['pastelabel', 'pastelabel.ui', 'pastelabel.ui.main_window', 'pastelabel.ui.ui_builder', 'pastelabel.ui.settings_dialog', 'pastelabel.ui.theme', 'pastelabel.ui.dwm', 'pastelabel.ui.dialogs', 'pastelabel.ui.i18n', 'pastelabel.ui.processing_panel', 'pastelabel.engine', 'pastelabel.engine.save_manager', 'pastelabel.engine.undo_manager', 'pastelabel.engine.label_manager', 'pastelabel.engine.image_loader', 'pastelabel.engine.paste_engine', 'pastelabel.engine.event_handler', 'pastelabel.engine.augmenter', 'pastelabel.engine.augmenter.base', 'pastelabel.engine.augmenter.color', 'pastelabel.engine.augmenter.flipt', 'pastelabel.engine.augmenter.noise', 'pastelabel.engine.augmenter.translate', 'pastelabel.engine.augmenter.rotate', 'pastelabel.engine.augmenter.scale', 'pastelabel.engine.yolo_exporter', 'pastelabel.engine.splitter', 'pastelabel.canvas', 'pastelabel.canvas.canvas', 'pastelabel.canvas.canvas_renderer', 'pastelabel.canvas.canvas_interaction', 'pastelabel.canvas.canvas_drawing', 'pastelabel.canvas.canvas_menu', 'pastelabel.core', 'pastelabel.core.config', 'pastelabel.core.config_manager', 'pastelabel.core.utils', 'pastelabel.core.editor_protocol', 'pastelabel.core.exception_hook', 'pkgutil'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'pandas', 'pytest'],
+    excludes=['tkinter', 'matplotlib', 'pandas', 'numpy', 'pytest'],
     noarchive=False,
-    optimize=0,
+    optimize=2,
 )
 pyz = PYZ(a.pure)
 

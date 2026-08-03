@@ -81,7 +81,7 @@ _TRANSFORM_ORDER = ["fliph", "flipv", "bright", "trans", "rotate", "scale",
 class Worker(QThread):
     log = pyqtSignal(str)
     progress = pyqtSignal(int, int, str)
-    finished = pyqtSignal(object)
+    result_ready = pyqtSignal(object)
     error = pyqtSignal(str)
 
     def __init__(self, func):
@@ -93,7 +93,7 @@ class Worker(QThread):
     def run(self):
         try:
             self.result = self._func(self.log.emit, self.progress.emit)
-            self.finished.emit(self.result)
+            self.result_ready.emit(self.result)
         except Exception as e:
             self._error = str(e)
             self.error.emit(str(e))
@@ -171,6 +171,7 @@ class ProcessingPanel(QWidget):
         self._collapsible_sections = []
         self._split_lbls = []
         self._interrupted = False
+        self._workers = set()
         self._build_augment_section(main_layout)
         self._build_export_section(main_layout)
         self._build_split_section(main_layout)
@@ -305,6 +306,10 @@ class ProcessingPanel(QWidget):
         self._aug_mode.addItems(["", ""])
         self._aug_mode.setFixedWidth(100)
         rl.addWidget(self._aug_mode)
+        rl.addSpacing(10)
+        self._aug_skip_empty = QCheckBox()
+        self._aug_skip_empty.setChecked(True)
+        rl.addWidget(self._aug_skip_empty)
         rl.addStretch()
         layout.addLayout(rl)
         btn_layout = QHBoxLayout()
@@ -431,10 +436,17 @@ class ProcessingPanel(QWidget):
         worker = getattr(self._editor, '_background_label_scan_worker', None)
         if worker is not None and worker.isRunning():
             return []
-        total = len(self._editor.background_images)
-        for i, img_path in enumerate(self._editor.background_images):
-            if i >= 500:
-                break
+        images = self._editor.background_images
+        if not images:
+            work_dir = self._path_edit.text().strip()
+            if work_dir and os.path.isdir(work_dir):
+                exts = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif')
+                images = sorted([
+                    os.path.join(work_dir, f) for f in os.listdir(work_dir)
+                    if os.path.splitext(f)[1].lower() in exts
+                ])
+        total = len(images)
+        for i, img_path in enumerate(images):
             jp = os.path.splitext(img_path)[0] + ".json"
             if os.path.exists(jp):
                 try:
@@ -536,6 +548,7 @@ class ProcessingPanel(QWidget):
         self._aug_mode.addItems([tr("全部增强"), tr("随机几项")])
         self._aug_mode.setCurrentIndex(idx)
         self._aug_btn.setText(tr("增强"))
+        self._aug_skip_empty.setText(tr("跳过空标签"))
         self._aug_clear_btn.setText(tr("清空"))
         self._exp_section.set_title(tr("YOLO 导出"))
         self._exp_label_title.setText(tr("类别:"))
@@ -565,6 +578,11 @@ class ProcessingPanel(QWidget):
             pass
 
     def closeEvent(self, event):
+        self._scan_check_timer.stop()
+        self._spinner_timer.stop()
+        for w in list(self._workers):
+            w.requestInterruption()
+            w.wait(2000)
         self._log_area.clear()
         self.hide()
         event.accept()
@@ -577,6 +595,9 @@ class ProcessingPanel(QWidget):
         btn.setText(text)
         btn.setEnabled(False)
         self._interrupted = False
+        for b in (self._aug_btn, self._exp_btn, self._split_btn, self._pipe_btn):
+            if b is not btn:
+                b.setEnabled(False)
         if hasattr(btn, '_stop_btn'):
             btn._stop_btn.setVisible(True)
             btn._stop_btn.setEnabled(True)
@@ -593,6 +614,9 @@ class ProcessingPanel(QWidget):
         btn.setEnabled(True)
         if hasattr(btn, '_stop_btn'):
             btn._stop_btn.setVisible(False)
+        for b in (self._aug_btn, self._exp_btn, self._split_btn, self._pipe_btn):
+            if b is not btn:
+                b.setEnabled(True)
         if clear_btn:
             clear_btn.setEnabled(True)
 
@@ -838,6 +862,7 @@ class ProcessingPanel(QWidget):
         ratio = self._aug_ratio.value()
         mode = "all" if self._aug_mode.currentIndex() == 0 else "random"
         include_original = self._aug_inc_orig.isChecked()
+        skip_empty = self._aug_skip_empty.isChecked()
         output_dir = self._get_output_dir()
         transform_names = [name for name, (cb, _, _) in self._aug_widgets.items()
                           if cb.isChecked() and not name.startswith("__")]
@@ -861,9 +886,14 @@ class ProcessingPanel(QWidget):
                 on_transform_progress=_on_transform_progress,
             )
             return aug.run(self._run_images, self._run_boxes, specs, ratio, mode,
-                          include_original=include_original)
+                          include_original=include_original, skip_empty=skip_empty)
 
         def _on_finished(result):
+            if self._interrupted:
+                self._log(tr("已中断"))
+                self._button_ready(self._aug_btn, clear_btn=self._aug_clear_btn)
+                self._pipe_finish(True)
+                return
             self._augment_result = result
             aug_count = len(result) if result else 0
             self._log(tr("log_aug_done").format(aug_count=aug_count, total=aug_count))
@@ -874,11 +904,13 @@ class ProcessingPanel(QWidget):
             self._augment_result = None
             self._button_ready(self._aug_btn, clear_btn=self._aug_clear_btn)
             self._pipe_finish(True)
-        self._worker = Worker(_aug_task)
-        self._worker.progress.connect(lambda *a: None)
-        self._worker.finished.connect(_on_finished)
-        self._worker.error.connect(_on_error)
-        self._worker.start()
+        worker = Worker(_aug_task)
+        worker.progress.connect(lambda *a: None)
+        worker.result_ready.connect(_on_finished)
+        worker.error.connect(_on_error)
+        self._workers.add(worker)
+        worker.destroyed.connect(lambda: self._workers.discard(worker))
+        worker.start()
 
     def _run_export(self):
         self._ensure_boxes_loaded()
@@ -894,6 +926,7 @@ class ProcessingPanel(QWidget):
         output_dir = self._get_output_dir()
         self._button_busy(self._exp_btn, clear_btn=self._exp_clear_btn)
         self._interrupted = False
+        skip_empty = self._exp_skip_empty.isChecked()
 
         def _exp_task(log_fn, progress_fn):
             detected = self._detect_augmented_images()
@@ -943,11 +976,16 @@ class ProcessingPanel(QWidget):
                 self._run_images,
                 self._run_boxes,
                 labels,
-                skip_empty=self._exp_skip_empty.isChecked(),
+                skip_empty=skip_empty,
                 input_data=input_data
             )
 
         def _on_finished(_):
+            if self._interrupted:
+                self._log(tr("已中断"))
+                self._button_ready(self._exp_btn, clear_btn=self._exp_clear_btn)
+                self._pipe_finish(True)
+                return
             self._log(tr("log_exp_done").format(path=output_dir))
             self._button_ready(self._exp_btn, clear_btn=self._exp_clear_btn)
             self._pipe_finish()
@@ -955,12 +993,14 @@ class ProcessingPanel(QWidget):
             self._log(tr("log_exp_err").format(err=err))
             self._button_ready(self._exp_btn, clear_btn=self._exp_clear_btn)
             self._pipe_finish(True)
-        self._worker = Worker(_exp_task)
-        self._worker.log.connect(self._log)
-        self._worker.progress.connect(lambda *a: None)
-        self._worker.finished.connect(_on_finished)
-        self._worker.error.connect(_on_error)
-        self._worker.start()
+        worker = Worker(_exp_task)
+        worker.log.connect(self._log)
+        worker.progress.connect(lambda *a: None)
+        worker.result_ready.connect(_on_finished)
+        worker.error.connect(_on_error)
+        self._workers.add(worker)
+        worker.destroyed.connect(lambda: self._workers.discard(worker))
+        worker.start()
 
     def _on_split_changed(self, changed_key):
         others = [k for k in SPLIT_KEYS if k != changed_key]
@@ -1044,6 +1084,11 @@ class ProcessingPanel(QWidget):
             sp.run(split_images, split_boxes, ratios)
 
         def _on_finished(_):
+            if self._interrupted:
+                self._log(tr("已中断"))
+                self._button_ready(self._split_btn, clear_btn=self._split_clear_btn)
+                self._pipe_finish(True)
+                return
             self._log(tr("log_split_done").format(train=train_n, val=val_n, test=test_n))
             self._button_ready(self._split_btn, clear_btn=self._split_clear_btn)
             self._pipe_finish()
@@ -1051,11 +1096,13 @@ class ProcessingPanel(QWidget):
             self._log(tr("log_split_err").format(err=err))
             self._button_ready(self._split_btn, clear_btn=self._split_clear_btn)
             self._pipe_finish(True)
-        self._worker = Worker(_split_task)
-        self._worker.progress.connect(lambda *a: None)
-        self._worker.finished.connect(_on_finished)
-        self._worker.error.connect(_on_error)
-        self._worker.start()
+        worker = Worker(_split_task)
+        worker.progress.connect(lambda *a: None)
+        worker.result_ready.connect(_on_finished)
+        worker.error.connect(_on_error)
+        self._workers.add(worker)
+        worker.destroyed.connect(lambda: self._workers.discard(worker))
+        worker.start()
 
     def _run_pipeline(self):
         steps = [s for s in ["augment", "export", "split"]

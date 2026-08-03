@@ -1699,7 +1699,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._processing_panel.move(x, y)
 
     def closeEvent(self, event):
-        if hasattr(self, '_processing_panel') and self._processing_panel and self._processing_panel.isVisible():
+        if hasattr(self, '_processing_panel') and self._processing_panel and any(w.isRunning() for w in self._processing_panel._workers):
             from PyQt5.QtWidgets import QMessageBox
             from .dwm import set_titlebar_dark
             from .i18n import t as _t

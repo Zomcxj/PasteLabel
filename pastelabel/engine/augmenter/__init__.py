@@ -28,6 +28,7 @@ class Augmenter:
         image_ratio: float = 1.0,
         mode: str = "all",
         include_original: bool = False,
+        skip_empty: bool = True,
     ) -> List[dict]:
         os.makedirs(self.output_dir, exist_ok=True)
         total = len(background_images)
@@ -41,18 +42,20 @@ class Augmenter:
                 if ext not in ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'):
                     ext = '.jpg'
                 boxes = detection_boxes_dict.get(idx, [])
+                if skip_empty and not boxes:
+                    continue
                 self._save_original(img_path, base, ext, boxes, results)
 
         if mode == "random":
             results = self._run_random(background_images, detection_boxes_dict,
-                                       transform_specs, image_ratio, total, results)
+                                       transform_specs, image_ratio, total, results, skip_empty)
         else:
             results = self._run_all(background_images, detection_boxes_dict,
-                                    transform_specs, image_ratio, total, results)
+                                    transform_specs, image_ratio, total, results, skip_empty)
         return results
 
     def _run_all(self, background_images, detection_boxes_dict,
-                 transform_specs, image_ratio, total, results=None):
+                 transform_specs, image_ratio, total, results=None, skip_empty=True):
         if results is None:
             results = []
         for cls, ranges in transform_specs:
@@ -74,6 +77,10 @@ class Augmenter:
                 if ext not in ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'):
                     ext = '.jpg'
                 boxes = detection_boxes_dict.get(idx, [])
+                if skip_empty and not boxes:
+                    if self.on_transform_progress:
+                        self.on_transform_progress(t_name, idx + 1, total)
+                    continue
                 original_image = QImage(img_path)
                 iw = original_image.width()
                 ih = original_image.height()
@@ -99,7 +106,7 @@ class Augmenter:
         return results
 
     def _run_random(self, background_images, detection_boxes_dict,
-                    transform_specs, image_ratio, total, results=None):
+                    transform_specs, image_ratio, total, results=None, skip_empty=True):
         if results is None:
             results = []
         for idx in range(total):
@@ -111,6 +118,10 @@ class Augmenter:
             if ext not in ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'):
                 ext = '.jpg'
             boxes = detection_boxes_dict.get(idx, [])
+            if skip_empty and not boxes:
+                if self.on_progress:
+                    self.on_progress(idx + 1, total)
+                continue
             original_image = QImage(img_path)
             original_boxes = copy.deepcopy(boxes)
             iw = original_image.width()
@@ -148,7 +159,7 @@ class Augmenter:
     def _build_kwargs(self, cls, ranges, mode):
         kwargs = {}
         for pname, (vmin, vmax) in ranges.items():
-            kwargs[pname] = random.uniform(vmin, vmax) if mode == "random" else (vmin + vmax) / 2
+            kwargs[pname] = random.uniform(vmin, vmax)
         if cls.__name__ in ("RandomRotation", "RandomScale"):
             if "angle" in kwargs:
                 kwargs["max_angle"] = abs(kwargs.pop("angle"))

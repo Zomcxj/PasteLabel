@@ -36,7 +36,7 @@ class YoloExporter:
                     "image": item["image"],
                     "img_path": item.get("img_path", ""),
                 })
-            self._write_files(items)
+            self._write_files(items, selected_labels)
             return
         total = len(background_images)
         items = []
@@ -65,18 +65,28 @@ class YoloExporter:
                 "img_path": img_path,
                 "image": img
             })
-        self._write_files(items)
+        self._write_files(items, selected_labels)
 
     def _ensure_dirs(self):
         os.makedirs(os.path.join(self.output_dir, "images"), exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, "labels"), exist_ok=True)
 
-    def _write_files(self, items: List[dict]):
-        classes_set = set()
-        for item in items:
-            for b in item["boxes"]:
-                classes_set.add(b["label"])
-        classes = sorted(classes_set)
+    def _write_files(self, items: List[dict], selected_labels: List[str] = None):
+        if selected_labels:
+            classes = sorted(selected_labels)
+        else:
+            classes_set = set()
+            for item in items:
+                for b in item["boxes"]:
+                    classes_set.add(b["label"])
+            classes = sorted(classes_set)
+        classes_txt = os.path.join(self.output_dir, "classes.txt")
+        if os.path.exists(classes_txt):
+            with open(classes_txt, 'r') as f:
+                existing = [line.strip() for line in f if line.strip()]
+            if existing:
+                existing_set = set(existing)
+                classes = existing + [c for c in classes if c not in existing_set]
         total = len(items)
         for idx, item in enumerate(items):
             self._write_one(item, classes)
@@ -95,10 +105,22 @@ class YoloExporter:
         with open(txt_path, 'w') as f:
             for b in boxes:
                 class_id = classes.index(b["label"])
-                x_c = (b["x"] + b["width"] / 2) / iw
-                y_c = (b["y"] + b["height"] / 2) / ih
-                w_n = b["width"] / iw
-                h_n = b["height"] / ih
+                x1 = max(0, b["x"])
+                y1 = max(0, b["y"])
+                x2 = min(iw, b["x"] + b["width"])
+                y2 = min(ih, b["y"] + b["height"])
+                if x2 - x1 < 1 or y2 - y1 < 1:
+                    continue
+                x_c = (x1 + x2) / 2 / iw
+                y_c = (y1 + y2) / 2 / ih
+                w_n = (x2 - x1) / iw
+                h_n = (y2 - y1) / ih
+                x_c = max(0.0, min(1.0, x_c))
+                y_c = max(0.0, min(1.0, y_c))
+                w_n = max(0.0, min(1.0, w_n))
+                h_n = max(0.0, min(1.0, h_n))
+                if w_n < 1e-6 or h_n < 1e-6:
+                    continue
                 f.write(f"{class_id} {x_c:.6f} {y_c:.6f} {w_n:.6f} {h_n:.6f}\n")
         img = item.get("image")
         if img is not None and not img.isNull():

@@ -16,8 +16,11 @@ class Splitter:
         self,
         background_images: List[str],
         detection_boxes_dict: Dict[int, List[dict]],
-        ratios: Dict[str, float]
+        ratios: Dict[str, float],
+        classes: List[str] = None,
     ):
+        if os.path.exists(self.output_dir):
+            shutil.rmtree(self.output_dir)
         total = float(sum(ratios.values()))
         if total <= 0:
             return
@@ -48,27 +51,38 @@ class Splitter:
                     return
                 src = background_images[idx]
                 dst = os.path.join(split_img_dir, os.path.basename(src))
-                if not os.path.exists(dst):
-                    shutil.copy2(src, dst)
+                shutil.copy2(src, dst)
                 base = os.path.splitext(os.path.basename(src))[0]
                 src_txt = os.path.join(yolo_labels_dir, f"{base}.txt")
                 if os.path.exists(src_txt):
                     dst_txt = os.path.join(split_lbl_dir, f"{base}.txt")
-                    if not os.path.exists(dst_txt):
-                        shutil.copy2(src_txt, dst_txt)
+                    if os.path.exists(dst_txt):
+                        os.remove(dst_txt)
+                    shutil.copy2(src_txt, dst_txt)
                 count += 1
                 if self.on_progress:
                     self.on_progress(count, total_files)
-        self._write_dataset_yaml(splits, background_images)
+        self._write_dataset_yaml(splits, background_images, classes)
 
-    def _write_dataset_yaml(self, splits: Dict[str, list], images: List[str]):
-        lines = []
+    def _write_dataset_yaml(self, splits: Dict[str, list], images: List[str],
+                             classes: List[str] = None):
+        if classes is None:
+            classes_txt = os.path.join(os.path.dirname(self.output_dir), "classes.txt")
+            if os.path.exists(classes_txt):
+                with open(classes_txt, 'r') as f:
+                    classes = [line.strip() for line in f if line.strip()]
+            else:
+                classes = []
+        lines = [f"path: {os.path.abspath(self.output_dir)}"]
         for split_name in ("train", "val", "test"):
             if split_name in splits and splits[split_name]:
                 rel = f"./images/{split_name}"
                 lines.append(f"{split_name}: {rel}")
-        lines.append("nc: 0")
-        lines.append("names: []")
+        lines.append(f"nc: {len(classes)}")
+        lines.append(f"names: {classes}")
         path = os.path.join(self.output_dir, "dataset.yaml")
         with open(path, 'w') as f:
             f.write("\n".join(lines) + "\n")
+        if not splits.get("val"):
+            import logging
+            logging.warning("Validation set is empty")

@@ -89,9 +89,9 @@ def set_titlebar_dark(hwnd, dark, force_refresh=False):
             ps = (
                 'Add-Type @"'
                 'using System.Runtime.InteropServices;'
-                'public class Dwm{'
+                'public class Dwm{{'
                 '[DllImport("dwmapi.dll")]'
-                'public static extern int DwmSetWindowAttribute(System.IntPtr h,int a,ref int v,int s);}'
+                'public static extern int DwmSetWindowAttribute(System.IntPtr h,int a,ref int v,int s);}}'
                 '"@;'
                 '[Dwm]::DwmSetWindowAttribute([IntPtr]{h},20,[ref]$v,4);'
                 '[Dwm]::DwmSetWindowAttribute([IntPtr]{h},19,[ref]$v,4)'

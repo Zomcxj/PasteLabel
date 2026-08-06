@@ -371,9 +371,6 @@ class CanvasRendererMixin:
     def _draw_magnifier(self, painter, background_rect, scene):
         if not getattr(self._editor, '_magnifier_enabled', False):
             return
-        mag_pos = MAGNIFIER_CONFIG.get('position', 'side')
-        if mag_pos == 'side' and self.selected_box is None and self._editor.selected_item is None and not self.is_drawing_box:
-            return
         if not self.mouse_inside or self.mouse_pos is None:
             return
         pixmap = self._editor.current_background

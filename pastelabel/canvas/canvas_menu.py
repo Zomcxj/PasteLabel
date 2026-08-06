@@ -293,6 +293,14 @@ class CanvasMenuMixin:
         self._editor.update_label_list()
         self.update()
 
+        # 删除后自动跳转到下一张
+        if self._editor.background_images:
+            new_idx = min(idx, len(self._editor.background_images) - 1)
+            self._editor.switch_background_to_index(new_idx)
+            row = self._editor._find_bg_list_row_for_index(new_idx)
+            if row is not None:
+                self._editor.background_list.setCurrentRow(row)
+
     def _remove_current_background(self):
         """从画布移除当前背景图（移到删除文件夹）"""
         import shutil

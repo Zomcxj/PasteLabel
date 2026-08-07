@@ -383,10 +383,23 @@ class CanvasRendererMixin:
             return
 
         src_size = max(1, int(size / zoom))
-        src_x = int(self.mouse_pos.x() - src_size // 2)
-        src_y = int(self.mouse_pos.y() - src_size // 2)
-        src_x = max(0, min(self.width() - src_size, src_x))
-        src_y = max(0, min(self.height() - src_size, src_y))
+        # 取样窗口始终以光标为中心；越界不夹紧，否则放大内容会偏离光标
+        src_x = int(self.mouse_pos.x()) - src_size // 2
+        src_y = int(self.mouse_pos.y()) - src_size // 2
+
+        t_bg = ThemeManager.get_theme()['canvas_bg']
+        src_pix = QPixmap(src_size, src_size)
+        src_pix.fill(QColor(
+            int(t_bg[1:3], 16), int(t_bg[3:5], 16), int(t_bg[5:7], 16)
+        ))
+        ox = max(src_x, 0)
+        oy = max(src_y, 0)
+        ox2 = min(src_x + src_size, self.width())
+        oy2 = min(src_y + src_size, self.height())
+        if ox2 > ox and oy2 > oy:
+            sp2 = QPainter(src_pix)
+            sp2.drawPixmap(ox - src_x, oy - src_y, scene, ox, oy, ox2 - ox, oy2 - oy)
+            sp2.end()
 
         mag_pos = MAGNIFIER_CONFIG.get('position', 'side')
         if mag_pos == 'center':
@@ -406,7 +419,7 @@ class CanvasRendererMixin:
 
         painter.save()
         painter.fillRect(dst, QColor(255, 255, 255, 210))
-        painter.drawPixmap(dst, scene, QRectF(src_x, src_y, src_size, src_size))
+        painter.drawPixmap(dst, src_pix, QRectF(0, 0, src_size, src_size))
         painter.setPen(QPen(QColor(60, 60, 60, 180), 1))
         painter.drawRect(dst)
         cross_color = QColor(CROSSHAIR_CONFIG.get('color', '#00FF80'))

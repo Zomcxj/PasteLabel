@@ -518,6 +518,9 @@ class LabelManager(QObject):
             for index, boxes in boxes_dict.items():
                 if not isinstance(index, int) or index < 0 or index >= len(images):
                     continue
+                if not boxes:
+                    # Empty slot (e.g. batch-loaded placeholder): disk counts stand.
+                    continue
                 # Subtract prior disk contribution for this file, then add memory.
                 json_path = f"{os.path.splitext(images[index])[0]}.json"
                 try:

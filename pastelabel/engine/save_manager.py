@@ -351,6 +351,8 @@ class SaveManager(QObject):
         """生成并保存 JSON 文件"""
         if self.editor._is_delete_view:
             return
+        if hasattr(self.editor, '_dataset_stats_dirty'):
+            self.editor._dataset_stats_dirty = True
         json_path = os.path.splitext(image_path)[0] + '.json'
         
         items_to_use = canvas_items if canvas_items is not None else self.editor.canvas_items

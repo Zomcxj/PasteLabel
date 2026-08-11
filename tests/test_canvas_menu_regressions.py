@@ -346,12 +346,21 @@ def test_delete_current_label_file_removes_json_and_clears_boxes(tmp_path, monke
         detection_boxes = [{"label": "Car", "x": 0, "y": 0, "width": 1, "height": 1}]
         detection_boxes_dict = {0: [{"label": "Car", "x": 0, "y": 0, "width": 1, "height": 1}]}
         refreshed = []
+        jumped_to = []
 
         def update_label_list(self):
             pass
 
         def _refresh_background_item_status(self, idx, path):
             self.refreshed.append((idx, path))
+
+        def switch_background_to_index(self, index):
+            self.jumped_to.append(index)
+
+        def _find_bg_list_row_for_index(self, index):
+            return index
+
+        background_list = type("List", (), {"setCurrentRow": lambda self, r: None})()
 
     class Canvas(CanvasMenuMixin):
         def __init__(self):
@@ -377,3 +386,4 @@ def test_delete_current_label_file_removes_json_and_clears_boxes(tmp_path, monke
     assert not json_path.exists()
     assert canvas._editor.refreshed == [(0, str(img))]
     assert canvas.updated is True
+    assert canvas._editor.jumped_to == [0]

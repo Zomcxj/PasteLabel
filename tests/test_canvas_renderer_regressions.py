@@ -12,10 +12,11 @@ from pastelabel.engine.paste_engine import PasteEngineMixin
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_magnifier_only_appears_for_selected_box_or_draw_mode():
+def test_magnifier_shows_in_side_mode_regardless_of_selection():
     source = (ROOT / "pastelabel" / "canvas" / "canvas_renderer.py").read_text(encoding="utf-8")
 
-    assert "if mag_pos == 'side' and self.selected_box is None and self._editor.selected_item is None and not self.is_drawing_box:" in source
+    # v1.1.4: side magnifier is always visible; the old gating on selection must not exist.
+    assert "if mag_pos == 'side' and self.selected_box is None and self._editor.selected_item is None and not self.is_drawing_box:" not in source
     assert "MAGNIFIER_CONFIG.get('position', 'side')" in source
 
 

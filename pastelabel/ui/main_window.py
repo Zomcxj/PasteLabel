@@ -152,6 +152,7 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self._background_label_scan_workers = set()
         self._background_label_scan_pending = False
         self._background_label_scan_completed = False
+        self._dataset_stats_dirty = False
 
         self.prefix_input = QLineEdit()
         self.prefix_input.setText(DEFAULT_PREFIX)
@@ -420,6 +421,8 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
 
     def _load_memory_record_now(self, record):
         """实际加载记忆记录。"""
+        if hasattr(self, '_save_memory_record_on_close'):
+            self._save_memory_record_on_close()
         self._clear_memory_content()
         missing = []
 
@@ -428,14 +431,12 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         label_path = record.get('label_path') or ''
         saved_index = int(record.get('background_index', 0) or 0)
 
-        target_background_index = None
         if bg_path:
             if os.path.isdir(bg_path):
-                self.load_background_folder(bg_path, load_first=False)
+                self.load_background_folder(
+                    bg_path, load_first=False, restore_index=max(0, int(saved_index))
+                )
                 QApplication.processEvents()
-                if self.background_images:
-                    target_background_index = max(0, min(saved_index, len(self.background_images) - 1))
-                    QApplication.processEvents()
             else:
                 missing.append(bg_path)
         if paste_path:
@@ -480,9 +481,6 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 if hasattr(self, 'update_label_list'):
                     self.update_label_list()
 
-        self.update_file_count()
-        if target_background_index is not None:
-            self.switch_background_to_index(target_background_index)
         if missing and hasattr(self, 'status_label'):
             self.status_label.setText(f"{tr('路径不存在')}: {missing[0]}")
 
@@ -1054,8 +1052,17 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
         self.update_file_count()
 
     def _collect_bg_stats_for_dialog(self):
-        """Background label counts: prefer memory cache, else scan sidecar JSONs."""
+        """Background label counts: reuse full-dataset cache when fresh, else seed disk+memory."""
         cached = getattr(self, '_cached_bg_label_stats', None) or []
+        current_path = getattr(self, '_memory_background_path', '') or ''
+        cache_path = getattr(self, '_cached_bg_label_stats_path', '') or ''
+        scan_done = getattr(self, '_background_label_scan_completed', False)
+        dirty = getattr(self, '_dataset_stats_dirty', False)
+        if not (cached and scan_done and not dirty and cache_path == current_path):
+            if hasattr(self, 'label_manager') and hasattr(self.label_manager, '_seed_stats_cache_from_disk_and_memory'):
+                self.label_manager._seed_stats_cache_from_disk_and_memory()
+            self._dataset_stats_dirty = False
+            cached = getattr(self, '_cached_bg_label_stats', None) or []
         current_path = getattr(self, '_memory_background_path', '') or ''
         # Prefer any non-empty live cache (renames/canvas edits update it without path).
         if cached:

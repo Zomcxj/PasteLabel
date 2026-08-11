@@ -148,6 +148,30 @@ def scan_dataset_labels(image_paths, is_interrupted=None):
     return labels
 
 
+def scan_dataset_labels_with_counts(image_paths, is_interrupted=None):
+    """Return (labels_set, {label: count}) across all background sidecar JSONs."""
+    counts = {}
+    pending = []
+    for image_path in image_paths:
+        if is_interrupted and is_interrupted():
+            break
+        pending.append(f"{os.path.splitext(image_path)[0]}.json")
+    if not pending:
+        return set(), counts
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [pool.submit(_count_labels_in_json, jp) for jp in pending]
+        for future in concurrent.futures.as_completed(futures):
+            if is_interrupted and is_interrupted():
+                break
+            result = future.result()
+            if result:
+                for lbl, n in result.items():
+                    counts[lbl] = counts.get(lbl, 0) + int(n or 0)
+    labels = {lbl for lbl, n in counts.items() if n > 0}
+    return labels, counts
+
+
 def _count_labels_in_json(json_path):
     """Parse a LabelMe JSON and return {label: shape_count}, or None on error."""
     try:
@@ -191,7 +215,7 @@ def collect_background_label_counts(image_paths, is_interrupted=None):
 
 class DatasetLabelScanWorker(QThread):
     """Scan a fixed dataset snapshot outside the UI thread."""
-    labels_scanned = pyqtSignal(int, tuple, object)
+    labels_scanned = pyqtSignal(int, tuple, object, object)
 
     def __init__(self, generation, image_paths, parent=None):
         super().__init__(parent)
@@ -200,12 +224,14 @@ class DatasetLabelScanWorker(QThread):
 
     def run(self):
         try:
-            labels = scan_dataset_labels(self._image_paths, self.isInterruptionRequested)
+            labels, counts = scan_dataset_labels_with_counts(
+                self._image_paths, self.isInterruptionRequested
+            )
             if not self.isInterruptionRequested():
-                self.labels_scanned.emit(self._generation, self._image_paths, labels)
+                self.labels_scanned.emit(self._generation, self._image_paths, labels, counts)
         except Exception:
             if not self.isInterruptionRequested():
-                self.labels_scanned.emit(self._generation, self._image_paths, set())
+                self.labels_scanned.emit(self._generation, self._image_paths, set(), {})
 
 
 class ImageLoaderMixin:
@@ -213,6 +239,7 @@ class ImageLoaderMixin:
 
     def _start_background_replacement(self):
         """Invalidate scans and labels before replacing the background dataset."""
+        self._pending_memory_index = None
         if hasattr(self, '_background_load_timer') and self._background_load_timer:
             self._background_load_timer.stop()
             self._background_load_timer = None
@@ -225,6 +252,8 @@ class ImageLoaderMixin:
             self.background_dataset_labels = set()
         self._cached_bg_label_stats = []
         self._cached_bg_label_stats_path = ""
+        if hasattr(self, '_dataset_stats_dirty'):
+            self._dataset_stats_dirty = False
         self._background_label_scan_pending = True
         self._background_label_scan_completed = False
         if (hasattr(self, '_processing_panel') and self._processing_panel
@@ -312,10 +341,16 @@ class ImageLoaderMixin:
             return
         self.load_background_folder(folder_path)
 
-    def load_background_folder(self, folder_path, load_first=True):
-        """从指定文件夹加载背景图，供文件夹按钮和记忆记录复用。"""
+    def load_background_folder(self, folder_path, load_first=True, restore_index=None):
+        """从指定文件夹加载背景图，供文件夹按钮和记忆记录复用。
+
+        restore_index: 数据集完整加载后要切换到的索引（记忆记录恢复用）。
+        """
+        if hasattr(self, '_save_memory_record_on_close'):
+            self._save_memory_record_on_close()
         self._memory_background_path = folder_path
         self._start_background_replacement()
+        self._pending_memory_index = restore_index
 
         self.background_images.clear()
         self.background_list.clear()
@@ -377,6 +412,33 @@ class ImageLoaderMixin:
             self._start_dataset_label_scan()
             self.update_file_count()
             self.background_list.viewport().update()
+            self._finalize_dataset_load()
+
+    def _finalize_dataset_load(self):
+        """Dataset fully loaded: apply a pending saved background index (memory restore)."""
+        pending = getattr(self, '_pending_memory_index', None)
+        if pending is None:
+            return
+        self._pending_memory_index = None
+        if not self.background_images:
+            return
+        target = max(0, min(int(pending), len(self.background_images) - 1))
+        if target != getattr(self, 'current_background_index', -1):
+            self.switch_background_to_index(target)
+        else:
+            file_path = self.background_images[target]
+            pixmap = self._get_cached_pixmap(file_path)
+            if pixmap and not pixmap.isNull():
+                self.current_background = pixmap
+                self._load_detection_boxes_for_index(target, file_path)
+                self.canvas_items = self.canvas_items_dict.get(target, []).copy()
+                self.update_label_list()
+                self.canvas.reset_view()
+                self.canvas.update()
+        row = self._find_bg_list_row_for_index(target) if hasattr(self, '_find_bg_list_row_for_index') else None
+        if row is not None:
+            self.background_list.setCurrentRow(row)
+        self.update_file_count()
 
     def _load_next_background_batch(self):
         """Load next batch of background images into the list."""
@@ -391,6 +453,7 @@ class ImageLoaderMixin:
                 if callable(apply_filter):
                     apply_filter(navigate=False)
                 self.background_list.viewport().update()
+                self._finalize_dataset_load()
                 return
             file_path = self._pending_image_files[self._pending_image_index]
             idx = self._pending_image_index
@@ -695,7 +758,7 @@ class ImageLoaderMixin:
                     and self._processing_panel.isVisible()):
                 self._update_processing_panel_labels()
 
-    def _apply_dataset_labels(self, generation, image_paths, labels):
+    def _apply_dataset_labels(self, generation, image_paths, labels, counts=None):
         """Apply only the latest worker result for the unchanged dataset."""
         if (generation != self._background_label_scan_generation
                 or tuple(self.background_images) != tuple(image_paths)):
@@ -707,6 +770,26 @@ class ImageLoaderMixin:
             self.background_dataset_labels = set()
         self.background_dataset_labels = set(labels)
         self.global_labels.update(labels)
+        if isinstance(counts, dict):
+            color_map = getattr(self, 'label_color_map', None) or {}
+            stats = []
+            for label, count in sorted(counts.items(), key=lambda x: (-int(x[1] or 0), x[0])):
+                if int(count or 0) <= 0:
+                    continue
+                color = ''
+                if isinstance(color_map, dict) and color_map.get(label):
+                    color = color_map[label]
+                elif hasattr(self, 'get_label_color'):
+                    try:
+                        color = self.get_label_color(label)
+                    except Exception:
+                        color = ''
+                stats.append({'label': label, 'count': int(count), 'color': color or ''})
+            self._cached_bg_label_stats = stats
+            if not self._cached_bg_label_stats_path:
+                self._cached_bg_label_stats_path = getattr(self, '_memory_background_path', '') or ''
+            if hasattr(self, '_dataset_stats_dirty'):
+                self._dataset_stats_dirty = False
         self._background_label_scan_completed = True
         self.update_label_list()
         if (hasattr(self, '_processing_panel') and self._processing_panel

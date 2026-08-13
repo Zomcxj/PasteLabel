@@ -56,11 +56,13 @@ def test_buttons_use_theme_primary_text_except_background_list_controls(mode):
 
 
 def test_color_buttons_render_their_selected_color_without_blue_states():
+    import inspect
+    from pastelabel.ui.main_window import ImageEditor
+
     root = Path(__file__).resolve().parents[1]
-    window = (root / "pastelabel" / "ui" / "main_window.py").read_text(encoding="utf-8")
     settings = (root / "pastelabel" / "ui" / "settings_dialog.py").read_text(encoding="utf-8")
 
-    label_style = window.split("def _set_label_color_button", 1)[1].split("def _change_label_color", 1)[0]
+    label_style = inspect.getsource(ImageEditor._set_label_color_button)
     crosshair_style = settings.split("def _update_crosshair_color_button", 1)[1].split("def _choose_crosshair_color", 1)[0]
     assert "background-color: {color}" in label_style
     assert "#2950ff" not in label_style

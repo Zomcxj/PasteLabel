@@ -49,9 +49,12 @@ def test_options_buttons_use_blue_pressed_state(mode):
 
 
 def test_mode_segment_indicator_reads_the_active_interaction_token():
+    import inspect
+    from pastelabel.ui.main_window import ImageEditor
+
     root = Path(__file__).resolve().parents[1]
     builder = (root / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
-    window = (root / "pastelabel" / "ui" / "main_window.py").read_text(encoding="utf-8")
+    window = inspect.getsource(ImageEditor._update_mode_seg_style)
     style = ThemeManager.get_stylesheet()
 
     token = 'ThemeManager.get_theme()["interaction_active"]'

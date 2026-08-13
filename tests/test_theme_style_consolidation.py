@@ -58,8 +58,10 @@ def test_mode_and_cache_widgets_use_global_qss_contract_without_local_overrides(
 
 
 def test_mode_refresh_only_syncs_state_and_indicator_without_local_qss():
-    root = __import__("pathlib").Path(__file__).parents[1]
-    refresh = _method_source(root / "pastelabel" / "ui" / "main_window.py", "_update_mode_seg_style", "_apply_mode_visibility_defaults")
+    from pastelabel.ui.main_window import ImageEditor
+    import inspect
+
+    refresh = inspect.getsource(ImageEditor._update_mode_seg_style)
 
     assert "setChecked(is_paste)" in refresh
     assert "setChecked(not is_paste)" in refresh
@@ -69,9 +71,10 @@ def test_mode_refresh_only_syncs_state_and_indicator_without_local_qss():
 
 
 def test_apply_theme_refreshes_the_mode_indicator_from_current_tokens():
-    refresh = _method_source(
-        ROOT / "pastelabel" / "ui" / "main_window.py", "_apply_theme", "_update_status_info"
-    )
+    from pastelabel.ui.main_window import ImageEditor
+    import inspect
+
+    refresh = inspect.getsource(ImageEditor._apply_theme)
 
     assert "self._update_mode_seg_style()" in refresh
 

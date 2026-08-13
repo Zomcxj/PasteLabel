@@ -43,10 +43,11 @@ def test_center_on_parent_uses_parent_window_geometry():
 
 
 def test_label_stats_dialog_centers_after_show_event():
+    import inspect
     from pathlib import Path
+    from pastelabel.ui.main_window import ImageEditor
 
-    source = (Path(__file__).resolve().parents[1] / "pastelabel" / "ui" / "main_window.py").read_text(encoding="utf-8")
-    stats_block = source.split('def _show_label_stats', 1)[1].split('def _set_titlebar_dark', 1)[0]
+    stats_block = inspect.getsource(ImageEditor._show_label_stats)
 
     assert 'class _StatsDialog(QDialog):' in stats_block
     assert 'def showEvent(self, event):' in stats_block

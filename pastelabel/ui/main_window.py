@@ -21,9 +21,10 @@ from .theme import ThemeManager, ThemeMode
 from .dwm import set_titlebar_dark
 from .settings_dialog import SettingsDialog
 from .processing_panel import ProcessingPanel
+from .mixins.label_cache_slot import LabelCacheSlotMixin
 
 
-class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
+class ImageEditor(LabelCacheSlotMixin, UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                    EventHandlerMixin, QMainWindow):
     """贴图标注工具主窗口"""
 
@@ -209,153 +210,6 @@ class ImageEditor(UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
                 if label:
                     stats[label] = stats.get(label, 0) + 1
         return stats
-
-    def _save_label_cache_slots(self):
-        from ..core import config_manager
-        config_manager.save_all(label_cache_slots=self.label_cache_slots)
-
-    def _get_next_writable_label_cache_slot_index(self):
-        writable_slots = [
-            (index, slot) for index, slot in enumerate(self.label_cache_slots)
-            if not slot.get('locked')
-        ]
-        if not writable_slots:
-            return None
-        return min(
-            writable_slots,
-            key=lambda item: int(item[1].get('copy_order', 0) or 0),
-        )[0]
-
-    def _reset_label_cache_slots(self):
-        for index, slot in enumerate(self.label_cache_slots):
-            default_shortcut = str(index + 1)
-            default_name = f"{tr('缓存槽')}{index + 1}"
-            slot['name'] = default_name
-            slot['locked'] = False
-            slot['items'] = []
-            slot['copied_at'] = ''
-            slot['copy_order'] = 0
-            slot['shortcut'] = str(slot.get('shortcut') or default_shortcut)
-        self.active_label_cache_slot = 0
-        self._label_cache_copy_counter = 0
-
-    def set_active_label_cache_slot(self, slot_index):
-        if slot_index < 0 or slot_index >= len(self.label_cache_slots):
-            return
-        self.active_label_cache_slot = slot_index
-        self._rebuild_label_cache_menu()
-
-    def _get_selected_detection_boxes(self):
-        multi_indexes = [
-            index for index in getattr(self.canvas, 'selected_boxes', [])
-            if 0 <= index < len(self.detection_boxes)
-        ]
-        if multi_indexes:
-            return [dict(self.detection_boxes[index]) for index in multi_indexes]
-
-        index = getattr(self.canvas, 'selected_box', None)
-        if index is None or index < 0 or index >= len(self.detection_boxes):
-            return []
-        return [dict(self.detection_boxes[index])]
-
-    def copy_selected_labels_to_active_cache_slot(self):
-        items = self._get_selected_detection_boxes()
-        if not items and getattr(self, 'canvas', None):
-            # hover 选中态可能还没同步到 selected_box，需要补一次同步。
-            check_hover = getattr(self.canvas, '_check_hover', None)
-            if callable(check_hover):
-                check_hover()
-                items = self._get_selected_detection_boxes()
-        if not items:
-            self.status_label.setText(tr("无可复制标签"))
-            return
-        slot_index = ImageEditor._get_next_writable_label_cache_slot_index(self)
-        if slot_index is None:
-            self.status_label.setText(tr("没有可写入的缓存槽"))
-            return
-        self.active_label_cache_slot = slot_index
-        slot = self.label_cache_slots[slot_index]
-        self._label_cache_copy_counter = getattr(self, '_label_cache_copy_counter', 0) + 1
-        slot['items'] = items
-        slot['copied_at'] = datetime.now().strftime('%H:%M:%S')
-        slot['copy_order'] = self._label_cache_copy_counter
-        self._last_paste_slot = None
-        self._save_label_cache_slots()
-        self._rebuild_label_cache_menu()
-
-    def paste_label_cache_slot(self, slot_index):
-        if self._is_delete_view or self.current_background is None:
-            return
-        if slot_index < 0 or slot_index >= len(self.label_cache_slots):
-            return
-        slot = self.label_cache_slots[slot_index]
-        if not slot.get('items'):
-            self.status_label.setText(tr("缓存槽为空"))
-            return
-        pasted_group = []
-        for box in slot['items']:
-            pasted_group.append((
-                QRectF(box['x'], box['y'], box['width'], box['height']),
-                box['label'],
-            ))
-        adjusted_group = self._offset_overlapping_paste_group(pasted_group)
-        if adjusted_group:
-            self.save_undo_state()
-            self._last_paste_start = len(self.detection_boxes)
-        for rect, label in adjusted_group:
-            self.detection_boxes.append({
-                'x': rect.x(),
-                'y': rect.y(),
-                'width': rect.width(),
-                'height': rect.height(),
-                'label': label,
-            })
-        if adjusted_group:
-            self._last_paste_slot = slot_index
-            self._last_paste_count = len(adjusted_group)
-        if adjusted_group and self.current_background_index >= 0:
-            self.detection_boxes_dict[self.current_background_index] = self.detection_boxes.copy()
-        self.update_label_list()
-        self.canvas.update()
-
-    def _sync_pasted_boxes_to_cache(self):
-        if self._last_paste_slot is None or self._last_paste_count <= 0:
-            return
-        start = self._last_paste_start
-        end = start + self._last_paste_count
-        if start < 0 or end > len(self.detection_boxes):
-            return
-        slot = self.label_cache_slots[self._last_paste_slot]
-        slot['items'] = [dict(self.detection_boxes[i]) for i in range(start, end)]
-        self._save_label_cache_slots()
-
-    def toggle_label_cache_slot_lock(self, slot_index):
-        if slot_index < 0 or slot_index >= len(self.label_cache_slots):
-            return
-        self.label_cache_slots[slot_index]['locked'] = not self.label_cache_slots[slot_index].get('locked')
-        self._save_label_cache_slots()
-        self._rebuild_label_cache_menu()
-
-    def clear_label_cache_slot(self, slot_index):
-        if slot_index < 0 or slot_index >= len(self.label_cache_slots):
-            return
-        if self.label_cache_slots[slot_index].get('locked'):
-            return
-        self.label_cache_slots[slot_index]['items'] = []
-        self.label_cache_slots[slot_index]['copied_at'] = ''
-        self.label_cache_slots[slot_index]['copy_order'] = 0
-        self._save_label_cache_slots()
-        self._rebuild_label_cache_menu()
-
-    def rename_label_cache_slot(self, slot_index, name):
-        if slot_index < 0 or slot_index >= len(self.label_cache_slots):
-            return
-        text = str(name or '').strip()
-        if not text:
-            text = f"{tr('缓存槽')}{slot_index + 1}"
-        self.label_cache_slots[slot_index]['name'] = text
-        self._save_label_cache_slots()
-        self._rebuild_label_cache_menu()
 
     def _connect_manager_signals(self):
         """连接管理器信号 → 编辑器 UI 刷新（需在 init_ui 之后调用）"""

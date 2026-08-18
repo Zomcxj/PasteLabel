@@ -26,10 +26,11 @@ from .mixins.stats import StatsMixin
 from .mixins.background_list import BackgroundListMixin
 from .mixins.theme import ThemeMixin
 from .mixins.translation import TranslationMixin
+from .mixins.dataset_classifier import DatasetClassifierMixin
 
 
 class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin, MemoryRecordMixin, LabelCacheSlotMixin, UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
-                   EventHandlerMixin, QMainWindow):
+                   DatasetClassifierMixin, EventHandlerMixin, QMainWindow):
     """贴图标注工具主窗口"""
 
     def __init__(self):

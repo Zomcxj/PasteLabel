@@ -695,21 +695,21 @@ class ThemeManager:
                 color: {t['interaction_active_text']};
             }}
             QPushButton#iconBtn, QPushButton#navBtn, QPushButton#bgBtn,
-            QPushButton#pasteBtn, QPushButton#labelBtn, QPushButton#themeBtn,
-            QPushButton#settingsBtn, QPushButton#langBtn {{
+            QPushButton#pasteBtn, QPushButton#labelBtn, QPushButton#datasetBtn,
+            QPushButton#themeBtn, QPushButton#settingsBtn, QPushButton#langBtn {{
                 background-color: {t['widget_bg']};
                 border: 1px solid {t['border_color']};
             }}
             QPushButton#iconBtn:hover, QPushButton#navBtn:hover, QPushButton#bgBtn:hover,
-            QPushButton#pasteBtn:hover, QPushButton#labelBtn:hover, QPushButton#themeBtn:hover,
-            QPushButton#settingsBtn:hover, QPushButton#langBtn:hover {{
+            QPushButton#pasteBtn:hover, QPushButton#labelBtn:hover, QPushButton#datasetBtn:hover,
+            QPushButton#themeBtn:hover, QPushButton#settingsBtn:hover, QPushButton#langBtn:hover {{
                 background-color: {t['widget_bg']};
                 border: 1px solid {t['interaction_active']};
                 color: {t['button_text']};
             }}
             QPushButton#iconBtn:pressed, QPushButton#navBtn:pressed, QPushButton#bgBtn:pressed,
-            QPushButton#pasteBtn:pressed, QPushButton#labelBtn:pressed, QPushButton#themeBtn:pressed,
-            QPushButton#settingsBtn:pressed, QPushButton#langBtn:pressed {{
+            QPushButton#pasteBtn:pressed, QPushButton#labelBtn:pressed, QPushButton#datasetBtn:pressed,
+            QPushButton#themeBtn:pressed, QPushButton#settingsBtn:pressed, QPushButton#langBtn:pressed {{
                 background-color: {t['interaction_active']};
                 border: 1px solid {t['interaction_active']};
                 color: {t['interaction_active_text']};

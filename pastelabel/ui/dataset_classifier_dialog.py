@@ -65,6 +65,7 @@ def _run_with_progress(parent, title, label, task):
 
     result_box = {}
     cancelled = [False]
+    completed = [False]
 
     def _on_progress(cur, total, msg):
         if cancelled[0]:
@@ -73,19 +74,22 @@ def _run_with_progress(parent, title, label, task):
         progress.setValue(int(cur))
         if msg:
             progress.setLabelText(str(msg))
-        QApplication.processEvents()
 
     def _on_done(result):
         if not cancelled[0]:
             result_box['result'] = result
+        completed[0] = True
         loop.quit()
 
     def _on_error(err):
         if not cancelled[0]:
             result_box['error'] = err
+        completed[0] = True
         loop.quit()
 
     def _on_canceled():
+        if completed[0]:
+            return
         cancelled[0] = True
         worker.cancel()
         progress.setLabelText(tr("正在中断..."))

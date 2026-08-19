@@ -238,14 +238,6 @@ class UIBuilderMixin:
         )
         upload_layout.addWidget(self.upload_paste_label_btn)
 
-        upload_layout.addSpacing(2)
-        self.dataset_lbl = QLabel(tr("数据集:"))
-        upload_layout.addWidget(self.dataset_lbl)
-        self.classify_btn = self._create_svg_button(
-            SVG_CLASSIFY, self._open_dataset_classifier, tr("数据集分类"), "#9C27B0", "datasetBtn"
-        )
-        upload_layout.addWidget(self.classify_btn)
-
         upload_layout.addSpacing(8)
         self._add_separator(upload_layout)
         upload_layout.addSpacing(8)
@@ -477,8 +469,7 @@ class UIBuilderMixin:
         self.process_btn.setFixedWidth(70)
         self.process_btn.setFixedHeight(24)
         self.process_btn.setToolTip(tr("数据处理"))
-        self.process_btn.setCheckable(True)
-        self.process_btn.clicked.connect(self._toggle_processing_panel)
+        self.process_btn.clicked.connect(self._show_export_menu)
         layout.addWidget(self.process_btn)
 
     def _rebuild_label_cache_menu(self):

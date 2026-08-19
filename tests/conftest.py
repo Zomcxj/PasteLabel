@@ -35,7 +35,7 @@ def _make_mock_module(name):
         'QLineEdit', 'QCheckBox', 'QSpinBox', 'QGroupBox', 'QFrame',
         'QSplitter', 'QScrollArea', 'QFileDialog', 'QMessageBox',
         'QInputDialog', 'QMenu', 'QAction', 'QWidgetAction', 'QShortcut', 'QKeySequence',
-        'QProgressDialog', 'QSvgRenderer', 'QCursor',
+        'QProgressDialog', 'QProgressBar', 'QSvgRenderer', 'QCursor',
         'QStackedWidget', 'QComboBox', 'QDoubleSpinBox', 'QTextBrowser',
         'QTabWidget', 'QToolButton', 'QSlider', 'QRadioButton', 'QColorDialog', 'QDialogButtonBox',
     ]:
@@ -228,12 +228,15 @@ class _MockQProgressDialog(_MockQWidget):
     def setWindowTitle(self, *a): pass
     def setMinimumWidth(self, *a): pass
     def setModal(self, *a): pass
+    def setAutoReset(self, *a): pass
+    def setAutoClose(self, *a): pass
     def setStyleSheet(self, *a): pass
     def show(self): pass
     def setValue(self, *a): pass
     def setLabelText(self, *a): pass
     def wasCanceled(self): return False
     def close(self): pass
+    def findChild(self, *a): return None
     def geometry(self):
         return type('G', (), {'width': lambda self: 400, 'height': lambda self: 200})()
 
@@ -442,6 +445,10 @@ qtwidgets.QDoubleSpinBox = type('QDoubleSpinBox', (_MockQWidget,), {
 })
 qtwidgets.QLineEdit = _MockQLineEdit
 qtwidgets.QProgressDialog = _MockQProgressDialog
+qtwidgets.QProgressBar = type('QProgressBar', (_MockQWidget,), {
+    'setObjectName': lambda self, *a: None,
+    'setStyleSheet': lambda self, *a: None,
+})
 qtwidgets.QInputDialog = _MockQInputDialog
 qtwidgets.QMessageBox = _MockQMessageBox
 qtwidgets.QFileDialog = _MockQFileDialog

@@ -377,6 +377,24 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
             self._processing_panel.show()
             self._center_processing_panel()
 
+    def _show_export_menu(self):
+        """顶部'导出'按钮弹出菜单: 增强划分 / Kmeans划分"""
+        from PyQt5.QtWidgets import QMenu
+        from PyQt5.QtCore import QPoint
+
+        menu = QMenu(self)
+        menu.setObjectName("optionsMenu")
+        action_aug = menu.addAction(tr("增强划分"))
+        action_kmeans = menu.addAction(tr("Kmeans划分"))
+
+        btn_pos = self.process_btn.mapToGlobal(QPoint(0, self.process_btn.height()))
+        action = menu.exec_(btn_pos)
+
+        if action == action_aug:
+            self._toggle_processing_panel()
+        elif action == action_kmeans:
+            self._open_dataset_classifier()
+
     def _update_processing_panel_labels(self):
         if hasattr(self, '_processing_panel') and self._processing_panel:
             self._processing_panel._refresh_texts()

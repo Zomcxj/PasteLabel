@@ -88,10 +88,6 @@ class TranslationMixin:
             self.paste_lbl.setText(tr("贴图:"))
         if hasattr(self, 'label_lbl'):
             self.label_lbl.setText(tr("标签:"))
-        if hasattr(self, 'dataset_lbl'):
-            self.dataset_lbl.setText(tr("数据集:"))
-        if hasattr(self, 'classify_btn'):
-            self.classify_btn.setToolTip(tr("数据集分类"))
         if hasattr(self, 'paste_count_lbl'):
             self.paste_count_lbl.setText(tr("贴图个数:"))
         if hasattr(self, 'size_lbl'):

@@ -361,7 +361,7 @@ class ProcessingPanel(QWidget):
         btn_layout = QHBoxLayout()
         self._exp_btn = QPushButton()
         self._exp_btn.setObjectName("successBtn")
-        self._exp_btn.clicked.connect(lambda: self._run_export())
+        self._exp_btn.clicked.connect(self._show_export_menu)
         btn_layout.addWidget(self._exp_btn, 5)
         btn_layout.addWidget(self._make_btn_with_stop(self._exp_btn, lambda: self._do_interrupt()), 1)
         self._exp_clear_btn = QPushButton()
@@ -911,6 +911,31 @@ class ProcessingPanel(QWidget):
         self._workers.add(worker)
         worker.destroyed.connect(lambda: self._workers.discard(worker))
         worker.start()
+
+    def _show_export_menu(self):
+        """显示导出选项菜单"""
+        from PyQt5.QtWidgets import QMenu
+        from PyQt5.QtCore import QPoint
+
+        menu = QMenu(self)
+        menu.setObjectName("optionsMenu")
+        action_aug = menu.addAction(tr("增强划分"))
+        action_kmeans = menu.addAction(tr("Kmeans划分"))
+
+        btn_pos = self._exp_btn.mapToGlobal(QPoint(0, self._exp_btn.height()))
+        action = menu.exec_(btn_pos)
+
+        if action == action_aug:
+            self._run_export()
+        elif action == action_kmeans:
+            self._open_dataset_classifier()
+
+    def _open_dataset_classifier(self):
+        """打开Kmeans数据集分类对话框"""
+        from .dataset_classifier_dialog import DatasetClassifierDialog
+        folder = self._path_edit.text().strip()
+        dlg = DatasetClassifierDialog(self._editor, self, default_folder=folder)
+        dlg.exec_()
 
     def _run_export(self):
         self._ensure_boxes_loaded()

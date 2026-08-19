@@ -18,9 +18,52 @@ import random
 import shutil
 
 import numpy as np
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
-from sklearn.preprocessing import StandardScaler
+
+
+def _whiten(X):
+    mean = X.mean(axis=0)
+    std = X.std(axis=0)
+    std[std < 1e-10] = 1.0
+    return (X - mean) / std
+
+
+def _kmeans(X, k, n_iter=20, tol=1e-4, rng=None):
+    rng = rng or np.random.default_rng()
+    n, d = X.shape
+    centroids = np.empty((k, d), dtype=X.dtype)
+    idx0 = int(rng.integers(0, n))
+    centroids[0] = X[idx0]
+    for i in range(1, k):
+        dists = np.min(np.sum((X[:, None, :] - centroids[:i][None, :, :]) ** 2, axis=2), axis=1)
+        probs = dists / (dists.sum() + 1e-12)
+        cum = np.cumsum(probs)
+        r = rng.random()
+        pick = int(np.searchsorted(cum, r))
+        if pick >= n:
+            pick = int(rng.integers(0, n))
+        centroids[i] = X[pick]
+    for _ in range(n_iter):
+        dists = np.sum((X[:, None, :] - centroids[None, :, :]) ** 2, axis=2)
+        codes = np.argmin(dists, axis=1)
+        new_cent = np.empty_like(centroids)
+        for i in range(k):
+            mask = codes == i
+            if np.any(mask):
+                new_cent[i] = X[mask].mean(axis=0)
+            else:
+                new_cent[i] = centroids[i]
+        shift = np.linalg.norm(new_cent - centroids)
+        centroids = new_cent
+        if shift < tol:
+            break
+    return centroids, float(np.mean(np.min(dists, axis=1)))
+
+
+def _vq(X, centroids):
+    dists = np.sum((X[:, None, :] - centroids[None, :, :]) ** 2, axis=2)
+    codes = np.argmin(dists, axis=1)
+    min_dists = np.sqrt(np.min(dists, axis=1))
+    return codes, min_dists
 
 
 def get_image_extensions():
@@ -124,8 +167,7 @@ def build_features(label_image_count, mean_areas):
     freq = np.array([label_image_count[l] for l in labels]).reshape(-1, 1)
     area = np.array([mean_areas[l] for l in labels]).reshape(-1, 1)
     X = np.hstack([np.log1p(freq), np.log1p(area)])
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    X_scaled = _whiten(X)
     return labels, X_scaled, X
 
 
@@ -140,14 +182,9 @@ def recommend_k(X, max_k=10, progress_callback=None, is_interrupted=None):
     for i, k in enumerate(k_range):
         if is_interrupted and is_interrupted():
             return None, {}
-        km = KMeans(n_clusters=k, random_state=42, n_init=10)
-        km.fit(X)
-        labels = km.labels_
-        if len(set(labels)) > 1:
-            sil = float(silhouette_score(X, labels))
-        else:
-            sil = -1.0
-        scores[k] = (sil, float(km.inertia_))
+        centroids, distortion = _kmeans(X, k)
+        # distortion 越小聚类越好，用负值模拟得分（越大越好）
+        scores[k] = (-distortion, distortion)
         if progress_callback:
             progress_callback(i + 1, total, k)
     if not scores:
@@ -157,19 +194,27 @@ def recommend_k(X, max_k=10, progress_callback=None, is_interrupted=None):
 
 
 def cluster_labels(X, k, labels):
-    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-    kmeans.fit(X)
-    cluster_of_label = {label: int(cid) for label, cid in zip(labels, kmeans.labels_)}
-    centers = kmeans.cluster_centers_
+    centroids, _ = _kmeans(X, k)
+    codes, _ = _vq(X, centroids)
+    cluster_of_label = {label: int(cid) for label, cid in zip(labels, codes)}
 
-    order = sorted(range(k), key=lambda c: centers[c][1], reverse=True)
+    # 过滤空 centroid（某些质心附近没有被分配的数据点）
+    used = sorted(set(codes))
+    n_groups = len(used)
+    if n_groups < centroids.shape[0]:
+        old_to_new = {old: new for new, old in enumerate(used)}
+        centroids = centroids[used]
+        cluster_of_label = {label: old_to_new[cid] for label, cid in cluster_of_label.items() if cid in old_to_new}
+        codes = np.array([old_to_new[c] for c in codes])
+
+    order = sorted(range(n_groups), key=lambda c: centroids[c][1], reverse=True)
     new_id = {old: new for new, old in enumerate(order)}
 
-    group_labels = [set() for _ in range(k)]
+    group_labels = [set() for _ in range(n_groups)]
     for label, old_cid in cluster_of_label.items():
         group_labels[new_id[old_cid]].add(label)
 
-    return group_labels, kmeans, cluster_of_label
+    return group_labels, centroids, cluster_of_label
 
 
 def split_by_class(classified_images, train_ratio, min_threshold=20):
@@ -193,10 +238,11 @@ def split_by_class(classified_images, train_ratio, min_threshold=20):
     return train_images, val_images
 
 
-def copy_with_trimmed_annotation(src_dir, image_name, dest_dir, allowed_labels):
+def copy_with_trimmed_annotation(src_dir, image_name, img_dest_dir, lbl_dest_dir, allowed_labels):
+    """复制图片和标签到对应目录，只保留 allowed_labels 中的标签。"""
     image_src = os.path.join(src_dir, image_name)
     if os.path.exists(image_src):
-        shutil.copy2(image_src, dest_dir)
+        shutil.copy2(image_src, img_dest_dir)
 
     json_src = os.path.join(src_dir, os.path.splitext(image_name)[0] + '.json')
     if not os.path.exists(json_src):
@@ -210,7 +256,7 @@ def copy_with_trimmed_annotation(src_dir, image_name, dest_dir, allowed_labels):
         if shape.get('label', '') in allowed_labels
     ]
 
-    json_dst = os.path.join(dest_dir, os.path.splitext(image_name)[0] + '.json')
+    json_dst = os.path.join(lbl_dest_dir, os.path.splitext(image_name)[0] + '.json')
     with open(json_dst, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
@@ -261,23 +307,26 @@ def classify_and_split(image_dir, train_ratio, k, analysis=None,
     if len(labels) < 2:
         return None
 
-    group_labels, kmeans, cluster_of_label = cluster_labels(X_scaled, k, labels)
+    group_labels, _centroids, cluster_of_label = cluster_labels(X_scaled, k, labels)
+    n_groups = len(group_labels)
 
     train_images, val_images = split_by_class(classified_images, train_ratio)
 
     group_dirs = []
-    for gi in range(k):
-        train_dir = os.path.join(image_dir, f'g{gi}', 'train', 'images')
-        val_dir = os.path.join(image_dir, f'g{gi}', 'val', 'images')
-        for d in [train_dir, val_dir]:
+    for gi in range(n_groups):
+        train_img_dir = os.path.join(image_dir, f'g{gi}', 'images', 'train')
+        val_img_dir = os.path.join(image_dir, f'g{gi}', 'images', 'val')
+        train_lbl_dir = os.path.join(image_dir, f'g{gi}', 'labels', 'train')
+        val_lbl_dir = os.path.join(image_dir, f'g{gi}', 'labels', 'val')
+        for d in [train_img_dir, val_img_dir, train_lbl_dir, val_lbl_dir]:
             os.makedirs(d, exist_ok=True)
-        group_dirs.append((train_dir, val_dir))
+        group_dirs.append((train_img_dir, val_img_dir))
 
-    group_train_count = [0] * k
-    group_val_count = [0] * k
+    group_train_count = [0] * n_groups
+    group_val_count = [0] * n_groups
 
     copy_tasks = []
-    for gi in range(k):
+    for gi in range(n_groups):
         for image_name in train_images:
             if image_labels.get(image_name, set()) & group_labels[gi]:
                 copy_tasks.append((image_name, gi, 'train'))
@@ -288,20 +337,21 @@ def classify_and_split(image_dir, train_ratio, k, analysis=None,
     for idx, (image_name, gi, split_kind) in enumerate(copy_tasks):
         if is_interrupted and is_interrupted():
             return None
-        dest_dir = group_dirs[gi][0] if split_kind == 'train' else group_dirs[gi][1]
+        img_dest = group_dirs[gi][0] if split_kind == 'train' else group_dirs[gi][1]
+        lbl_dest = os.path.join(image_dir, f'g{gi}', 'labels', split_kind)
         if split_kind == 'train':
             group_train_count[gi] += 1
         else:
             group_val_count[gi] += 1
-        copy_with_trimmed_annotation(image_dir, image_name, dest_dir, group_labels[gi])
+        copy_with_trimmed_annotation(image_dir, image_name, img_dest, lbl_dest, group_labels[gi])
         if progress_callback:
             progress_callback(idx + 1, total, None)
 
     folder_name = os.path.basename(os.path.normpath(image_dir))
-    for gi in range(k):
+    for gi in range(n_groups):
         write_classes_txt(os.path.join(image_dir, f'g{gi}', 'classes.txt'), group_labels[gi])
         write_yaml(os.path.join(image_dir, f'{folder_name}_g{gi}.yaml'),
-                   image_dir, f'g{gi}/train/images', f'g{gi}/val/images', group_labels[gi])
+                   image_dir, f'g{gi}/train', f'g{gi}/val', group_labels[gi])
 
     if log_fn:
         log_fn(f"train: {len(train_images)}, val: {len(val_images)}")
@@ -314,7 +364,7 @@ def classify_and_split(image_dir, train_ratio, k, analysis=None,
         'image_primary_label': image_primary_label,
         'classified_images': classified_images,
         'group_labels': group_labels,
-        'k': k,
+        'k': n_groups,
         'train_images': train_images,
         'val_images': val_images,
         'group_train_count': group_train_count,

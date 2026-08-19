@@ -255,7 +255,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'pandas', 'numpy', 'pytest'],
+    excludes=['tkinter', 'matplotlib', 'pandas', 'pytest', 'PySide6', 'sklearn', 'torch', 'torchvision', 'tensorflow', 'keras', 'onnxruntime'],
     noarchive=False,
     optimize=${PYTHON_OPTIMIZE},
 )

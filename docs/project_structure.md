@@ -49,7 +49,8 @@ PasteLabel/
 │   │   ├── save_manager.py
 │   │   ├── splitter.py
 │   │   ├── undo_manager.py
-│   │   └── yolo_exporter.py
+│   ├── yolo_exporter.py
+│   └── dataset_classifier.py  # KMeans 数据集分类与划分引擎
 │   └── ui/                    # 主窗口、对话框、主题与国际化
 │       ├── __init__.py
 │       ├── dialog_helpers.py
@@ -71,6 +72,7 @@ PasteLabel/
 │   ├── test_canvas_renderer_regressions.py
 │   ├── test_config.py
 │   ├── test_config_manager.py
+│   ├── test_dataset_classifier.py
 │   ├── test_dialog_button_styles.py
 │   ├── test_dialogs_regressions.py
 │   ├── test_documentation_regressions.py

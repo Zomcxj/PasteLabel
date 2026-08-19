@@ -138,32 +138,42 @@ class ProgressDialogFactory:
 
     @staticmethod
     def create_progress_dialog(parent, title, label_text, maximum):
-        from PyQt5.QtWidgets import QProgressDialog
-        from . import i18n
+        from PyQt5.QtWidgets import QProgressDialog, QProgressBar
+        from . import i18n  # noqa: F401
         t = ThemeManager.get_theme()
 
         progress_dialog = QProgressDialog(label_text, i18n.t("取消"), 0, maximum, parent)
         progress_dialog.setWindowTitle(title)
         progress_dialog.setMinimumWidth(400)
         progress_dialog.setModal(True)
+        progress_dialog.setAutoReset(False)
+        progress_dialog.setAutoClose(False)
         progress_dialog.setStyleSheet(f"""
             QProgressDialog {{
                 background-color: {t['widget_bg']};
                 border: 1px solid {t['border_color']};
                 border-radius: 12px;
             }}
-            QProgressBar {{
-                border: 1px solid {t['border_color']};
-                border-radius: 8px;
-                background-color: {t['scrollbar_bg']};
-                text-align: center;
-                color: {t['text_primary']};
-            }}
-            QProgressBar::chunk {{
-                background-color: {t['accent']};
-                border-radius: 6px;
-            }}
         """)
+
+        bar = progress_dialog.findChild(QProgressBar)
+        if bar is not None:
+            bar.setObjectName("progressBar")
+            bar.setStyleSheet(f"""
+                QProgressBar#progressBar {{
+                    border: none;
+                    border-radius: 8px;
+                    background-color: {t['scrollbar_bg']};
+                    text-align: center;
+                    color: {t['text_primary']};
+                    min-height: 16px;
+                    max-height: 16px;
+                }}
+                QProgressBar#progressBar::chunk {{
+                    background-color: {t['accent']};
+                    border-radius: 8px;
+                }}
+            """)
 
         ProgressDialogFactory._center_dialog(progress_dialog)
         ProgressDialogFactory._sync_titlebar(progress_dialog)

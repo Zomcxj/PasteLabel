@@ -103,10 +103,14 @@ def test_classify_and_split_output(tmp_path):
     assert result['k'] == 2
     assert len(result['train_images']) + len(result['val_images']) == 10
     for gi in range(2):
-        train_dir = os.path.join(str(tmp_path), f'g{gi}', 'train', 'images')
-        val_dir = os.path.join(str(tmp_path), f'g{gi}', 'val', 'images')
-        assert os.path.isdir(train_dir)
-        assert os.path.isdir(val_dir)
+        train_img_dir = os.path.join(str(tmp_path), f'g{gi}', 'images', 'train')
+        val_img_dir = os.path.join(str(tmp_path), f'g{gi}', 'images', 'val')
+        train_lbl_dir = os.path.join(str(tmp_path), f'g{gi}', 'labels', 'train')
+        val_lbl_dir = os.path.join(str(tmp_path), f'g{gi}', 'labels', 'val')
+        assert os.path.isdir(train_img_dir)
+        assert os.path.isdir(val_img_dir)
+        assert os.path.isdir(train_lbl_dir)
+        assert os.path.isdir(val_lbl_dir)
         assert os.path.isfile(os.path.join(str(tmp_path), f'g{gi}', 'classes.txt'))
     yaml_files = [f for f in os.listdir(str(tmp_path)) if f.endswith('.yaml')]
     assert len(yaml_files) == 2

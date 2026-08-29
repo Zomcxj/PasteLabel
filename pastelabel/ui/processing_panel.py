@@ -16,6 +16,8 @@ from .theme import ThemeManager
 from .dwm import set_titlebar_dark
 from ..core.utils import create_app_icon
 from ..engine.yolo_exporter import YoloExporter
+from ..engine.voc_exporter import VocExporter
+from ..engine.coco_exporter import CocoExporter
 from ..engine.splitter import Splitter
 from ..engine.augmenter import Augmenter, get_all_transforms
 from ..engine.augmenter.base import BaseTransform
@@ -338,6 +340,18 @@ class ProcessingPanel(QWidget):
     def _build_export_section(self, parent_layout):
         section = self._collapsible_section("", parent_layout, "#FFC107")
         layout = section.content_layout()
+        fmt_layout = QHBoxLayout()
+        fmt_layout.setContentsMargins(0, 0, 0, 0)
+        self._exp_fmt_label = QLabel()
+        fmt_layout.addWidget(self._exp_fmt_label)
+        self._exp_format = QComboBox()
+        self._exp_format.addItems([
+            "YOLO Detection", "VOC Detection", "COCO Detection"
+        ])
+        self._exp_format.setFixedWidth(150)
+        fmt_layout.addWidget(self._exp_format)
+        fmt_layout.addStretch()
+        layout.addLayout(fmt_layout)
         self._exp_label_title = QLabel()
         layout.addWidget(self._exp_label_title)
         self._exp_label_grid_container = QWidget()
@@ -550,7 +564,8 @@ class ProcessingPanel(QWidget):
         self._aug_btn.setText(tr("增强"))
         self._aug_skip_empty.setText(tr("跳过空标签"))
         self._aug_clear_btn.setText(tr("清空"))
-        self._exp_section.set_title(tr("YOLO 导出"))
+        self._exp_section.set_title(tr("标签导出"))
+        self._exp_fmt_label.setText(tr("格式:"))
         self._exp_label_title.setText(tr("类别:"))
         self._exp_skip_empty.setText(tr("跳过空标签"))
         self._exp_btn.setText(tr("导出"))
@@ -992,11 +1007,25 @@ class ProcessingPanel(QWidget):
                 count=len(input_data),
                 labels=", ".join(labels),
             ))
-            exp = YoloExporter(
-                output_dir,
-                on_progress=lambda c, t: progress_fn(c, t, ""),
-                is_interrupted=lambda: self._interrupted,
-            )
+            fmt = self._exp_format.currentText()
+            if fmt == "VOC Detection":
+                exp = VocExporter(
+                    output_dir,
+                    on_progress=lambda c, t: progress_fn(c, t, ""),
+                    is_interrupted=lambda: self._interrupted,
+                )
+            elif fmt == "COCO Detection":
+                exp = CocoExporter(
+                    output_dir,
+                    on_progress=lambda c, t: progress_fn(c, t, ""),
+                    is_interrupted=lambda: self._interrupted,
+                )
+            else:
+                exp = YoloExporter(
+                    output_dir,
+                    on_progress=lambda c, t: progress_fn(c, t, ""),
+                    is_interrupted=lambda: self._interrupted,
+                )
             exp.run(
                 self._run_images,
                 self._run_boxes,

@@ -74,6 +74,8 @@ class _MockQWidget:
     def adjustSize(self): pass
     def move(self, *a): pass
     def setWordWrap(self, *a): pass
+    def style(self): return type('Style', (), {'unpolish': lambda self, *a: None, 'polish': lambda self, *a: None})()
+    def layout(self): return None
 
 
 class _MockQMainWindow(_MockQWidget):
@@ -147,6 +149,7 @@ class _MockQBoxLayout:
     def addStretch(self): pass
     def setStretch(self, *a): pass
     def setContentsMargins(self, *a): pass
+    def setSpacing(self, *a): pass
 
 
 class _MockQLabel(_MockQWidget):
@@ -323,6 +326,14 @@ qtcore.Qt = type('Qt', (), {
     'OpenHandCursor': 17,
     'ClosedHandCursor': 18,
     'ArrowCursor': 0,
+    'WA_StyledBackground': 9,
+    'NoFocus': 0,
+    'AlignRight': 0x0002,
+    'AlignVCenter': 0x0080,
+    'DotLine': 1,
+    'NoPen': 0,
+    'SolidLine': 1,
+    'Key_Space': 0x20,
 })()
 qtcore.QPoint = type('QPoint', (), {'__init__': lambda self, x=0, y=0: None})
 qtcore.QPointF = type('QPointF', (), {'__init__': lambda self, x=0, y=0: None})
@@ -519,6 +530,26 @@ qtwidgets.QComboBox = type('QComboBox', (_MockQWidget,), {
     'setCurrentIndex': lambda self, *a: None,
     'currentIndex': lambda self: 0,
     'setMaximumWidth': lambda self, *a: None,
+    'setFixedWidth': lambda self, *a: None,
+})
+qtwidgets.QToolButton = type('QToolButton', (_MockQWidget,), {
+    'setIcon': lambda self, *a: None,
+    'setIconSize': lambda self, *a: None,
+    'setFixedSize': lambda self, *a: None,
+    'setToolTip': lambda self, *a: None,
+    'setFocusPolicy': lambda self, *a: None,
+    'setStyleSheet': lambda self, *a: None,
+    'clicked': type('Signal', (), {'connect': lambda self, f: None})(),
+})
+qtwidgets.QSlider = type('QSlider', (_MockQWidget,), {
+    'setRange': lambda self, *a: None,
+    'setValue': lambda self, *a: None,
+    'value': lambda self: 50,
+    'setFixedWidth': lambda self, *a: None,
+    'setTracking': lambda self, *a: None,
+    'setFocusPolicy': lambda self, *a: None,
+    'blockSignals': lambda self, *a: None,
+    'valueChanged': type('Signal', (), {'connect': lambda self, f: None})(),
 })
 qtwidgets.QShortcut = type('QShortcut', (_MockQWidget,), {
     '__init__': lambda self, *a, **kw: None,

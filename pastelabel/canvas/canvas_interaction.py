@@ -939,7 +939,20 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self.update()
 
     def keyPressEvent(self, event):
+        if event.key() == Qt.Key_R and not event.isAutoRepeat():
+            self._saved_shape_opacity = self.shape_opacity
+            self.shape_opacity = 0.0
+            self.update()
         super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key_R and not event.isAutoRepeat():
+            if hasattr(self, '_saved_shape_opacity'):
+                self.shape_opacity = self._saved_shape_opacity
+            else:
+                self.shape_opacity = 1.0
+            self.update()
+        super().keyReleaseEvent(event)
 
     def resizeEvent(self, event):
         self.update()

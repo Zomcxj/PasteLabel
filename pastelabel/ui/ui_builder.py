@@ -15,6 +15,7 @@ from .segmented_control import AnimatedSegmentedControl
 from ..core.config import WINDOW_CONFIG, PASTE_PARAMS, THUMBNAIL_CONFIG, DEFAULT_PREFIX
 from ..core.utils import create_thumbnail
 from ..canvas import Canvas
+from ..widgets.canvas_adjustment import CanvasAdjustmentWidget
 from .theme import ThemeManager
 from .i18n import t as tr
 
@@ -438,6 +439,12 @@ class UIBuilderMixin:
         self.magnifier_action.triggered.connect(self._on_magnifier_menu_changed)
         self._menu_actions.append((self.magnifier_action, None, None))
 
+        self.options_menu.addSeparator()
+
+        self.hide_labels_action = self.options_menu.addAction(tr("隐藏标签:R"))
+        self.hide_labels_action.setCheckable(False)
+        self.hide_labels_action.setToolTip(tr("按住R暂时隐藏所有标注，松开后复原"))
+
         self.options_btn.setMenu(self.options_menu)
         layout.addWidget(self.options_btn)
 
@@ -668,10 +675,19 @@ class UIBuilderMixin:
         self._loading_spinner = _SpinnerWidget(canvas_scroll.viewport())
         self._loading_spinner.hide()
 
+        self.canvas_adjustment = CanvasAdjustmentWidget(canvas_scroll.viewport())
+        self.canvas_adjustment.opacity_changed.connect(self._on_opacity_changed)
+        self.canvas_adjustment.brightness_contrast_changed.connect(self._on_brightness_contrast_changed)
+        self.canvas_adjustment.geometry_changed.connect(
+            lambda: self._position_canvas_adjustment(canvas_scroll)
+        )
+        canvas_scroll.viewport().installEventFilter(self)
+        self._canvas_scroll_area = canvas_scroll
+        QTimer.singleShot(0, lambda: self._position_canvas_adjustment(canvas_scroll))
+
         control_widget = self._create_control_panel()
         control_widget.setFixedWidth(350)
 
-        # Both Expanding so heights match (vertical stretch, shared top edge).
         canvas_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         control_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
@@ -683,6 +699,32 @@ class UIBuilderMixin:
         container_layout.addWidget(control_widget, 0)
 
         return container
+
+    def _position_canvas_adjustment(self, scroll_area):
+        viewport = scroll_area.viewport()
+        self.canvas_adjustment.adjustSize()
+        margin = 10
+        height = self.canvas_adjustment.height()
+        self.canvas_adjustment.move(
+            margin, max(0, viewport.height() - height - margin)
+        )
+        self.canvas_adjustment.raise_()
+
+    def _on_opacity_changed(self, value):
+        if hasattr(self, 'canvas'):
+            self.canvas.shape_opacity = value / 100.0
+            self.canvas.update()
+
+    def _on_brightness_contrast_changed(self, brightness, contrast):
+        if hasattr(self, 'canvas'):
+            self.canvas.apply_brightness_contrast(brightness, contrast)
+
+    def eventFilter(self, obj, event):
+        if (hasattr(self, '_canvas_scroll_area') and
+                obj == self._canvas_scroll_area.viewport() and
+                event.type() == event.Resize):
+            self._position_canvas_adjustment(self._canvas_scroll_area)
+        return super().eventFilter(obj, event)
 
     def _create_control_panel(self):
         """创建控制面板"""

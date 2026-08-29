@@ -50,6 +50,12 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         self.draw_start_pos = None
         self.temp_draw_box = None
 
+        # 画布显示参数
+        self.shape_opacity = 1.0
+        self._original_background = None
+        self._brightness = 50
+        self._contrast = 50
+
         # 鼠标状态跟踪
         self.mouse_inside = False
         self.mouse_pos = QPoint(0, 0)
@@ -183,3 +189,45 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         if parts:
             prefix = "[移除路径] " if self._editor._is_delete_view else ""
             self._editor.status_label.setText(prefix + " | ".join(parts))
+
+    def apply_brightness_contrast(self, brightness, contrast):
+        if self._original_background is None:
+            if self._editor.current_background is not None:
+                self._original_background = self._editor.current_background
+        if self._original_background is None:
+            return
+        self._brightness = brightness
+        self._contrast = contrast
+        b_factor = brightness / 50.0
+        c_factor = contrast / 50.0
+        if b_factor == 1.0 and c_factor == 1.0:
+            self._editor.current_background = self._original_background
+        else:
+            from PyQt5.QtGui import QImage
+            orig = self._original_background
+            img = orig.toImage()
+            img = img.convertToFormat(QImage.Format_ARGB32)
+            w, h = img.width(), img.height()
+            ptr = img.bits()
+            ptr.setsize(w * h * 4)
+            pixels = bytearray(ptr)
+            for i in range(0, len(pixels), 4):
+                b_val = pixels[i]
+                g_val = pixels[i + 1]
+                r_val = pixels[i + 2]
+                b_val = int((b_val - 128) * b_factor * c_factor + 128)
+                g_val = int((g_val - 128) * b_factor * c_factor + 128)
+                r_val = int((r_val - 128) * b_factor * c_factor + 128)
+                pixels[i] = max(0, min(255, b_val))
+                pixels[i + 1] = max(0, min(255, g_val))
+                pixels[i + 2] = max(0, min(255, r_val))
+            img.bits()[:] = pixels
+            self._editor.current_background = QPixmap.fromImage(img)
+        self.update()
+
+    def set_background(self, pixmap):
+        self._original_background = pixmap
+        self._editor.current_background = pixmap
+        self._brightness = 50
+        self._contrast = 50
+        self.update()

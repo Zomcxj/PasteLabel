@@ -439,12 +439,6 @@ class UIBuilderMixin:
         self.magnifier_action.triggered.connect(self._on_magnifier_menu_changed)
         self._menu_actions.append((self.magnifier_action, None, None))
 
-        self.options_menu.addSeparator()
-
-        self.hide_labels_action = self.options_menu.addAction(tr("隐藏标签:R"))
-        self.hide_labels_action.setCheckable(False)
-        self.hide_labels_action.setToolTip(tr("按住R暂时隐藏所有标注，松开后复原"))
-
         self.options_btn.setMenu(self.options_menu)
         layout.addWidget(self.options_btn)
 

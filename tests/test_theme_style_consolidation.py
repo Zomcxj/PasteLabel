@@ -175,6 +175,7 @@ class Canvas(CanvasRendererMixin, QWidget):
         self.background_scale = 1
         self.selected_box = 0
         self.selected_boxes = [0]
+        self.shape_opacity = 1.0
         self.is_drawing_box = True
         self.temp_draw_box = QRectF(50, 50, 20, 20)
         self.draw_start_pos = QPoint(50, 50)

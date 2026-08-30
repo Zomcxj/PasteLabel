@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QSlider, QPushButton, QToolButton
 )
+from ..ui.theme import ThemeManager
 
 
 class CanvasAdjustmentWidget(QWidget):
@@ -34,19 +35,18 @@ class CanvasAdjustmentWidget(QWidget):
     BC_MAX = 150
     BC_DEFAULT = 50
 
-    _LABEL_CSS = (
-        "QLabel { color: #333; font-size: 11px; background: transparent; }"
-    )
-    _TITLE_CSS = (
-        "QLabel { color: #333; font-size: 11px; font-weight: 600;"
-        " background: transparent; }"
-    )
-    _RESET_CSS = (
-        "QPushButton { background: rgba(120, 120, 120, 60);"
-        " border-radius: 3px; font-size: 11px; color: #333; padding: 0; }"
-        "QPushButton:hover { background: rgba(120, 120, 120, 110); }"
-        "QPushButton:pressed { background: rgba(120, 120, 120, 150); }"
-    )
+    def _label_css(self, bold=False):
+        weight = " font-weight: 600;" if bold else ""
+        return f"QLabel {{ color: {ThemeManager.get_theme()['text_primary']}; font-size: 11px;{weight} background: transparent; }}"
+
+    def _reset_css(self):
+        text = ThemeManager.get_theme()['text_primary']
+        return (
+            f"QPushButton {{ background: rgba(120, 120, 120, 60);"
+            f" border-radius: 3px; font-size: 11px; color: {text}; padding: 0; }}"
+            "QPushButton:hover { background: rgba(120, 120, 120, 110); }"
+            "QPushButton:pressed { background: rgba(120, 120, 120, 150); }"
+        )
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -63,7 +63,7 @@ class CanvasAdjustmentWidget(QWidget):
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
         self.title_label = QLabel(self.tr("Canvas Display"))
-        self.title_label.setStyleSheet(self._TITLE_CSS)
+        self.title_label.setStyleSheet(self._label_css(bold=True))
         self.toggle_button = QToolButton()
         self.toggle_button.setText("▲")
         self.toggle_button.setFixedSize(20, 20)
@@ -133,9 +133,10 @@ class CanvasAdjustmentWidget(QWidget):
 
     def _build_stylesheet(self):
         primary = "#0071e3"
+        theme = ThemeManager.get_theme()
         return f"""
         #canvas_adjustment {{
-            background: rgba(255, 255, 255, 220);
+            background: {theme['widget_bg']};
             border: none;
             border-radius: 6px;
         }}
@@ -169,7 +170,7 @@ class CanvasAdjustmentWidget(QWidget):
 
         name_label = QLabel(title)
         name_label.setFixedWidth(64)
-        name_label.setStyleSheet(self._LABEL_CSS)
+        name_label.setStyleSheet(self._label_css())
         name_label.setToolTip(tooltip)
 
         slider = QSlider(Qt.Horizontal)
@@ -184,13 +185,13 @@ class CanvasAdjustmentWidget(QWidget):
         value_label.setProperty("display", display)
         value_label.setFixedWidth(36)
         value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        value_label.setStyleSheet(self._LABEL_CSS)
+        value_label.setStyleSheet(self._label_css())
         value_label.setToolTip(tooltip)
         self._set_value_text(value_label, default)
 
         reset_btn = QPushButton("↺")
         reset_btn.setFixedSize(22, 20)
-        reset_btn.setStyleSheet(self._RESET_CSS)
+        reset_btn.setStyleSheet(self._reset_css())
         reset_btn.setToolTip(self.tr("Reset to default"))
         reset_btn.setFocusPolicy(Qt.NoFocus)
         reset_btn.clicked.connect(
@@ -267,3 +268,12 @@ class CanvasAdjustmentWidget(QWidget):
             slider.setValue(value)
             slider.blockSignals(False)
             self._set_value_text(label, value)
+
+    def refresh_theme(self):
+        self.setStyleSheet(self._build_stylesheet())
+        self.title_label.setStyleSheet(self._label_css(bold=True))
+        for label in self.findChildren(QLabel):
+            if label is not self.title_label:
+                label.setStyleSheet(self._label_css())
+        for button in self.findChildren(QPushButton):
+            button.setStyleSheet(self._reset_css())

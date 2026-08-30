@@ -3,6 +3,8 @@ Canvas 控件 - 由 CanvasRendererMixin + CanvasInteractionMixin 组合而成
 """
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt, QPoint, QRectF
+from PyQt5.QtGui import QPixmap
+import numpy as np
 
 from ..core.config import BACKGROUND_SCALE_CONFIG, WINDOW_CONFIG
 from .canvas_renderer import CanvasRendererMixin
@@ -210,18 +212,9 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
             w, h = img.width(), img.height()
             ptr = img.bits()
             ptr.setsize(w * h * 4)
-            pixels = bytearray(ptr)
-            for i in range(0, len(pixels), 4):
-                b_val = pixels[i]
-                g_val = pixels[i + 1]
-                r_val = pixels[i + 2]
-                b_val = int((b_val - 128) * b_factor * c_factor + 128)
-                g_val = int((g_val - 128) * b_factor * c_factor + 128)
-                r_val = int((r_val - 128) * b_factor * c_factor + 128)
-                pixels[i] = max(0, min(255, b_val))
-                pixels[i + 1] = max(0, min(255, g_val))
-                pixels[i + 2] = max(0, min(255, r_val))
-            img.bits()[:] = pixels
+            pixels = np.frombuffer(ptr, dtype=np.uint8).reshape(h, w, 4)
+            rgb = (pixels[:, :, :3].astype(np.float32) - 128.0) * (b_factor * c_factor) + 128.0
+            pixels[:, :, :3] = np.clip(rgb, 0, 255).astype(np.uint8)
             self._editor.current_background = QPixmap.fromImage(img)
         self.update()
 

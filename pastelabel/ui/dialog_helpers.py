@@ -54,19 +54,36 @@ class ThemedInputDialog(QInputDialog):
 
 
 class ThemedMessageBox(QMessageBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.buttonClicked.connect(
+            lambda _button: QTimer.singleShot(0, self._fix_detail_buttons)
+        )
+
     def showEvent(self, event):
         super().showEvent(event)
         center_on_parent(self)
         sync_titlebar(self)
         QTimer.singleShot(0, self._fix_detail_buttons)
+        QTimer.singleShot(100, self._fix_detail_buttons)
 
     def _fix_detail_buttons(self):
         for btn in self.findChildren(QPushButton):
-            raw = btn.text().replace('&', '')
-            if raw in ("Show Details...", "Show Details", "显示详情"):
+            raw = btn.text().replace('&', '').strip().lower()
+            if raw in ("show details...", "show details", "显示详情"):
                 btn.setText(i18n.t("显示详情"))
-            elif raw in ("Hide Details...", "Hide Details", "隐藏详情"):
+                if not btn.property("_pastelabel_detail_wired"):
+                    btn.setProperty("_pastelabel_detail_wired", True)
+                    btn.clicked.connect(
+                        lambda: QTimer.singleShot(0, self._fix_detail_buttons)
+                    )
+            elif raw in ("hide details...", "hide details", "隐藏详情"):
                 btn.setText(i18n.t("隐藏详情"))
+                if not btn.property("_pastelabel_detail_wired"):
+                    btn.setProperty("_pastelabel_detail_wired", True)
+                    btn.clicked.connect(
+                        lambda: QTimer.singleShot(0, self._fix_detail_buttons)
+                    )
 
 
 class ThemedColorDialog(QColorDialog):

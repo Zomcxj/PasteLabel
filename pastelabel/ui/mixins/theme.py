@@ -85,6 +85,8 @@ class ThemeMixin:
         self._update_mode_seg_style()
         if hasattr(self, 'canvas'):
             self.canvas.update()
+        if hasattr(self, 'canvas_adjustment'):
+            self.canvas_adjustment.refresh_theme()
         app.processEvents()
 
     def _update_status_info(self):

@@ -938,9 +938,6 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self._editor.canvas_items[self._editor.selected_item] = (p, nr, label)
             self.update()
 
-    def keyPressEvent(self, event):
-        super().keyPressEvent(event)
-
     def resizeEvent(self, event):
         self.update()
         super().resizeEvent(event)

@@ -32,6 +32,8 @@ class CanvasRendererMixin:
         if background_rect:
             self._draw_grid(sp, background_rect)
 
+        sp.setOpacity(self.shape_opacity)
+
         if background_rect:
             self._draw_paste_items(sp, background_rect)
 
@@ -41,6 +43,8 @@ class CanvasRendererMixin:
 
         if self.is_drawing_box:
             self._draw_temp_box(sp)
+
+        sp.setOpacity(1.0)
 
         if (getattr(self._editor, 'edit_mode', 'paste') == 'annotate' and
                 self.mouse_inside and self._editor.current_background is not None and

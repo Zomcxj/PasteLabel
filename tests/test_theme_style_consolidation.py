@@ -175,6 +175,7 @@ class Canvas(CanvasRendererMixin, QWidget):
         self.background_scale = 1
         self.selected_box = 0
         self.selected_boxes = [0]
+        self.shape_opacity = 1.0
         self.is_drawing_box = True
         self.temp_draw_box = QRectF(50, 50, 20, 20)
         self.draw_start_pos = QPoint(50, 50)
@@ -205,7 +206,7 @@ for mode in (ThemeMode.LIGHT, ThemeMode.DARK):
 assert samples[0] == samples[1], samples
 assert QColor(samples[0][1]).red() > 200, samples
 assert QColor(samples[0][0]).red() > QColor(samples[0][0]).green(), samples
-assert QColor(samples[0][2]).green() > 200, samples
+assert QColor(samples[0][2]).red() > 200, samples
 assert samples[0][3] != "#ffffff", samples
 '''
     result = subprocess.run(

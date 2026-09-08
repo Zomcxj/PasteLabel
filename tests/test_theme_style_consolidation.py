@@ -44,8 +44,8 @@ def test_global_stylesheet_owns_normal_mode_and_cache_widget_rules():
 
 def test_mode_and_cache_widgets_use_global_qss_contract_without_local_overrides():
     root = __import__("pathlib").Path(__file__).parents[1]
-    mode_setup = _method_source(root / "pastelabel" / "ui" / "ui_builder.py", "_create_options_menu", "_rebuild_label_cache_menu")
-    cache_setup = _method_source(root / "pastelabel" / "ui" / "ui_builder.py", "_rebuild_label_cache_menu", "_handle_cache_slot_row_click")
+    mode_setup = _method_source(root / "pastelabel" / "ui" / "mixins" / "options_popup.py", "_create_options_menu", "_rebuild_options_popup")
+    cache_setup = _method_source(root / "pastelabel" / "ui" / "mixins" / "cache_menu.py", "_rebuild_label_cache_menu", "_handle_cache_slot_row_click")
 
     assert 'self.mode_seg.setObjectName("modeSeg")' in mode_setup
     assert mode_setup.count('setObjectName("modeSegBtn")') == 2
@@ -220,10 +220,8 @@ assert samples[0][3] != "#ffffff", samples
 
 
 def test_options_popup_uses_global_qss_instead_of_a_stale_local_override():
-    source = (ROOT / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
-
     popup_setup = _method_source(
-        ROOT / "pastelabel" / "ui" / "ui_builder.py",
+        ROOT / "pastelabel" / "ui" / "mixins" / "options_popup.py",
         "_rebuild_options_popup",
         "_refresh_options_popup_texts",
     )

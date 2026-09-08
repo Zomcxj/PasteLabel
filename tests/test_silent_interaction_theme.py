@@ -53,7 +53,7 @@ def test_mode_segment_indicator_reads_the_active_interaction_token():
     from pastelabel.ui.main_window import ImageEditor
 
     root = Path(__file__).resolve().parents[1]
-    builder = (root / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+    builder = (root / "pastelabel" / "ui" / "mixins" / "options_popup.py").read_text(encoding="utf-8")
     window = inspect.getsource(ImageEditor._update_mode_seg_style)
     style = ThemeManager.get_stylesheet()
 
@@ -68,11 +68,10 @@ def test_mode_segment_indicator_reads_the_active_interaction_token():
 
 def test_named_controls_use_the_shared_silent_button_styles():
     root = Path(__file__).resolve().parents[1]
-    builder = (root / "pastelabel" / "ui" / "ui_builder.py").read_text(encoding="utf-8")
+    lists = (root / "pastelabel" / "ui" / "mixins" / "lists.py").read_text(encoding="utf-8")
 
-    assert 'self.view_toggle_btn.setObjectName("warningBtn")' in builder
-    assert builder.count('setObjectName("accentBtn")') == 2
-    assert 'self.toggle_view_btn.setObjectName("warningBtn")' in builder
+    assert lists.count('setObjectName("accentBtn")') == 2
+    assert 'self.toggle_view_btn.setObjectName("warningBtn")' in lists
 
 
 def test_all_inputs_hover_with_blue_border():

@@ -4,11 +4,11 @@ import shutil
 from datetime import datetime
 from typing import List
 
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFrame,
-    QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QScrollArea, QSpinBox, QTextEdit, QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QDoubleSpinBox, QFileDialog,
+    QHBoxLayout, QLabel, QLineEdit,
+    QPushButton, QSpinBox, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from .i18n import t as tr
@@ -20,145 +20,16 @@ from ..engine.voc_exporter import VocExporter
 from ..engine.coco_exporter import CocoExporter
 from ..engine.splitter import Splitter
 from ..engine.augmenter import Augmenter, get_all_transforms
-from ..engine.augmenter.base import BaseTransform
-
-SPLIT_KEYS = ["train", "val", "test"]
-
-
-class _ScanSpinnerWidget(QLabel):
-    """内嵌 braille 旋转动画的扫描提示组件"""
-    _CHARS = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._idx = 0
-        self._raw_text = ""
-        self._timer = QTimer(self)
-        self._timer.setInterval(80)
-        self._timer.timeout.connect(self._tick)
-        self.setStyleSheet("color: gray; font-size: 11px; padding: 2px;")
-        self.setFixedHeight(20)
-
-    def setLabel(self, t):
-        self._raw_text = t
-        self._idx = 0
-        self._refresh()
-
-    def setVisible(self, v):
-        super().setVisible(v)
-        if v:
-            self._idx = 0
-            self._timer.start()
-            self._refresh()
-        else:
-            self._timer.stop()
-
-    def _tick(self):
-        self._idx += 1
-        self._refresh()
-
-    def _refresh(self):
-        c = self._CHARS[self._idx % len(self._CHARS)]
-        super().setText(f"{c} {self._raw_text}" if self._raw_text else c)
-
-TRANSFORM_META = {
-    "fliph":       ("水平翻转", []),
-    "flipv":       ("垂直翻转", []),
-    "bright":      ("亮度", [("delta", QSpinBox, -100, 100, -30, 30)]),
-    "contrast":    ("对比度", [("factor", QDoubleSpinBox, 0.5, 2.0, 1.2, 1.8)]),
-    "hue":         ("色相(H)", [("delta", QSpinBox, -180, 180, -30, 30)]),
-    "saturation":  ("饱和度(S)", [("factor", QDoubleSpinBox, 0.0, 2.0, 1.2, 1.8)]),
-    "value":       ("明度(V)", [("delta", QSpinBox, -100, 100, -30, 30)]),
-    "gauss":       ("高斯噪声", [("sigma", QSpinBox, 1, 100, 10, 40)]),
-    "saltpepper":  ("椒盐噪声", [("prob", QDoubleSpinBox, 0.0, 0.5, 0.02, 0.08)]),
-    "trans":       ("随机平移", [("offset", QSpinBox, 0, 100, 10, 30)]),
-    "rotate":      ("随机旋转", [("angle", QSpinBox, 0, 45, 5, 25)]),
-    "scale":       ("随机缩放", [("scale", QDoubleSpinBox, 0.5, 1.5, 0.8, 1.2)]),
-}
-
-_TRANSFORM_ORDER = ["fliph", "flipv", "bright", "trans", "rotate", "scale",
-                    "contrast", "gauss", "saltpepper", "hue", "saturation", "value"]
+from .mixins.processing_panel_builder import ProcessingPanelBuilderMixin, SPLIT_KEYS, TRANSFORM_META
+from ..widgets.processing import Worker, CollapsibleSection
 
 
-class Worker(QThread):
-    log = pyqtSignal(str)
-    progress = pyqtSignal(int, int, str)
-    result_ready = pyqtSignal(object)
-    error = pyqtSignal(str)
-
-    def __init__(self, func):
-        super().__init__()
-        self._func = func
-        self.result = None
-        self._error = None
-
-    def run(self):
-        try:
-            self.result = self._func(self.log.emit, self.progress.emit)
-            self.result_ready.emit(self.result)
-        except Exception as e:
-            self._error = str(e)
-            self.error.emit(str(e))
 
 
-class CollapsibleSection(QWidget):
-
-    def __init__(self, title: str, parent=None, color: str = "#4CAF50"):
-        super().__init__(parent)
-        self._expanded = True
-        self._title = title
-        self._color = color
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(0, 2, 0, 2)
-        outer.setSpacing(0)
-        bar = QWidget()
-        bar.setFixedWidth(3)
-        bar.setStyleSheet(f"background: {color};")
-        outer.addWidget(bar)
-        inner = QWidget()
-        inner_layout = QVBoxLayout(inner)
-        inner_layout.setContentsMargins(0, 0, 0, 0)
-        inner_layout.setSpacing(0)
-        self._header = QPushButton(f"▼ {title}")
-        self._header.setObjectName("collapseHeader")
-        self._header.setFlat(True)
-        self._header.setCursor(Qt.PointingHandCursor)
-        self._header.setFixedHeight(24)
-        self._header.setStyleSheet("border: none; text-align: left; padding: 2px 8px;")
-        self._header.clicked.connect(self._toggle)
-        self._content = QWidget()
-        self._content.setObjectName("collapseContent")
-        self._content_layout = QVBoxLayout(self._content)
-        self._content_layout.setContentsMargins(8, 2, 8, 4)
-        inner_layout.addWidget(self._header)
-        inner_layout.addWidget(self._content)
-        outer.addWidget(inner, 1)
-
-    def _toggle(self):
-        self._expanded = not self._expanded
-        self._content.setVisible(self._expanded)
-        self._header.setText(f"{'▼' if self._expanded else '▶'} {self._title}")
-        self._update_margins()
-
-    def _update_margins(self):
-        outer = self.layout()
-        if outer:
-            if self._expanded:
-                outer.setContentsMargins(0, 2, 0, 2)
-                outer.setSpacing(0)
-            else:
-                outer.setContentsMargins(0, 0, 0, 0)
-                outer.setSpacing(0)
-
-    def set_title(self, title: str):
-        self._title = title
-        self._header.setText(f"{'▼' if self._expanded else '▶'} {title}")
-
-    def content_layout(self):
-        return self._content_layout
 
 
-class ProcessingPanel(QWidget):
+
+class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
     def __init__(self, editor, parent=None):
         super().__init__(parent, Qt.Window | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint)
         self._editor = editor
@@ -244,88 +115,6 @@ class ProcessingPanel(QWidget):
         parent_layout.addWidget(s)
         return s
 
-    def _build_augment_section(self, parent_layout):
-        section = self._collapsible_section("", parent_layout, "#F44336")
-        layout = section.content_layout()
-        transforms = get_all_transforms()
-        order = [n for n in _TRANSFORM_ORDER if n in transforms]
-        self._aug_widgets = {}
-        grid = QGridLayout()
-        grid.setSpacing(6)
-        self._aug_inc_orig = QCheckBox()
-        self._aug_inc_orig.setChecked(True)
-        self._aug_widgets["__orig__"] = (self._aug_inc_orig, {}, "原图")
-        orig_cell = QWidget()
-        orig_cell.setMinimumWidth(140)
-        orig_cl = QHBoxLayout(orig_cell)
-        orig_cl.setContentsMargins(2, 1, 2, 1)
-        orig_cl.setSpacing(2)
-        orig_cl.addWidget(self._aug_inc_orig)
-        orig_cl.addStretch()
-        grid.addWidget(orig_cell, 0, 0)
-        for idx, name in enumerate(order):
-            row, col = divmod(idx + 1, 3)
-            meta = TRANSFORM_META.get(name, (name, []))
-            display_name, param_defs = meta
-            cell = QWidget()
-            cell.setMinimumWidth(140)
-            cl = QHBoxLayout(cell)
-            cl.setContentsMargins(2, 1, 2, 1)
-            cl.setSpacing(2)
-            cb = QCheckBox(display_name)
-            cb.setChecked(name in ("fliph", "flipv", "bright", "rotate", "trans"))
-            cl.addWidget(cb)
-            cl.addStretch()
-            param_spins = {}
-            for pname, ptype, pmin, pmax, dmin, dmax in param_defs:
-                lbl = QLabel("~")
-                lbl.setFixedWidth(10)
-                spin_min = self._make_spin(ptype, pmin, pmax, dmin)
-                spin_max = self._make_spin(ptype, pmin, pmax, dmax)
-                cl.addWidget(spin_min)
-                cl.addWidget(lbl)
-                cl.addWidget(spin_max)
-                param_spins[pname] = (spin_min, spin_max)
-            grid.addWidget(cell, row, col)
-            self._aug_widgets[name] = (cb, param_spins, display_name)
-        for c in range(3):
-            grid.setColumnStretch(c, 1)
-        layout.addLayout(grid)
-        rl = QHBoxLayout()
-        self._ratio_lbl = QLabel()
-        rl.addWidget(self._ratio_lbl)
-        self._aug_ratio = QDoubleSpinBox()
-        self._aug_ratio.setRange(0.05, 1.0)
-        self._aug_ratio.setSingleStep(0.05)
-        self._aug_ratio.setDecimals(2)
-        self._aug_ratio.setValue(1.0)
-        self._aug_ratio.setFixedWidth(70)
-        rl.addWidget(self._aug_ratio)
-        rl.addSpacing(10)
-        self._mode_lbl = QLabel()
-        rl.addWidget(self._mode_lbl)
-        self._aug_mode = QComboBox()
-        self._aug_mode.addItems(["", ""])
-        self._aug_mode.setFixedWidth(100)
-        rl.addWidget(self._aug_mode)
-        rl.addSpacing(10)
-        self._aug_skip_empty = QCheckBox()
-        self._aug_skip_empty.setChecked(True)
-        rl.addWidget(self._aug_skip_empty)
-        rl.addStretch()
-        layout.addLayout(rl)
-        btn_layout = QHBoxLayout()
-        self._aug_btn = QPushButton()
-        self._aug_btn.setObjectName("successBtn")
-        self._aug_btn.clicked.connect(lambda: self._run_augment())
-        btn_layout.addWidget(self._aug_btn, 5)
-        btn_layout.addWidget(self._make_btn_with_stop(self._aug_btn, lambda: self._do_interrupt()), 1)
-        self._aug_clear_btn = QPushButton()
-        self._aug_clear_btn.setObjectName("accentBtn")
-        self._aug_clear_btn.clicked.connect(lambda: self._clear_aug())
-        btn_layout.addWidget(self._aug_clear_btn, 1)
-        layout.addLayout(btn_layout)
-        self._aug_section = section
 
     def _make_spin(self, typ, vmin, vmax, default):
         s = typ()
@@ -337,109 +126,8 @@ class ProcessingPanel(QWidget):
         s.setFixedWidth(60)
         return s
 
-    def _build_export_section(self, parent_layout):
-        section = self._collapsible_section("", parent_layout, "#FFC107")
-        layout = section.content_layout()
-        fmt_layout = QHBoxLayout()
-        fmt_layout.setContentsMargins(0, 0, 0, 0)
-        self._exp_fmt_label = QLabel()
-        fmt_layout.addWidget(self._exp_fmt_label)
-        self._exp_format = QComboBox()
-        self._exp_format.addItems([
-            "YOLO Detection", "VOC Detection", "COCO Detection"
-        ])
-        self._exp_format.setFixedWidth(150)
-        fmt_layout.addWidget(self._exp_format)
-        fmt_layout.addStretch()
-        layout.addLayout(fmt_layout)
-        self._exp_label_title = QLabel()
-        layout.addWidget(self._exp_label_title)
-        self._exp_label_grid_container = QWidget()
-        self._exp_label_grid_container.setMaximumHeight(130)
-        self._exp_label_grid = QGridLayout(self._exp_label_grid_container)
-        self._exp_label_grid.setSpacing(8)
-        self._exp_label_grid.setContentsMargins(0, 2, 0, 2)
-        self._exp_label_grid.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        self._exp_label_checkboxes = {}
-        layout.addWidget(self._exp_label_grid_container, 0, Qt.AlignLeft)
-        self._exp_scan_label = _ScanSpinnerWidget()
-        self._exp_scan_label.setVisible(False)
-        layout.addWidget(self._exp_scan_label)
-        opts_layout = QHBoxLayout()
-        opts_layout.setContentsMargins(0, 0, 0, 0)
-        self._exp_skip_empty = QCheckBox()
-        self._exp_skip_empty.setChecked(True)
-        opts_layout.addWidget(self._exp_skip_empty)
-        opts_layout.addStretch()
-        layout.addLayout(opts_layout)
-        btn_layout = QHBoxLayout()
-        self._exp_btn = QPushButton()
-        self._exp_btn.setObjectName("successBtn")
-        self._exp_btn.clicked.connect(self._show_export_menu)
-        btn_layout.addWidget(self._exp_btn, 5)
-        btn_layout.addWidget(self._make_btn_with_stop(self._exp_btn, lambda: self._do_interrupt()), 1)
-        self._exp_clear_btn = QPushButton()
-        self._exp_clear_btn.setObjectName("accentBtn")
-        self._exp_clear_btn.clicked.connect(lambda: self._clear_exp())
-        btn_layout.addWidget(self._exp_clear_btn, 1)
-        layout.addLayout(btn_layout)
-        self._exp_section = section
 
-    def _build_split_section(self, parent_layout):
-        section = self._collapsible_section("", parent_layout, "#4CAF50")
-        layout = section.content_layout()
-        sl = QHBoxLayout()
-        for key in SPLIT_KEYS:
-            self._split_lbls.append(QLabel())
-            sl.addWidget(self._split_lbls[-1])
-            s = QDoubleSpinBox()
-            s.setRange(0.0, 1.0)
-            s.setSingleStep(0.05)
-            s.setValue({"train": 0.8, "val": 0.1, "test": 0.1}[key])
-            s.setFixedWidth(60)
-            s.valueChanged.connect(lambda val, k=key: self._on_split_changed(k))
-            sl.addWidget(s)
-            setattr(self, f"_split_{key}", s)
-        sl.addStretch()
-        layout.addLayout(sl)
-        btn_layout = QHBoxLayout()
-        self._split_btn = QPushButton()
-        self._split_btn.setObjectName("successBtn")
-        self._split_btn.clicked.connect(lambda: self._run_split())
-        btn_layout.addWidget(self._split_btn, 5)
-        btn_layout.addWidget(self._make_btn_with_stop(self._split_btn, lambda: self._do_interrupt()), 1)
-        self._split_clear_btn = QPushButton()
-        self._split_clear_btn.setObjectName("accentBtn")
-        self._split_clear_btn.clicked.connect(lambda: self._clear_split())
-        btn_layout.addWidget(self._split_clear_btn, 1)
-        layout.addLayout(btn_layout)
-        self._split_section = section
 
-    def _build_pipeline_section(self, parent_layout):
-        section = self._collapsible_section("", parent_layout, "#FFFFFF")
-        layout = section.content_layout()
-        hl = QHBoxLayout()
-        self._pipe_aug = QCheckBox()
-        self._pipe_aug.setChecked(True)
-        self._pipe_exp = QCheckBox()
-        self._pipe_exp.setChecked(True)
-        self._pipe_split = QCheckBox()
-        self._pipe_split.setChecked(True)
-        hl.addWidget(self._pipe_aug)
-        hl.addWidget(QLabel(" → "))
-        hl.addWidget(self._pipe_exp)
-        hl.addWidget(QLabel(" → "))
-        hl.addWidget(self._pipe_split)
-        hl.addStretch()
-        layout.addLayout(hl)
-        btn_layout = QHBoxLayout()
-        self._pipe_btn = QPushButton()
-        self._pipe_btn.setObjectName("accentBtn")
-        self._pipe_btn.clicked.connect(self._run_pipeline)
-        btn_layout.addWidget(self._pipe_btn)
-        btn_layout.addWidget(self._make_btn_with_stop(self._pipe_btn, lambda: self._do_interrupt()))
-        layout.addLayout(btn_layout)
-        self._pipe_section = section
 
     def _scan_labels_from_json(self):
         """Scan background image sidecar JSONs only (no detection boxes / paste)."""

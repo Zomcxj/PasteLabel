@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QApplication
 
 from ..dwm import set_titlebar_dark
 from ..theme import ThemeManager
-from ..ui_builder import MOON_SVG, SUN_SVG, _load_svg_icon
+from ..icons import MOON_SVG, SUN_SVG, _load_svg_icon
 
 
 class ThemeMixin:

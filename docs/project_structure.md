@@ -74,7 +74,6 @@ PasteLabel/
 │   │   ├── segmented_control.py
 │   │   ├── settings_dialog.py
 │   │   ├── theme.py
-│   │   ├── ui_builder.py      # UI 构建 mixin 兼容组合壳
 │   │   └── mixins/
 │   │       ├── __init__.py
 │   │       ├── background_list.py

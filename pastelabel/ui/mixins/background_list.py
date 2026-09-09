@@ -5,6 +5,7 @@ import os
 from PyQt5.QtCore import Qt
 
 from ..i18n import t as tr
+from ...engine.image_loader import BG_ROLE_INDEX, BG_ROLE_PATH, BG_ROLE_STATUS
 
 
 class BackgroundListMixin:
@@ -108,16 +109,16 @@ class BackgroundListMixin:
             item = bg_list.item(row)
             if item is None:
                 continue
-            status = item.data(Qt.UserRole + 2)
+            status = item.data(BG_ROLE_STATUS)
             if status is None:
-                path = item.data(Qt.UserRole + 1)
+                path = item.data(BG_ROLE_PATH)
                 if not path:
-                    idx = item.data(Qt.UserRole)
+                    idx = item.data(BG_ROLE_INDEX)
                     if isinstance(idx, int) and 0 <= idx < len(self.background_images):
                         path = self.background_images[idx]
                 from ...engine.image_loader import annotation_status_for_image, decorate_background_list_item
                 if path:
-                    status = decorate_background_list_item(item, path, item.data(Qt.UserRole))
+                    status = decorate_background_list_item(item, path, item.data(BG_ROLE_INDEX))
                 else:
                     status = 'unannotated'
             visible = (mode == 'all') or (status == mode)
@@ -158,7 +159,7 @@ class BackgroundListMixin:
             item = bg_list.item(row)
             if item is None:
                 continue
-            if item.data(Qt.UserRole) == image_index:
+            if item.data(BG_ROLE_INDEX) == image_index:
                 return row
         if 0 <= image_index < bg_list.count():
             return image_index
@@ -181,7 +182,7 @@ class BackgroundListMixin:
         if target_row is None:
             for row in range(bg_list.count()):
                 item = bg_list.item(row)
-                if item and item.data(Qt.UserRole + 1) == image_path:
+                if item and item.data(BG_ROLE_PATH) == image_path:
                     target_row = row
                     break
         if target_row is None:
@@ -189,12 +190,12 @@ class BackgroundListMixin:
         item = bg_list.item(target_row)
         if item is None:
             return
-        idx = item.data(Qt.UserRole)
+        idx = item.data(BG_ROLE_INDEX)
         if idx is None:
             idx = image_index
         decorate_background_list_item(item, image_path, idx)
         mode = getattr(self, '_bg_annotation_filter', 'all')
-        status = item.data(Qt.UserRole + 2)
+        status = item.data(BG_ROLE_STATUS)
         visible = (mode == 'all') or (status == mode)
         item.setHidden(not visible)
 

@@ -482,8 +482,9 @@ class LabelManager(QObject):
                 label_colors=getattr(self.editor, 'label_colors', None),
                 label_color_map=color_map,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            from ..core.exception_hook import _write_log
+            _write_log(f"保存标签颜色配置失败: {e}")
 
     def _transfer_label_color(self, old_label, new_label, move_if_unused=True):
         """Color rules on rename (detects target existence at call time)."""
@@ -740,7 +741,9 @@ class LabelManager(QObject):
                 try:
                     with open(json_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                except Exception:
+                except Exception as e:
+                    from ..core.exception_hook import _write_log
+                    _write_log(f"读取标注 JSON 失败 {json_path}: {e}")
                     continue
                 if not isinstance(data, dict):
                     continue
@@ -757,8 +760,9 @@ class LabelManager(QObject):
                 try:
                     with open(json_path, 'w', encoding='utf-8') as f:
                         json.dump(data, f, ensure_ascii=False, indent=2)
-                except Exception:
-                    pass
+                except Exception as e:
+                    from ..core.exception_hook import _write_log
+                    _write_log(f"写入标注 JSON 失败 {json_path}: {e}")
 
         self.label_list_changed.emit()
         self.data_changed.emit()

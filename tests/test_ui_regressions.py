@@ -52,3 +52,31 @@ def test_memory_action_dispatches_memory_records_dialog(monkeypatch):
     OptionsPopupMixin._show_memory_records(owner)
 
     assert calls == {"parent": owner, "executed": True}
+
+
+def test_canvas_adjustment_panel_localizes_via_project_i18n():
+    source = (ROOT / "pastelabel" / "widgets" / "canvas_adjustment.py").read_text(encoding="utf-8")
+
+    # 不允许绕过项目 i18n 的 Qt 自带 tr()（无翻译文件时恒为英文）
+    assert "self.tr(" not in source
+    assert "from ..ui.i18n import t as tr" in source
+    for key in ("画布显示", "标签透明度", "画面亮度", "对比度", "恢复默认"):
+        assert f'tr("{key}")' in source
+    assert "def retranslate_ui" in source
+
+
+def test_language_switch_refreshes_canvas_adjustment_texts():
+    source = (ROOT / "pastelabel" / "ui" / "mixins" / "translation.py").read_text(encoding="utf-8")
+
+    assert "self.canvas_adjustment.retranslate_ui()" in source
+
+
+def test_canvas_adjustment_i18n_entries_exist_in_both_languages():
+    from pastelabel.ui import i18n
+
+    keys = ("画布显示", "标签透明度", "画面亮度", "对比度", "恢复默认", "收起调节", "展开调节")
+    for lang in ("zh", "en"):
+        table = i18n._strings[lang]
+        for key in keys:
+            assert key in table, (lang, key)
+            assert table[key] != ""

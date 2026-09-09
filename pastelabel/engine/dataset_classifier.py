@@ -1,8 +1,6 @@
 """
 数据集分类引擎 - 按 [出现频次 + HBB框大小] 二维KMeans聚类分割
 
-参考: D:/dataset/split_dataset_freq_area/split_freq_area.py
-
 流程:
 1. 遍历所有标注，统计每个标签的出现图片数(频次) 和 平均HBB面积
 2. 每张图取全局出现次数最少的标签为主标签

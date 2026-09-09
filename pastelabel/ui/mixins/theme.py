@@ -31,8 +31,9 @@ class ThemeMixin:
                 continue
             try:
                 set_titlebar_dark(int(widget.winId()), dark, force_refresh=force_refresh)
-            except Exception:
-                pass
+            except Exception as e:
+                from ...core.exception_hook import _write_log
+                _write_log(f"标题栏深色同步失败 {type(widget).__name__}: {e}")
 
     def _apply_app_palette(self):
         """同步 Qt 调色板，补足 Win10 原生控件/窗口背景刷新。"""
@@ -70,8 +71,9 @@ class ThemeMixin:
                 widget.style().unpolish(widget)
                 widget.style().polish(widget)
                 widget.update()
-            except Exception:
-                pass
+            except Exception as e:
+                from ...core.exception_hook import _write_log
+                _write_log(f"主题刷新控件失败 {type(widget).__name__}: {e}")
         if hasattr(self, 'theme_btn'):
             is_dark = ThemeManager.get_mode().value == "dark"
             svg = MOON_SVG if is_dark else SUN_SVG

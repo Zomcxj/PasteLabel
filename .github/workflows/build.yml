@@ -33,7 +33,7 @@ jobs:
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -r requirements-build.txt
 
       - name: Build with PyInstaller (Windows)
         if: runner.os == 'Windows'
@@ -109,15 +109,14 @@ jobs:
         shell: bash
         run: |
           printf '%s\n' \
-            "PasteLabel v1.2.1 — 画布显示调节与多格式检测导出" \
+            "PasteLabel v1.2.2 — 画布调节面板中英文切换与稳定性改进" \
             "" \
             "✨ 新增" \
-            "• 画布显示调节面板：实时调整标注透明度、图像亮度、对比度，支持一键复位" \
-            "• 检测格式导出扩展：在原有 YOLO 基础上新增 VOC (XML) 与 COCO (JSON) 导出" \
+            "• 画布显示调节面板（左下角）支持中英文切换：标题、标签透明度/画面亮度/对比度、悬浮提示、复位按钮随语言实时切换" \
             "" \
             "🔧 改进" \
-            "• 亮度/对比度改用 NumPy 向量化处理，滑动调节流畅不卡顿" \
-            "• 修复暗色模式下调节面板配色、错误弹窗\"显示详情\"按钮中文显示" \
+            "• 修复了一些 bug：标注读写、配置保存等失败不再静默，原因自动写入 ~/pastelabel.log 便于排障" \
+            "• 拆分千行级大文件、清理重复代码，测试进入 CI 双版本保障，稳定性提升" \
             > release-notes.md
 
           gh release delete "$TAG" --repo "${{ github.repository }}" --yes 2>/dev/null || true

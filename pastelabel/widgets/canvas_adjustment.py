@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
     QSlider, QPushButton, QToolButton
 )
 from ..ui.theme import ThemeManager
+from ..ui.i18n import t as tr
 
 
 class CanvasAdjustmentWidget(QWidget):
@@ -62,12 +63,12 @@ class CanvasAdjustmentWidget(QWidget):
 
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
-        self.title_label = QLabel(self.tr("Canvas Display"))
+        self.title_label = QLabel(tr("画布显示"))
         self.title_label.setStyleSheet(self._label_css(bold=True))
         self.toggle_button = QToolButton()
         self.toggle_button.setText("▲")
         self.toggle_button.setFixedSize(20, 20)
-        self.toggle_button.setToolTip(self.tr("Collapse adjustments"))
+        self.toggle_button.setToolTip(tr("收起调节"))
         self.toggle_button.setFocusPolicy(Qt.NoFocus)
         self.toggle_button.setStyleSheet(
             "QToolButton { background: transparent; border: none;"
@@ -86,34 +87,31 @@ class CanvasAdjustmentWidget(QWidget):
         content_layout.setSpacing(5)
         self.content_widget.setLayout(content_layout)
 
-        self.opacity_slider, self.opacity_value_label = self._build_row(
+        self.opacity_slider, self.opacity_value_label, self.opacity_name_label = self._build_row(
             content_layout,
-            self.tr("Opacity"),
+            tr("标签透明度"),
             self.OPACITY_MIN,
             self.OPACITY_MAX,
             self.OPACITY_DEFAULT,
-            self.tr(
-                "Adjust the transparency of annotation shapes and masks. "
-                "Label text remains fully visible."
-            ),
+            tr("调整标注形状与遮罩的透明度，标签文字保持完全可见。"),
             display="percent",
         )
-        self.brightness_slider, self.brightness_value_label = self._build_row(
+        self.brightness_slider, self.brightness_value_label, self.brightness_name_label = self._build_row(
             content_layout,
-            self.tr("Brightness"),
+            tr("画面亮度"),
             self.BC_MIN,
             self.BC_MAX,
             self.BC_DEFAULT,
-            self.tr("Adjust the brightness of the underlying image."),
+            tr("调整底层图像的亮度。"),
             display="factor",
         )
-        self.contrast_slider, self.contrast_value_label = self._build_row(
+        self.contrast_slider, self.contrast_value_label, self.contrast_name_label = self._build_row(
             content_layout,
-            self.tr("Contrast"),
+            tr("对比度"),
             self.BC_MIN,
             self.BC_MAX,
             self.BC_DEFAULT,
-            self.tr("Adjust the contrast of the underlying image."),
+            tr("调整底层图像的对比度。"),
             display="factor",
         )
         layout.addWidget(self.content_widget)
@@ -192,7 +190,7 @@ class CanvasAdjustmentWidget(QWidget):
         reset_btn = QPushButton("↺")
         reset_btn.setFixedSize(22, 20)
         reset_btn.setStyleSheet(self._reset_css())
-        reset_btn.setToolTip(self.tr("Reset to default"))
+        reset_btn.setToolTip(tr("恢复默认"))
         reset_btn.setFocusPolicy(Qt.NoFocus)
         reset_btn.clicked.connect(
             lambda _=False, s=slider: s.setValue(default)
@@ -203,7 +201,7 @@ class CanvasAdjustmentWidget(QWidget):
         row.addWidget(value_label)
         row.addWidget(reset_btn)
         layout.addLayout(row)
-        return slider, value_label
+        return slider, value_label, name_label
 
     @staticmethod
     def _set_value_text(label, value):
@@ -241,9 +239,9 @@ class CanvasAdjustmentWidget(QWidget):
         icon = "▼" if self._collapsed else "▲"
         self.toggle_button.setText(icon)
         tooltip = (
-            self.tr("Expand adjustments")
+            tr("展开调节")
             if self._collapsed
-            else self.tr("Collapse adjustments")
+            else tr("收起调节")
         )
         self.toggle_button.setToolTip(tooltip)
         self.style().unpolish(self)
@@ -268,6 +266,32 @@ class CanvasAdjustmentWidget(QWidget):
             slider.setValue(value)
             slider.blockSignals(False)
             self._set_value_text(label, value)
+
+    def retranslate_ui(self):
+        """语言切换时刷新面板全部文本"""
+        self.title_label.setText(tr("画布显示"))
+        self.toggle_button.setToolTip(
+            tr("展开调节") if self._collapsed else tr("收起调节")
+        )
+        rows = (
+            (self.opacity_name_label, "标签透明度",
+             "调整标注形状与遮罩的透明度，标签文字保持完全可见。",
+             self.opacity_slider, self.opacity_value_label),
+            (self.brightness_name_label, "画面亮度",
+             "调整底层图像的亮度。",
+             self.brightness_slider, self.brightness_value_label),
+            (self.contrast_name_label, "对比度",
+             "调整底层图像的对比度。",
+             self.contrast_slider, self.contrast_value_label),
+        )
+        for name_label, name_key, tip_key, slider, value_label in rows:
+            name_label.setText(tr(name_key))
+            name_label.setToolTip(tr(tip_key))
+            slider.setToolTip(tr(tip_key))
+            value_label.setToolTip(tr(tip_key))
+            self._set_value_text(value_label, slider.value())
+        for button in self.findChildren(QPushButton):
+            button.setToolTip(tr("恢复默认"))
 
     def refresh_theme(self):
         self.setStyleSheet(self._build_stylesheet())

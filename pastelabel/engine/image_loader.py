@@ -537,13 +537,7 @@ class ImageLoaderMixin:
             if self.is_thumbnail_mode:
                 self._configure_small_list()
             else:
-                self.small_list.setViewMode(QListWidget.ListMode)
-                self.small_list.setIconSize(QSize())
-                self.small_list.setGridSize(QSize())
-                self.small_list.setSpacing(0)
-                self.small_list.setWrapping(False)
-                self.small_list.setFlow(QListWidget.TopToBottom)
-                self.small_list.setVerticalScrollMode(QListWidget.ScrollPerItem)
+                self._set_list_mode()
 
             self.refresh_list_items()
             self.small_list.scrollToTop()
@@ -690,7 +684,7 @@ class ImageLoaderMixin:
                         self.setWindowTitle(f"PasteLabel - {filename} [{w} x {h}] [{idx + 1} / {total}]")
                 return
 
-            index = item.data(Qt.UserRole)
+            index = item.data(BG_ROLE_INDEX)
             if index is None:
                 return
 

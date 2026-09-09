@@ -328,6 +328,16 @@ _strings = {
         "输出目录": "输出目录",
         "分割完成": "分割完成",
         "标签数量不足，无法聚类评估": "标签数量不足，无法聚类评估",
+        "画布显示": "画布显示",
+        "标签透明度": "标签透明度",
+        "画面亮度": "画面亮度",
+        "对比度": "对比度",
+        "调整标注形状与遮罩的透明度，标签文字保持完全可见。": "调整标注形状与遮罩的透明度，标签文字保持完全可见。",
+        "调整底层图像的亮度。": "调整底层图像的亮度。",
+        "调整底层图像的对比度。": "调整底层图像的对比度。",
+        "恢复默认": "恢复默认",
+        "收起调节": "收起调节",
+        "展开调节": "展开调节",
     },
     "en": {
         "背景图:": "Image:",
@@ -666,7 +676,17 @@ _strings = {
         "输出目录": "Output dir",
         "分割完成": "Split Complete",
         "标签数量不足，无法聚类评估": "Not enough labels to evaluate clustering",
-    }
+        "画布显示": "Canvas Display",
+        "标签透明度": "Opacity",
+        "画面亮度": "Brightness",
+        "对比度": "Contrast",
+        "调整标注形状与遮罩的透明度，标签文字保持完全可见。": "Adjust the transparency of annotation shapes and masks. Label text remains fully visible.",
+        "调整底层图像的亮度。": "Adjust the brightness of the underlying image.",
+        "调整底层图像的对比度。": "Adjust the contrast of the underlying image.",
+        "恢复默认": "Reset to default",
+        "收起调节": "Collapse adjustments",
+        "展开调节": "Expand adjustments",
+}
 }
 
 _current_lang = "zh"

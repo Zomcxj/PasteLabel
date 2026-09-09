@@ -137,6 +137,8 @@ class TranslationMixin:
             self.save_btn.setToolTip(tr("保存图片"))
         if hasattr(self, 'save_all_btn'):
             self.save_all_btn.setToolTip(tr("全部保存"))
+        if hasattr(self, 'canvas_adjustment'):
+            self.canvas_adjustment.retranslate_ui()
         if hasattr(self, '_update_shortcut_status_label'):
             self._update_shortcut_status_label()
 

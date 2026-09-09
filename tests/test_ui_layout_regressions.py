@@ -6,12 +6,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QWidget, QHBoxLayout, QVBoxLayout
 
-from pastelabel.ui.ui_builder import UIBuilderMixin
+from pastelabel.ui.mixins.panels import PanelsMixin
 
 
 def _inspect_create_splitter_source():
     import inspect
-    return inspect.getsource(UIBuilderMixin._create_splitter)
+    return inspect.getsource(PanelsMixin._create_splitter)
 
 
 def test_create_splitter_expands_canvas_and_panel_vertically():
@@ -27,8 +27,8 @@ def test_create_splitter_expands_canvas_and_panel_vertically():
 def test_create_control_panel_top_margin_matches_canvas():
     """Control panel top margin must not exceed canvas top margin."""
     import inspect
-    splitter_src = inspect.getsource(UIBuilderMixin._create_splitter)
-    control_src = inspect.getsource(UIBuilderMixin._create_control_panel)
+    splitter_src = inspect.getsource(PanelsMixin._create_splitter)
+    control_src = inspect.getsource(PanelsMixin._create_control_panel)
     # Canvas side: canvas_layout.setContentsMargins(0, 0, 0, 0) is the baseline.
     assert "canvas_layout.setContentsMargins(0, 0, 0, 0)" in splitter_src
     # Control panel outer top must be 0 to match canvas top edge.

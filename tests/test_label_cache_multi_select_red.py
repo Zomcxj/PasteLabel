@@ -3,7 +3,7 @@ from pathlib import Path
 
 from pastelabel.ui import i18n
 from pastelabel.ui.main_window import ImageEditor
-from pastelabel.ui.ui_builder import UIBuilderMixin
+from pastelabel.ui.mixins.cache_menu import CacheMenuMixin
 
 
 def test_canvas_uses_selected_boxes_state_for_multi_selection():
@@ -175,7 +175,7 @@ def test_cache_slot_row_click_only_switches_active_slot():
     editor.set_active_label_cache_slot = lambda idx: setattr(editor, "active", idx)
     editor.paste_label_cache_slot = lambda idx: setattr(editor, "pasted", editor.pasted + 1)
 
-    UIBuilderMixin._handle_cache_slot_row_click(editor, 2)
+    CacheMenuMixin._handle_cache_slot_row_click(editor, 2)
 
     assert editor.active == 2
     assert editor.pasted == 0

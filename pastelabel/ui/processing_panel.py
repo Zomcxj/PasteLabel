@@ -158,8 +158,9 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
                         lbl = sh.get("label", "")
                         if isinstance(lbl, str) and lbl.strip():
                             labels.add(lbl.strip())
-                except Exception:
-                    pass
+                except Exception as e:
+                    from ..core.exception_hook import _write_log
+                    _write_log(f"扫描标签 JSON 失败 {jp}: {e}")
             if total > 2 and i % 5 == 0:
                 QApplication.processEvents()
         if labels and hasattr(self._editor, 'background_dataset_labels'):
@@ -277,8 +278,9 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
             hwnd = int(self.winId())
             is_dark = ThemeManager.get_mode().name == "DARK"
             set_titlebar_dark(hwnd, is_dark)
-        except Exception:
-            pass
+        except Exception as e:
+            from ..core.exception_hook import _write_log
+            _write_log(f"面板标题栏深色同步失败: {e}")
 
     def closeEvent(self, event):
         self._scan_check_timer.stop()
@@ -397,8 +399,9 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
             img = QImage(img_path)
             if not img.isNull():
                 return img.width(), img.height()
-        except Exception:
-            pass
+        except Exception as e:
+            from ..core.exception_hook import _write_log
+            _write_log(f"读取图片尺寸失败 {img_path}: {e}")
         return 0, 0
 
     def _detect_augmented_images(self):

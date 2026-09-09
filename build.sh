@@ -238,7 +238,7 @@ a = Analysis(
     binaries=[],
     datas=[(${RESOURCE_DIR_SPEC}, 'ico_image')],
     hiddenimports=[
-        'pastelabel', 'pastelabel.ui', 'pastelabel.ui.main_window', 'pastelabel.ui.ui_builder',
+        'pastelabel',         'pastelabel.ui', 'pastelabel.ui.main_window', 'pastelabel.ui.icons',
         'pastelabel.ui.settings_dialog', 'pastelabel.ui.theme', 'pastelabel.ui.dwm',
         'pastelabel.ui.dialogs', 'pastelabel.ui.i18n',
         'pastelabel.ui.processing_panel', 'pastelabel.ui.dataset_classifier_dialog',

@@ -25,22 +25,6 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.update()
         super().leaveEvent(event)
 
-    def _do_canvas_drag_out(self):
-        """延迟执行 Canvas 拖出复制"""
-        if not getattr(self._editor, '_canvas_image_copy_enabled', False):
-            self._drag_out_pending = False
-            return
-        from PyQt5.QtGui import QCursor
-        global_pos = QCursor.pos()
-        main_win = self._editor
-        if not main_win.geometry().contains(main_win.mapFromGlobal(global_pos)):
-            file_path = self._editor.background_images[self._editor.current_background_index]
-            if os.path.isfile(file_path):
-                drag = QDrag(self)
-                mime = QMimeData()
-                mime.setUrls([QUrl.fromLocalFile(file_path)])
-                drag.setMimeData(mime)
-                drag.exec_(Qt.CopyAction)
 
     def mousePressEvent(self, event):
         self.setFocus()

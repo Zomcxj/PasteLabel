@@ -31,3 +31,24 @@ def test_message_box_relocalizes_detail_button_after_click():
 
     assert "btn.clicked" in source
     assert "QTimer.singleShot(0, self._fix_detail_buttons)" in source
+
+
+def test_memory_action_dispatches_memory_records_dialog(monkeypatch):
+    from pastelabel.ui import memory_dialog
+    from pastelabel.ui.mixins.options_popup import OptionsPopupMixin
+
+    calls = {}
+
+    class FakeMemoryRecordsDialog:
+        def __init__(self, parent):
+            calls["parent"] = parent
+
+        def exec_(self):
+            calls["executed"] = True
+
+    monkeypatch.setattr(memory_dialog, "MemoryRecordsDialog", FakeMemoryRecordsDialog)
+
+    owner = object()
+    OptionsPopupMixin._show_memory_records(owner)
+
+    assert calls == {"parent": owner, "executed": True}

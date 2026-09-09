@@ -67,7 +67,7 @@ PasteLabel 是一个基于 PyQt5 的图像标注工具，支持**贴图合成**�
 ### 依赖
 
 ```bash
-pip install PyQt5 opencv-python pyinstaller
+pip install -r requirements.txt
 ```
 
 Windows 深色标题栏依赖 `ffi.dll`。使用 `conda` 环境时，该文件通常在：
@@ -111,7 +111,7 @@ pyinstaller pastelabel/PasteLabel.spec
 ## 测试
 
 ```bash
-pip install pytest pytest-qt
+pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 

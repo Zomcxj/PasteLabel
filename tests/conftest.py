@@ -5,16 +5,12 @@ pytest conftest - 在收集测试前 mock PyQt5
 import sys
 import types
 
-# ponytail: 子进程测试用 sys.executable 在本地无 PyQt5，转至 llm 环境
+# 子进程默认使用当前测试解释器；需要指定其他解释器时显式设置环境变量
 import os as _os
-for _p in (
-    r"D:\Softwaredata\miniforge3\envs\llm\python.exe",
-    r"D:\Softwaredata\miniforge3\envs\llm\Scripts\python.exe",
-):
-    if _os.path.exists(_p):
-        sys.executable = _p
-        break
-del _os, _p
+_sub = _os.environ.get('PASTELABEL_SUBPROC_PYTHON')
+if _sub and _os.path.exists(_sub):
+    sys.executable = _sub
+del _os, _sub
 
 
 def _make_mock_module(name):

@@ -5,13 +5,12 @@ import os
 import sys
 from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtCore import QPoint, Qt, QUrl, QTimer, QRectF
-from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDrag, QIcon
+from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDrag
 
 from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG, MAGNIFIER_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG
 from ..core.utils import create_app_icon
 from ..engine.save_manager import SaveManager
 from ..engine.label_manager import LabelManager
-from .ui_builder import UIBuilderMixin, _load_svg_icon, SUN_SVG, MOON_SVG
 from ..engine.image_loader import ImageLoaderMixin
 from ..engine.paste_engine import PasteEngineMixin
 from ..engine.event_handler import EventHandlerMixin
@@ -27,9 +26,15 @@ from .mixins.background_list import BackgroundListMixin
 from .mixins.theme import ThemeMixin
 from .mixins.translation import TranslationMixin
 from .mixins.dataset_classifier import DatasetClassifierMixin
+from .mixins.toolbar import ToolbarMixin
+from .mixins.options_popup import OptionsPopupMixin
+from .mixins.cache_menu import CacheMenuMixin
+from .mixins.lists import ListsMixin
+from .mixins.panels import PanelsMixin
 
 
-class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin, MemoryRecordMixin, LabelCacheSlotMixin, UIBuilderMixin, ImageLoaderMixin, PasteEngineMixin,
+class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin, MemoryRecordMixin, LabelCacheSlotMixin,
+                   ToolbarMixin, OptionsPopupMixin, CacheMenuMixin, ListsMixin, PanelsMixin, ImageLoaderMixin, PasteEngineMixin,
                    DatasetClassifierMixin, EventHandlerMixin, QMainWindow):
     """贴图标注工具主窗口"""
 

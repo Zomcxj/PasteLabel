@@ -176,7 +176,7 @@ if ! "$PYTHON_CMD" -m pip --version &> /dev/null; then
 fi
 
 if ! "$PYTHON_CMD" -m PyInstaller --version &> /dev/null; then
-    log_error "未找到 PyInstaller，请执行: $PYTHON_CMD -m pip install -r requirements.txt"
+    log_error "未找到 PyInstaller，请执行: $PYTHON_CMD -m pip install -r requirements-build.txt"
     exit 1
 fi
 

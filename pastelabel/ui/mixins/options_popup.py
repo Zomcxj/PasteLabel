@@ -218,7 +218,7 @@ class OptionsPopupMixin:
         self._canvas_image_copy_enabled = bool(checked)
         if hasattr(self, 'canvas_copy_action'):
             self.canvas_copy_action.setChecked(self._canvas_image_copy_enabled)
-        from ..core import config_manager
+        from ...core import config_manager
         config_manager.save_all(canvas_image_copy_enabled=self._canvas_image_copy_enabled)
 
     def _on_magnifier_menu_changed(self, checked):
@@ -226,7 +226,7 @@ class OptionsPopupMixin:
         self._magnifier_enabled = bool(checked)
         if hasattr(self, 'magnifier_action'):
             self.magnifier_action.setChecked(self._magnifier_enabled)
-        from ..core import config_manager
+        from ...core import config_manager
         config_manager.save_all(magnifier_enabled=self._magnifier_enabled)
         if hasattr(self, 'canvas'):
             self.canvas.update()

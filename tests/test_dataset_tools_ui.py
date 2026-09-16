@@ -5,6 +5,7 @@
 """
 import ast
 import inspect
+import os
 import re
 
 from pathlib import Path
@@ -165,10 +166,16 @@ def test_default_folder_empty_when_background_images_attr_absent():
 
 
 def test_default_folder_prefers_first_background_image_dir():
-    class Owner(DatasetToolsMixin):
-        background_images = ["D:\\data\\shots\\a.png", "D:\\data\\shots\\b.png"]
+    """取第一张背景图所在目录，路径分隔符跟随当前平台。"""
+    folder = os.path.join("D", "data", "shots")
 
-    assert DatasetToolsMixin._get_dataset_tools_folder(Owner()) == "D:\\data\\shots"
+    class Owner(DatasetToolsMixin):
+        background_images = [
+            os.path.join(folder, "a.png"),
+            os.path.join(folder, "b.png"),
+        ]
+
+    assert DatasetToolsMixin._get_dataset_tools_folder(Owner()) == folder
 
 
 def test_dialog_default_folder_is_empty_not_cwd():

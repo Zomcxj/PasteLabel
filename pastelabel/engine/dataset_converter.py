@@ -158,9 +158,11 @@ def _webp_size(data: bytes) -> Optional[Tuple[int, int]]:
     if chunk == b"VP8L" and len(data) >= 25:
         value = struct.unpack("<I", data[21:25])[0]
         return (value & 0x3FFF) + 1, ((value >> 14) & 0x7FFF) + 1
-    if chunk == b"VP8X" and len(data) >= 26:
-        return (int.from_bytes(data[20:23], "little") + 1,
-                int.from_bytes(data[23:26], "little") + 1)
+    if chunk == b"VP8X" and len(data) >= 30:
+        # chunk data 自偏移 20 起：特性标志位 4 字节 + 宽-1(3) + 高-1(3)。
+        # 宽高在 24/27；20..24 是 alpha/exif/xmp/anim 标志，不是尺寸。
+        return (int.from_bytes(data[24:27], "little") + 1,
+                int.from_bytes(data[27:30], "little") + 1)
     return None
 
 
@@ -201,10 +203,17 @@ def _tiff_size(data: bytes) -> Optional[Tuple[int, int]]:
         if base + 12 > len(data):
             break
         tag, typ, _count = struct.unpack(order + "HHI", data[base:base + 8])
-        if tag in (256, 257):
-            value = struct.unpack(order + ("H" if typ == 3 else "I"),
-                                  data[base + 8:base + 12])[0]
-            sizes[tag] = value
+        if tag not in (256, 257):
+            continue
+        # IFD 值域固定 4 字节，但 SHORT(type 3) 只占前 2 字节。
+        # 一律按 4 字节去解 SHORT 会抛 struct.error。
+        if typ == 3:
+            value = struct.unpack(order + "H", data[base + 8:base + 10])[0]
+        elif typ == 4:
+            value = struct.unpack(order + "I", data[base + 8:base + 12])[0]
+        else:
+            continue
+        sizes[tag] = value
     if 256 in sizes and 257 in sizes:
         return sizes[256], sizes[257]
     return None

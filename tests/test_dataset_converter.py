@@ -84,14 +84,34 @@ def _webp_bytes(width, height):
             b"WEBP" + body)
 
 
-def _tiff_bytes(width, height):
-    """TIFF：宽高用 LONG(4) 类型写入，每项 12 字节。"""
+def _tiff_bytes(width, height, short=False):
+    """TIFF：每项 12 字节。
+
+    short=True 时宽高写成 SHORT(type 3)，否则用 LONG(type 4)。
+    两者都是 TIFF 规范允许的写法，解析器都得读对。
+    """
     header = b"II" + b"*" + bytes([0]) + (8).to_bytes(4, "little")
     entries = b""
-    for tag, value in ((256, width), (257, height)):
-        entries += struct.pack("<HHI", tag, 4, 1) + \
-            struct.pack("<I", value)
+    if short:
+        for tag, value in ((256, width), (257, height)):
+            entries += struct.pack("<HHI", tag, 3, 1) + \
+                struct.pack("<H", value) + b"\x00" * 2
+    else:
+        for tag, value in ((256, width), (257, height)):
+            entries += struct.pack("<HHI", tag, 4, 1) + \
+                struct.pack("<I", value)
     return header + struct.pack("<H", 2) + entries + (0).to_bytes(4, "little")
+
+
+def _webp_vp8x_bytes(width, height):
+    """VP8X WebP 容器：chunk data 为 flags(4) + 宽-1(3) + 高-1(3)。
+
+    宽高在绝对偏移 24/27，不在 20/23 —— 20..24 是特性标志位。
+    """
+    chunk = b"VP8X" + (10).to_bytes(4, "little") + \
+        bytes([0x00, 0x00, 0x00, 0x00]) + \
+        (width - 1).to_bytes(3, "little") + (height - 1).to_bytes(3, "little")
+    return b"RIFF" + (4 + len(chunk)).to_bytes(4, "little") + b"WEBP" + chunk
 
 
 def SV(func):
@@ -209,6 +229,25 @@ def test_read_image_size_accepts_tiff(tmp_path):
     path = tmp_path / "size.tif"
     path.write_bytes(_tiff_bytes(123, 45))
     assert read_image_size(str(path)) == (123, 45)
+
+
+def test_read_image_size_accepts_tiff_with_short_typed_dimensions(tmp_path):
+    """宽高写成 SHORT(type 3) 时不能抛 struct.error。
+
+    IFD 值域固定 4 字节，但 SHORT 只占其中前 2 字节；
+    按 4 字节去解 2 字节格式会抛「requires a buffer of 2 bytes」。
+    """
+    path = tmp_path / "size.tif"
+    path.write_bytes(_tiff_bytes(123, 45, short=True))
+    assert read_image_size(str(path)) == (123, 45)
+
+
+@pytest.mark.parametrize("width,height", [(150, 250), (1, 1), (32767, 4096)])
+def test_read_image_size_reads_webp_vp8x_canvas(tmp_path, width, height):
+    """VP8X 容器宽高在偏移 24/27，不是 20/23（那里是特性标志位）。"""
+    path = tmp_path / "anim.webp"
+    path.write_bytes(_webp_vp8x_bytes(width, height))
+    assert read_image_size(str(path)) == (width, height)
 
 
 def test_read_image_size_returns_none_on_unknown_or_missing(tmp_path):

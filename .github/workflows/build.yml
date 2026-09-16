@@ -109,13 +109,11 @@ jobs:
         shell: bash
         run: |
           printf '%s\n' \
-            "PasteLabel v1.3.0 — 新增数据集格式转换工具" \
+            "PasteLabel v1.3.1 — 修复图片尺寸读取错误" \
             "" \
-            "✨ 新增" \
-            "• 数据集格式转换工具（导出弹窗 → 「格式」）：YOLO / COCO / VOC / LabelMe 四格式互转，支持校验、子集切分与目录结构整理" \
-            "" \
-            "🔧 改进" \
-            "• 日志区字号加大、统一圆角样式，阅读更舒适" \
+            "🐛 修复" \
+            "• 修复 WebP（动画 / 带透明通道）图片尺寸读取错误：宽高会被读成数万像素，转换后标注坐标全部错位" \
+            "• 修复部分 TIFF 图片在读取尺寸时程序中断的问题" \
             > release-notes.md
 
           gh release delete "$TAG" --repo "${{ github.repository }}" --yes 2>/dev/null || true

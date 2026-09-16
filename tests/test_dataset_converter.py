@@ -7,12 +7,12 @@
 """
 import json
 import os
+import struct
+import zlib
 from pathlib import Path
 from types import SimpleNamespace
 
-import numpy as np
 import pytest
-from PIL import Image
 
 from pastelabel.engine import dataset_converter as ST
 from pastelabel.engine.dataset_converter import (
@@ -27,6 +27,71 @@ from pastelabel.engine.dataset_converter import (
     read_image_size,
     validate_dataset,
 )
+
+
+def _png_chunk(chunk_type, payload):
+    return (len(payload)).to_bytes(4, "big") + chunk_type + payload + \
+        zlib.crc32(chunk_type + payload).to_bytes(4, "big")
+
+
+def make_png(width, height, color_type=2):
+    """构造最小 PNG 字节，只要求文件头能被尺寸解析器读出宽高。"""
+    header = struct.pack(">IIBBBBB", width, height, 8, color_type, 0, 0, 0)
+    raw = b"\x00" * ((width * 3 + 1) * height)
+    return (b"\x89PNG\r\n\x1a\n" + _png_chunk(b"IHDR", header) +
+            _png_chunk(b"IDAT", zlib.compress(raw)) +
+            _png_chunk(b"IEND", b""))
+
+
+def write_png(path, width, height):
+    Path(path).write_bytes(make_png(width, height))
+
+
+def _jpeg_segment(marker, payload):
+    return marker + (2 + len(payload)).to_bytes(2, "big") + payload
+
+
+def make_jpeg(width, height, quant_table_bytes=0):
+    """最小 JPEG；quant_table_bytes > 0 时插入伪造量化表以推后 SOF 段。"""
+    app0 = _jpeg_segment(b"\xff\xe0",
+                         b"JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00")
+    dqt = b""
+    if quant_table_bytes > 0:
+        dqt = _jpeg_segment(bytes([0xFF, 0xDB]),
+                            bytes([0, 0x10]) * (quant_table_bytes - 5))
+    sof0 = _jpeg_segment(b"\xff\xc0",
+                         b"\x08" + struct.pack(">HH", height, width) +
+                         b"\x03\x01\x22\x00\x01\x11\x01\x01\x11\x01")
+    return (bytes([0xFF, 0xD8]) + app0 + dqt + sof0 +
+            bytes([0xFF, 0xD9]))
+
+
+def _gif_bytes(width, height):
+    return b"GIF89a" + struct.pack("<HH", width, height) + b"\x00" * 16
+
+
+def _bmp_bytes(width, height):
+    return (b"BM" + (54).to_bytes(4, "little") + b"\x00" * 8 +
+            (40).to_bytes(4, "little") + struct.pack("<ii", width, height))
+
+
+def _webp_bytes(width, height):
+    """VP8L WebP：宽高编码在 32 位位域里。"""
+    value = ((height - 1) << 14) | (width - 1)
+    body = b"VP8L" + (30).to_bytes(4, "little") + b"\x2f" + \
+        struct.pack("<I", value) + b"\x00" * 12
+    return (b"RIFF" + (4 + len(body)).to_bytes(4, "little") +
+            b"WEBP" + body)
+
+
+def _tiff_bytes(width, height):
+    """TIFF：宽高用 LONG(4) 类型写入，每项 12 字节。"""
+    header = b"II" + b"*" + bytes([0]) + (8).to_bytes(4, "little")
+    entries = b""
+    for tag, value in ((256, width), (257, height)):
+        entries += struct.pack("<HHI", tag, 4, 1) + \
+            struct.pack("<I", value)
+    return header + struct.pack("<H", 2) + entries + (0).to_bytes(4, "little")
 
 
 def SV(func):
@@ -126,13 +191,23 @@ def test_module_imports_and_exposes_public_api():
 ])
 def test_read_image_size_covers_common_formats(tmp_path, ext, expected):
     path = tmp_path / ("size" + ext)
-    Image.new("RGB", expected, (12, 34, 56)).save(path)
+    width, height = expected
+    if ext == ".png":
+        path.write_bytes(make_png(width, height))
+    elif ext == ".jpg":
+        path.write_bytes(make_jpeg(width, height))
+    elif ext == ".gif":
+        path.write_bytes(_gif_bytes(width, height))
+    elif ext == ".bmp":
+        path.write_bytes(_bmp_bytes(width, height))
+    elif ext == ".webp":
+        path.write_bytes(_webp_bytes(width, height))
     assert read_image_size(str(path)) == expected
 
 
 def test_read_image_size_accepts_tiff(tmp_path):
     path = tmp_path / "size.tif"
-    Image.new("RGB", (123, 45)).save(path)
+    path.write_bytes(_tiff_bytes(123, 45))
     assert read_image_size(str(path)) == (123, 45)
 
 
@@ -146,7 +221,7 @@ def test_read_image_size_returns_none_on_unknown_or_missing(tmp_path):
 def test_read_image_size_scans_jpeg_past_quantization_tables(tmp_path):
     """JPEG 的 SOF 段位于文件中部，必须跳过量化表才能读到尺寸。"""
     path = tmp_path / "big.jpg"
-    Image.new("RGB", (1024, 768), (200, 10, 10)).save(path, quality=95)
+    path.write_bytes(make_jpeg(1024, 768, quant_table_bytes=8192))
     assert read_image_size(str(path)) == (1024, 768)
 
 
@@ -188,7 +263,7 @@ def test_parse_paths_empty_for_unknown_key():
 # --------------------------------------------------------------------------
 def test_dataset_size_of_reads_from_disk_on_cache_miss(tmp_path):
     path = tmp_path / "a.png"
-    Image.new("RGB", (30, 20)).save(path)
+    write_png(path, 30, 20)
     dataset = ST.Dataset(classes=["cat"], image_paths=[str(path)])
     assert dataset.size_of(str(path)) == (30, 20)
     assert dataset.size_of(str(path)) == (30, 20)
@@ -311,7 +386,7 @@ def test_voc_reader_handles_real_world_variants(tmp_path):
     xmls = tmp_path / "xml"
     images.mkdir()
     xmls.mkdir()
-    Image.new("RGB", (64, 32)).save(images / "x.png")
+    write_png(images / "x.png", 64, 32)
     (xmls / "x.xml").write_text(
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         "<!-- generated by labelImg -->\n"
@@ -345,7 +420,7 @@ def test_voc_class_names_keep_first_seen_order_across_files(tmp_path):
     images.mkdir()
     xmls.mkdir()
     for name in ("a.png", "b.png"):
-        Image.new("RGB", (10, 10)).save(images / name)
+        write_png(images / name, 10, 10)
     (xmls / "a.xml").write_text(
         "<annotation><filename>a.png</filename>"
         "<object><name>zebra</name><bndbox><xmin>0</xmin><ymin>0</ymin>"
@@ -753,10 +828,8 @@ def yolo_dataset(tmp_path):
     labels_dir = tmp_path / "labels"
     images_dir.mkdir()
     labels_dir.mkdir()
-    for index, name in enumerate(("a.png", "b.png", "c.png")):
-        arr = ((np.arange(64 * 64, dtype=np.int32) + index * 7)
-               % 251).astype(np.uint8).reshape(64, 64)
-        Image.fromarray(arr).save(images_dir / name)
+    for name in ("a.png", "b.png", "c.png"):
+        write_png(images_dir / name, 64, 64)
     (labels_dir / "a.txt").write_text(
         "0 0.30 0.30 0.20 0.20\n1 0.70 0.70 0.15 0.15\n", encoding="utf-8")
     (labels_dir / "b.txt").write_text("1 0.50 0.50 0.40 0.40\n", encoding="utf-8")
@@ -894,8 +967,7 @@ def test_labelme_output_keeps_polygon_shapes(tmp_path):
     labels_dir = tmp_path / "labels"
     images_dir.mkdir()
     labels_dir.mkdir()
-    arr = ((np.arange(64 * 64, dtype=np.int32)) % 251).astype(np.uint8).reshape(64, 64)
-    Image.fromarray(arr).save(images_dir / "a.png")
+    write_png(images_dir / "a.png", 64, 64)
     (labels_dir / "a.txt").write_text(
         "0 0.10 0.10 0.50 0.10 0.50 0.50 0.10 0.50\n", encoding="utf-8")
     data_yaml = tmp_path / "data.yaml"

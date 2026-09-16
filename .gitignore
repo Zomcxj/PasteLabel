@@ -8,6 +8,9 @@ build/
 *.spec
 .pytest_cache/
 
+# 由 CI 在构建机上生成，不进仓库
+release-notes.md
+
 AGENTS.md
 docs/plan/
 docs/superpowers/

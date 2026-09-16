@@ -64,6 +64,9 @@ class TranslationMixin:
             self.step_label.setText(tr("步长："))
         self.lang_btn.setToolTip(tr("切换中英文"))
         self.theme_btn.setToolTip(tr("切换深色/浅色主题"))
+        if hasattr(self, 'format_btn'):
+            self.format_btn.setText(tr("格式"))
+            self.format_btn.setToolTip(tr("数据集格式转换"))
         for header_name in ('bg_list_header', 'label_group_header', 'paste_group_header'):
             header = getattr(self, header_name, None)
             if header is None:

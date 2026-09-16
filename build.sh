@@ -226,7 +226,6 @@ log_info "生成 spec 文件..."
 cat > "$SPEC_FILE" << 'SPECEOF'
 # -*- mode: python ; coding: utf-8 -*-
 # 自动生成 - 请勿手动修改
-
 SPECEOF
 
 # 用追加方式写入 Python 列表和 Analysis 块（需要变量展开的部分）
@@ -248,6 +247,8 @@ a = Analysis(
         'pastelabel.engine.event_handler',
         'pastelabel.engine.yolo_exporter', 'pastelabel.engine.splitter',
         'pastelabel.engine.dataset_classifier', 'pastelabel.ui.mixins.dataset_classifier',
+        'pastelabel.engine.dataset_converter',
+        'pastelabel.ui.dataset_tools_dialog', 'pastelabel.ui.mixins.dataset_tools',
         'numpy',
         'pastelabel.canvas', 'pastelabel.canvas.canvas', 'pastelabel.canvas.canvas_renderer',
         'pastelabel.canvas.canvas_interaction', 'pastelabel.canvas.canvas_drawing',
@@ -259,7 +260,12 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'pandas', 'pytest', 'PySide6', 'sklearn', 'torch', 'torchvision', 'tensorflow', 'keras', 'onnxruntime'],
+    # 通用体积护栏：本项目只用 PyQt5 + numpy + 标准库，其余大块依赖一律不打进包
+    excludes=['tkinter', 'matplotlib', 'pandas', 'pytest', 'PySide6', 'sklearn', 'torch', 'torchvision', 'tensorflow', 'keras', 'onnxruntime', 'cv2', 'av',
+              'IPython', 'ipykernel', 'jedi', 'prompt_toolkit', 'pygments', 'backcall', 'stack_data',
+              'matplotlib_inline', 'notebook', 'nbformat', 'nbclient', 'traitlets', 'zmq',
+              'pyreadline3', 'pickleshare', 'nest_asyncio', 'appnope', 'gevent', 'html5lib', 'bs4',
+              'Cython', 'cython', 'lxml', 'cryptography', 'yaml', 'scipy', 'supervision'],
     noarchive=False,
     optimize=${PYTHON_OPTIMIZE},
 )

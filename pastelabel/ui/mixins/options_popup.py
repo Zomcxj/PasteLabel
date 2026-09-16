@@ -140,6 +140,16 @@ class OptionsPopupMixin:
 
         layout.addSpacing(4)
 
+        self.format_btn = QPushButton(tr("格式"))
+        self.format_btn.setObjectName("optionsBtn")
+        self.format_btn.setFixedWidth(70)
+        self.format_btn.setFixedHeight(24)
+        self.format_btn.setToolTip(tr("数据集格式转换"))
+        self.format_btn.clicked.connect(self._open_dataset_tools)
+        layout.addWidget(self.format_btn)
+
+        layout.addSpacing(4)
+
         self.process_btn = QPushButton(tr("导出"))
         self.process_btn.setObjectName("optionsBtn")
         self.process_btn.setFixedWidth(70)

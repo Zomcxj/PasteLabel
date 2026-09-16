@@ -4,7 +4,6 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
 from ...core.config import WINDOW_CONFIG, PASTE_PARAMS, THUMBNAIL_CONFIG, DEFAULT_PREFIX
 from ..icons import _load_svg_icon, SVG_FILE, SVG_FOLDER, SUN_SVG
-from ..theme import ThemeManager
 from ..i18n import t as tr
 from ..segmented_control import AnimatedSegmentedControl
 
@@ -49,9 +48,6 @@ class ToolbarMixin:
         upload_layout = QHBoxLayout(toolbar_widget)
         upload_layout.setSpacing(4)
         upload_layout.setContentsMargins(4, 4, 4, 4)
-
-        t = ThemeManager.get_theme()
-        color = t['text_secondary']
 
         bg_color = "#2196F3"
         paste_color = "#4CAF50"

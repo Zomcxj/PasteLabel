@@ -227,3 +227,13 @@ def test_options_popup_uses_global_qss_instead_of_a_stale_local_override():
     )
     assert 'popup.setObjectName("optionsPopup")' in popup_setup
     assert "popup.setStyleSheet" not in popup_setup
+
+
+def test_log_area_font_is_one_step_up_from_default():
+    """日志框文字比全局字号大一号，小字长时间看容易吃力。"""
+    stylesheet = ThemeManager.get_stylesheet()
+    block = stylesheet.split("QTextEdit#logArea", 1)[1].split("}\n", 1)[0]
+    assert "Consolas" in block, "日志框应保持等宽字体"
+    assert "font-size: 12px;" in block
+    assert "font-size: 11px;" not in block
+    assert "border-radius: 6px;" in block, "圆角样式不应被误改"

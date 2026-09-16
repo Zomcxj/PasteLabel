@@ -307,7 +307,7 @@ class ThemeManager:
                 background-color: {t['widget_bg']};
                 color: {t['text_secondary']};
                 font-family: Consolas, "Courier New", monospace;
-                font-size: 11px;
+                font-size: 12px;
                 padding: 4px;
             }}
             QGroupBox {{

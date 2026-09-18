@@ -12,56 +12,93 @@ class CanvasRendererMixin:
     """Canvas 绘制混入类 - paintEvent 及所有 _draw_* 方法"""
 
     def paintEvent(self, event):
-        """绘制事件"""
+        """绘制事件
+
+        paintEvent 内未捕获的异常会让 Qt 直接终止进程（0xC0000409，无
+        traceback），所以整段绘制都包在兜底里：失败只降级为一条日志和
+        一个错误提示，应用继续运行。
+        """
+        try:
+            self._paint_scene(event)
+        except Exception as exc:
+            self._report_paint_failure(exc)
+
+    def _paint_scene(self, event):
+        """实际绘制流程；异常由 paintEvent 兜底。
+
+        每个 QPainter 都必须用 finally 收尾：异常时 traceback 会持有本帧，
+        未 end() 的 painter 会一直存活到 except 块结束，届时 Qt 在
+        render() 上下文里析构它会直接段错误（exit 139），而不是抛异常。
+        """
         # 所有切图路径最终都会重绘，亮度/对比度在此单点重新套用
         self.apply_display_adjustments()
 
         scene = QPixmap(self.size())
         scene.fill(Qt.transparent)
         sp = QPainter(scene)
-        sp.setRenderHint(QPainter.Antialiasing)
+        background_rect = None
+        try:
+            sp.setRenderHint(QPainter.Antialiasing)
 
-        t = ThemeManager.get_theme()
-        bg_color = t['canvas_bg']
-        r = int(bg_color[1:3], 16)
-        g = int(bg_color[3:5], 16)
-        b = int(bg_color[5:7], 16)
-        sp.fillRect(self.rect(), QColor(r, g, b))
+            t = ThemeManager.get_theme()
+            bg_color = t['canvas_bg']
+            r = int(bg_color[1:3], 16)
+            g = int(bg_color[3:5], 16)
+            b = int(bg_color[5:7], 16)
+            sp.fillRect(self.rect(), QColor(r, g, b))
 
-        background_rect = self.get_background_rect()
+            background_rect = self.get_background_rect()
 
-        if self._editor.current_background is not None and background_rect:
-            self._draw_background(sp, background_rect)
+            if self._editor.current_background is not None and background_rect:
+                self._draw_background(sp, background_rect)
 
-        if background_rect:
-            self._draw_grid(sp, background_rect)
+            if background_rect:
+                self._draw_grid(sp, background_rect)
 
-        sp.setOpacity(self.shape_opacity)
+            sp.setOpacity(self.shape_opacity)
 
-        if background_rect:
-            self._draw_paste_items(sp, background_rect)
+            if background_rect:
+                self._draw_paste_items(sp, background_rect)
 
-        if (self._editor.show_labels_checkbox.isChecked() and
-            background_rect and self._editor.detection_boxes):
-            self._draw_detection_boxes(sp, background_rect)
+            if (self._editor.show_labels_checkbox.isChecked() and
+                background_rect and self._editor.detection_boxes):
+                self._draw_detection_boxes(sp, background_rect)
 
-        if self.is_drawing_box:
-            self._draw_temp_box(sp)
+            if self.is_drawing_box:
+                self._draw_temp_box(sp)
 
-        sp.setOpacity(1.0)
+            sp.setOpacity(1.0)
 
-        if (getattr(self._editor, 'edit_mode', 'paste') == 'annotate' and
-                self.mouse_inside and self._editor.current_background is not None and
-                background_rect is not None):
-            self._draw_crosshair(sp)
-        sp.end()
+            if (getattr(self._editor, 'edit_mode', 'paste') == 'annotate' and
+                    self.mouse_inside and self._editor.current_background is not None and
+                    background_rect is not None):
+                self._draw_crosshair(sp)
+        finally:
+            if sp.isActive():
+                sp.end()
 
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.drawPixmap(0, 0, scene)
+        try:
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.drawPixmap(0, 0, scene)
 
-        if background_rect:
-            self._draw_magnifier(painter, background_rect, scene)
+            if background_rect:
+                self._draw_magnifier(painter, background_rect, scene)
+        finally:
+            if painter.isActive():
+                painter.end()
+
+    def _report_paint_failure(self, exc):
+        """绘制失败时的降级处理：记日志，绝不再抛异常。
+
+        这里刻意不新建 QPainter：本方法可能在 render() 的上下文里被调用，
+        此时再往 widget 上开 painter 会段错误。失败就只留日志。
+        """
+        try:
+            from ..core.exception_hook import _write_log
+            _write_log(f"画布绘制失败，已跳过本帧: {type(exc).__name__}: {exc}")
+        except Exception:
+            pass
 
     def _draw_background(self, painter, background_rect):
         """绘制背景图"""

@@ -12,7 +12,8 @@ from .base import BaseTransform, register_transform
 class RandomRotation(BaseTransform):
     name = "rotate"
 
-    def __init__(self, max_angle: float = 15, bg: str = "black"):
+    def __init__(self, max_angle: float = 15, bg: str = "black", rng=None):
+        super().__init__(rng)
         self.max_angle = max(0, min(45, max_angle))
         self.bg = bg
 
@@ -20,7 +21,7 @@ class RandomRotation(BaseTransform):
         self, image: QImage, boxes: List[dict],
         image_width: int, image_height: int
     ) -> Tuple[QImage, List[dict]]:
-        angle = random.uniform(-self.max_angle, self.max_angle)
+        angle = self.rng.uniform(-self.max_angle, self.max_angle)
         cx, cy = image_width / 2.0, image_height / 2.0
         theta = math.radians(angle)
         cos_a = math.cos(theta)

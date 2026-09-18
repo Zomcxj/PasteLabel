@@ -85,7 +85,9 @@ class BaseExporter:
             if os.path.exists(img_path):
                 os.remove(img_path)
             os.rename(tmp, img_path)
-        elif "img_path" in item:
+        elif item.get("img_path"):
+            # 空 img_path 必须视为「没有源图」：normpath("") 会得到 "."，
+            # 继续走会把当前工作目录当成文件去复制并抛 PermissionError。
             ext = os.path.splitext(item["img_path"])[1]
             import shutil
             dst = os.path.join(self.output_dir, "images", f"{stem}{ext}")

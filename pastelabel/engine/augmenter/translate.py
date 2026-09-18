@@ -11,7 +11,8 @@ from .base import BaseTransform, register_transform
 class RandomTranslate(BaseTransform):
     name = "trans"
 
-    def __init__(self, max_dx: int = 20, max_dy: int = 20):
+    def __init__(self, max_dx: int = 20, max_dy: int = 20, rng=None):
+        super().__init__(rng)
         self.max_dx = max(0, min(100, max_dx))
         self.max_dy = max(0, min(100, max_dy))
 
@@ -19,8 +20,8 @@ class RandomTranslate(BaseTransform):
         self, image: QImage, boxes: List[dict],
         image_width: int, image_height: int
     ) -> Tuple[QImage, List[dict]]:
-        dx = random.randint(-self.max_dx, self.max_dx)
-        dy = random.randint(-self.max_dy, self.max_dy)
+        dx = self.rng.randint(-self.max_dx, self.max_dx)
+        dy = self.rng.randint(-self.max_dy, self.max_dy)
         result = QImage(image.width(), image.height(), QImage.Format_ARGB32)
         result.fill(Qt.black)
         painter = QPainter(result)

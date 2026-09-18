@@ -136,10 +136,15 @@ class PasteEngineMixin:
         self.selected_item = None
         self.canvas.update()
 
-    def random_paste_images(self, background=None, detection_boxes=None):
-        """随机贴图 - 中心点避让算法"""
+    def random_paste_images(self, background=None, detection_boxes=None, seed=None):
+        """随机贴图 - 中心点避让算法
+
+        seed 给定时结果可复现；不传时沿用全局 random（保持既有行为）。
+        """
         if self._is_delete_view or not self.small_images or not self.current_background:
             return
+
+        rng = random.Random(seed)
 
         self.save_undo_state()
         self._validate_size_range()
@@ -161,7 +166,7 @@ class PasteEngineMixin:
         mr = RANDOM_POSITION_CONFIG['margin_right']
 
         num_paste = self.paste_count_spin.value()
-        selected_indices = random.choices(range(len(self.small_images)), k=num_paste)
+        selected_indices = rng.choices(range(len(self.small_images)), k=num_paste)
 
         pasted_boxes = []
 
@@ -174,7 +179,7 @@ class PasteEngineMixin:
             aspect_ratio = pixmap.width() / pixmap.height()
             min_size = self.min_size_spin.value()
             max_size = self.max_size_spin.value()
-            target_size = random.randint(min_size, max_size)
+            target_size = rng.randint(min_size, max_size)
 
             if pixmap.width() > pixmap.height():
                 new_width = target_size
@@ -201,8 +206,8 @@ class PasteEngineMixin:
                 continue
 
             for _ in range(RANDOM_POSITION_CONFIG['max_retries']):
-                cx = random.uniform(ml + new_width / 2, place_w + new_width / 2)
-                cy = random.uniform(mt + new_height / 2, place_h + new_height / 2)
+                cx = rng.uniform(ml + new_width / 2, place_w + new_width / 2)
+                cy = rng.uniform(mt + new_height / 2, place_h + new_height / 2)
 
                 tx = cx - new_width / 2
                 ty = cy - new_height / 2

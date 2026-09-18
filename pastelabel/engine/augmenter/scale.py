@@ -11,7 +11,8 @@ from .base import BaseTransform, register_transform
 class RandomScale(BaseTransform):
     name = "scale"
 
-    def __init__(self, min: float = 0.8, max: float = 1.2):
+    def __init__(self, min: float = 0.8, max: float = 1.2, rng=None):
+        super().__init__(rng)
         self.min = min
         self.max = max
 
@@ -19,7 +20,7 @@ class RandomScale(BaseTransform):
         self, image: QImage, boxes: List[dict],
         image_width: int, image_height: int
     ) -> Tuple[QImage, List[dict]]:
-        scale = random.uniform(self.min, self.max)
+        scale = self.rng.uniform(self.min, self.max)
         new_w = max(1, int(image_width * scale))
         new_h = max(1, int(image_height * scale))
         scaled = image.scaled(new_w, new_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)

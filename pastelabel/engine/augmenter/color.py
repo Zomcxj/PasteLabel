@@ -10,7 +10,8 @@ from .base import BaseTransform, register_transform
 class Brightness(BaseTransform):
     name = "bright"
 
-    def __init__(self, delta: int = 30):
+    def __init__(self, delta: int = 30, rng=None):
+        super().__init__(rng)
         self.delta = max(-100, min(100, delta))
 
     def apply(
@@ -36,7 +37,8 @@ class Brightness(BaseTransform):
 class Contrast(BaseTransform):
     name = "contrast"
 
-    def __init__(self, factor: float = 1.5):
+    def __init__(self, factor: float = 1.5, rng=None):
+        super().__init__(rng)
         self.factor = max(0.5, min(2.0, factor))
 
     def apply(
@@ -102,7 +104,8 @@ def _hsv_to_rgb(h, s, v):
 
 class _HSVAdjust(BaseTransform):
 
-    def __init__(self, h_delta=0, s_factor=1.0, v_factor=1.0):
+    def __init__(self, h_delta=0, s_factor=1.0, v_factor=1.0, rng=None):
+        super().__init__(rng)
         self.h_delta = h_delta
         self.s_factor = max(0.0, min(2.0, s_factor))
         self.v_factor = max(0.0, min(2.0, v_factor))
@@ -137,7 +140,8 @@ class _HSVAdjust(BaseTransform):
 class Hue(BaseTransform):
     name = "hue"
 
-    def __init__(self, delta: int = 30):
+    def __init__(self, delta: int = 30, rng=None):
+        super().__init__(rng)
         self.delta = max(-180, min(180, delta))
 
     def apply(
@@ -152,7 +156,8 @@ class Hue(BaseTransform):
 class Saturation(BaseTransform):
     name = "saturation"
 
-    def __init__(self, factor: float = 1.5):
+    def __init__(self, factor: float = 1.5, rng=None):
+        super().__init__(rng)
         self.factor = max(0.0, min(2.0, factor))
 
     def apply(
@@ -167,7 +172,8 @@ class Saturation(BaseTransform):
 class Value(BaseTransform):
     name = "value"
 
-    def __init__(self, delta: int = 30):
+    def __init__(self, delta: int = 30, rng=None):
+        super().__init__(rng)
         self.delta = max(-100, min(100, delta))
 
     def apply(

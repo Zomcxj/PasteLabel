@@ -14,11 +14,14 @@ from . import flipt, color, noise, translate, rotate, scale
 class Augmenter:
 
     def __init__(self, output_dir: str, on_progress: Callable = None,
-                 is_interrupted: Callable = None, on_transform_progress: Callable = None):
+                 is_interrupted: Callable = None, on_transform_progress: Callable = None,
+                 seed: int = None):
         self.output_dir = os.path.join(output_dir, "images")
         self.on_progress = on_progress
         self.is_interrupted = is_interrupted or (lambda: False)
         self.on_transform_progress = on_transform_progress
+        # 私有 RNG：seed 给定时结果可复现，且不污染全局 random
+        self._rng = random.Random(seed)
 
     def run(
         self,
@@ -67,7 +70,7 @@ class Augmenter:
             for idx in range(total):
                 if self.is_interrupted():
                     break
-                if random.random() >= image_ratio:
+                if self._rng.random() >= image_ratio:
                     if self.on_transform_progress:
                         self.on_transform_progress(t_name, idx + 1, total)
                     continue
@@ -126,11 +129,11 @@ class Augmenter:
             original_boxes = copy.deepcopy(boxes)
             iw = original_image.width()
             ih = original_image.height()
-            n = random.randint(1, len(transform_specs))
-            active = random.sample(transform_specs, n)
+            n = self._rng.randint(1, len(transform_specs))
+            active = self._rng.sample(transform_specs, n)
             any_applied = False
             for cls, ranges in active:
-                if random.random() >= image_ratio:
+                if self._rng.random() >= image_ratio:
                     continue
                 any_applied = True
                 kwargs = self._build_kwargs(cls, ranges, "random")
@@ -159,7 +162,7 @@ class Augmenter:
     def _build_kwargs(self, cls, ranges, mode):
         kwargs = {}
         for pname, (vmin, vmax) in ranges.items():
-            kwargs[pname] = random.uniform(vmin, vmax)
+            kwargs[pname] = self._rng.uniform(vmin, vmax)
         if cls.__name__ in ("RandomRotation", "RandomScale"):
             if "angle" in kwargs:
                 kwargs["max_angle"] = abs(kwargs.pop("angle"))
@@ -176,6 +179,7 @@ class Augmenter:
             kwargs["delta"] = int(kwargs["delta"])
         if cls.__name__ == "GaussianNoise" and "sigma" in kwargs:
             kwargs["sigma"] = int(kwargs["sigma"])
+        kwargs["rng"] = self._rng
         return kwargs
 
     def _save_original(self, img_path, base, ext, boxes, results):

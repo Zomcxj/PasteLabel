@@ -185,3 +185,20 @@ CROSSHAIR_CONFIG = {
     'color': '#00FF80',
     'alpha': 160,
 }
+
+# 出厂默认快照：这些字典在运行时会被就地修改（设置对话框、加载配置），
+# 「恢复默认设置」需要一份未被污染的副本来还原。
+_DEFAULT_SNAPSHOT = {
+    name: dict(value)
+    for name, value in list(globals().items())
+    if name.endswith('_CONFIG') and isinstance(value, dict)
+}
+
+
+def reset_defaults():
+    """把所有可变的配置字典还原为模块导入时的默认值。"""
+    for name, snapshot in _DEFAULT_SNAPSHOT.items():
+        target = globals().get(name)
+        if isinstance(target, dict):
+            target.clear()
+            target.update(snapshot)

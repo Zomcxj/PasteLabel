@@ -100,11 +100,14 @@ class SettingsDialog(QDialog):
 
         group = QGroupBox(tr("快捷键设置"))
         group_layout = QVBoxLayout(group)
+        # 与「参数设置」页保持同一首行位置，两页切换时行不会跳动
+        group_layout.setContentsMargins(19, 14, 9, 9)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
 
         shortcut_names = {
             'undo': tr("撤销"),
@@ -381,6 +384,11 @@ class SettingsDialog(QDialog):
         layout.addLayout(content_layout, 1)
 
         btn_layout = QHBoxLayout()
+        self.reset_all_btn = QPushButton(tr("恢复默认设置"))
+        self.reset_all_btn.setObjectName("dangerBtn")
+        self.reset_all_btn.setToolTip(tr("重置所有设置"))
+        self.reset_all_btn.clicked.connect(self._reset_all_settings)
+        btn_layout.addWidget(self.reset_all_btn)
         btn_layout.addStretch()
 
         save_btn = QPushButton(tr("保存"))
@@ -393,6 +401,28 @@ class SettingsDialog(QDialog):
         btn_layout.addWidget(cancel_btn)
 
         layout.addLayout(btn_layout)
+
+    def _reset_all_settings(self):
+        """恢复出厂设置（需二次确认）。"""
+        from .dialog_helpers import question, warning
+        from PyQt5.QtWidgets import QMessageBox
+        tr = i18n.t
+        answer = question(
+            self, tr("恢复默认设置"),
+            tr("将删除所有自定义配置（快捷键、主题、语言、参数与记忆记录），并恢复出厂默认。此操作不可撤销，是否继续？"),
+        )
+        if answer != QMessageBox.Yes:
+            return
+        if not self._editor or not hasattr(self._editor, 'reset_settings_to_default'):
+            warning(self, tr("警告"), tr("已恢复默认设置"))
+            self.accept()
+            return
+        if not self._editor.reset_settings_to_default():
+            warning(self, tr("警告"), tr("无法写入配置文件"))
+            return
+        self.accept()
+        if hasattr(self._editor, 'status_label'):
+            self._editor.status_label.setText(tr("已恢复默认设置"))
 
     def _switch_page(self, index):
         """切换左侧按钮对应的右侧设置页。"""

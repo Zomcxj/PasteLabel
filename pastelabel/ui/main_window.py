@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtCore import QPoint, Qt, QUrl, QTimer, QRectF
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDrag
 
-from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG, MAGNIFIER_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG
+from ..core.config import WINDOW_CONFIG, THUMBNAIL_CONFIG, MAGNIFIER_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG, DEFAULT_PREFIX
 from ..core.utils import create_app_icon
 from ..engine.save_manager import SaveManager
 from ..engine.label_manager import LabelManager
@@ -377,6 +377,41 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         dialog = SettingsDialog(self)
         dialog.exec_()
 
+    def reset_settings_to_default(self):
+        """恢复出厂设置：清空配置文件并刷新界面，返回是否成功。"""
+        from ..core import config_manager
+        from . import i18n
+
+        if not config_manager.reset_all():
+            return False
+
+        self._load_settings()
+        i18n.set_lang(config_manager.load_language())
+        self._apply_theme()
+        self._refresh_ui_texts()
+
+        self.prefix_input.setText(DEFAULT_PREFIX)
+        self.prefix_checkbox.setChecked(True)
+        self.show_labels_checkbox.setChecked(True)
+        self.show_label_names_checkbox.setChecked(True)
+        self.show_paste_names_checkbox.setChecked(True)
+        self.show_grid_checkbox.setChecked(False)
+        self._canvas_image_copy_enabled = False
+        self._magnifier_enabled = False
+        if hasattr(self, 'canvas_copy_action'):
+            self.canvas_copy_action.setChecked(False)
+        if hasattr(self, 'magnifier_action'):
+            self.magnifier_action.setChecked(False)
+        if hasattr(self, 'update_shortcuts'):
+            self.update_shortcuts()
+        if hasattr(self, '_refresh_menu_shortcuts'):
+            self._refresh_menu_shortcuts()
+        if hasattr(self, '_rebuild_label_cache_menu'):
+            self._rebuild_label_cache_menu()
+        if hasattr(self, 'canvas'):
+            self.canvas.update()
+        return True
+
     def _toggle_processing_panel(self):
         if not hasattr(self, '_processing_panel') or self._processing_panel is None:
             self._processing_panel = ProcessingPanel(self)
@@ -597,6 +632,43 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         self.canvas.update()
 
 
+    def apply_startup_args(self, background_dir=None, labels_file=None):
+        """应用命令行启动参数：打开背景目录、导入标签文件。"""
+        if background_dir:
+            if os.path.isdir(background_dir):
+                self.load_background_folder(background_dir)
+            else:
+                self.status_label.setText(f"{tr('路径不存在')}: {background_dir}")
+        if labels_file:
+            if os.path.isfile(labels_file):
+                self.load_background_label_file(labels_file)
+            else:
+                self.status_label.setText(f"{tr('路径不存在')}: {labels_file}")
+
+
+def _parse_args(argv):
+    """解析命令行参数。"""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="PasteLabel",
+        description="贴图标注工具",
+    )
+    parser.add_argument(
+        "path", nargs="?", default=None,
+        help="启动后直接打开的背景图目录",
+    )
+    parser.add_argument(
+        "--labels", default=None, metavar="文件",
+        help="启动后导入的背景标签文件（每行一个类别）",
+    )
+    parser.add_argument(
+        "--version", action="store_true",
+        help="显示版本号后退出",
+    )
+    return parser.parse_args(argv)
+
+
 def main():
     """程序入口函数"""
     import sys
@@ -604,10 +676,16 @@ def main():
 
     warnings.simplefilter("ignore", DeprecationWarning)
 
+    args = _parse_args(sys.argv[1:])
+    if args.version:
+        from .. import __version__
+        print(f"PasteLabel {__version__}")
+        return
+
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
-    app = QApplication(sys.argv)
+    app = QApplication(sys.argv[:1])
 
     from PyQt5.QtGui import QFontDatabase
     if getattr(sys, 'frozen', False):
@@ -622,6 +700,7 @@ def main():
 
     editor = ImageEditor()
     editor.show()
+    editor.apply_startup_args(args.path, args.labels)
     sys.exit(app.exec_())
 
 

@@ -368,6 +368,11 @@ _strings = {
         "恢复默认": "恢复默认",
         "收起调节": "收起调节",
         "展开调节": "展开调节",
+        "恢复默认设置": "恢复默认设置",
+        "重置所有设置": "重置所有设置",
+        "将删除所有自定义配置（快捷键、主题、语言、参数与记忆记录），并恢复出厂默认。此操作不可撤销，是否继续？": "将删除所有自定义配置（快捷键、主题、语言、参数与记忆记录），并恢复出厂默认。此操作不可撤销，是否继续？",
+        "已恢复默认设置": "已恢复默认设置",
+        "无法写入配置文件": "无法写入配置文件",
     },
     "en": {
         "背景图:": "Image:",
@@ -745,6 +750,11 @@ _strings = {
         "恢复默认": "Reset to default",
         "收起调节": "Collapse adjustments",
         "展开调节": "Expand adjustments",
+        "恢复默认设置": "Reset to defaults",
+        "重置所有设置": "Reset all settings",
+        "将删除所有自定义配置（快捷键、主题、语言、参数与记忆记录），并恢复出厂默认。此操作不可撤销，是否继续？": "This deletes all custom settings (shortcuts, theme, language, parameters and memory records) and restores factory defaults. This cannot be undone. Continue?",
+        "已恢复默认设置": "Default settings restored",
+        "无法写入配置文件": "Could not write the config file",
 }
 }
 

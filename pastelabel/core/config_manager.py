@@ -3,6 +3,7 @@
 """
 import os
 import json
+from . import config as config_module
 from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG, LABEL_COLORS
 
 
@@ -263,6 +264,21 @@ def delete_memory_record(index):
         return False
     records.pop(index)
     return save_memory_records(records)
+
+
+def reset_all():
+    """恢复出厂设置：删除配置文件，并把内存里的配置字典还原为默认值。
+
+    返回 True 表示配置文件已删除（或本来就不存在）。
+    """
+    removed = True
+    if os.path.exists(CONFIG_PATH):
+        try:
+            os.remove(CONFIG_PATH)
+        except OSError:
+            removed = False
+    config_module.reset_defaults()
+    return removed
 
 
 def load_all():

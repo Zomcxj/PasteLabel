@@ -109,7 +109,7 @@ jobs:
         shell: bash
         run: |
           printf '%s\n' \
-            "PasteLabel v1.3.3 — 快捷删除标签与相对路径显示" \
+            "PasteLabel $TAG — 快捷删除标签与相对路径显示" \
             "" \
             "✨ 新增" \
             "• 快捷键删除标签：选中标签后按 Ctrl+Shift+Z 直接删除，无需右键确认" \

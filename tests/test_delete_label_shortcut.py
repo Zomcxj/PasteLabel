@@ -1,0 +1,219 @@
+"""Ctrl+Shift+Z 直接删除标签（无确认框）回归测试。"""
+import inspect
+from pathlib import Path
+
+from pastelabel.core import config as config_module
+from pastelabel.engine.label_manager import LabelManager
+
+ROOT = Path(__file__).resolve().parents[1]
+LABEL_MANAGER_SRC = ROOT / "pastelabel" / "engine" / "label_manager.py"
+EVENT_HANDLER_SRC = ROOT / "pastelabel" / "engine" / "event_handler.py"
+SETTINGS_SRC = ROOT / "pastelabel" / "ui" / "settings_dialog.py"
+
+
+class FakeSignal:
+    def emit(self):
+        pass
+
+
+class FakeItem:
+    def __init__(self, text, box_index=None):
+        self._text = text
+        self._box_index = box_index
+
+    def text(self):
+        return self._text
+
+    def data(self, role):
+        return self._box_index
+
+
+class FakeList:
+    def __init__(self, selected):
+        self._selected = selected
+
+    def selectedItems(self):
+        return self._selected
+
+
+class FakeCanvas:
+    def __init__(self):
+        self.selected_box = 'x'
+        self.selected_boxes = ['x']
+
+
+class FakeEditor:
+    def __init__(self, selected, boxes, mode='stats'):
+        self.label_list = FakeList(selected)
+        self._bg_label_list_mode = mode
+        self.detection_boxes = list(boxes)
+        self.detection_boxes_dict = {0: [dict(b) for b in boxes]}
+        self.global_labels = {b['label'] for b in boxes}
+        self.background_images = ['a.png']
+        self.current_background_index = 0
+        self.canvas = FakeCanvas()
+        self.saved = []
+
+
+def _manager(editor):
+    manager = LabelManager(editor)
+    manager.label_list_changed = FakeSignal()
+    manager.data_changed = FakeSignal()
+    manager._save_detection_json_for_index = lambda index: editor.saved.append(index)
+    return manager
+
+
+# ---------- 配置与注册 ----------
+
+def test_shortcut_is_configured_as_ctrl_shift_z():
+    assert config_module.SHORTCUT_CONFIG['delete_label'] == 'Ctrl+Shift+Z'
+
+
+def test_shortcut_sits_right_below_restore_image_in_settings():
+    source = SETTINGS_SRC.read_text(encoding="utf-8")
+    restore = source.index("'restore_image': tr(\"恢复图片\"),")
+    delete = source.index("'delete_label': tr(\"删除标签\"),")
+    assert restore < delete
+    # 中间不能插入其它快捷键项
+    between = source[restore:delete]
+    assert between.count("': tr(") == 1
+
+
+def test_shortcut_is_registered_in_event_handler():
+    source = EVENT_HANDLER_SRC.read_text(encoding="utf-8")
+    assert "'delete_label': self.delete_selected_label," in source
+
+
+def test_shortcut_is_not_handled_by_the_confirming_delete_label():
+    source = EVENT_HANDLER_SRC.read_text(encoding="utf-8")
+    handlers = source[source.index("action_handlers = {"):source.index("self._shortcuts = []")]
+    assert "'delete_label': self.delete_selected_label," in handlers
+    assert "'delete_label': self.delete_label," not in handlers
+
+
+# ---------- 无确认删除 ----------
+
+def test_delete_selected_label_skips_the_confirmation_dialog(monkeypatch):
+    """核心：快捷键路径不能弹任何对话框。"""
+    import pastelabel.engine.label_manager as lm
+    calls = []
+    monkeypatch.setattr(lm.dialog_helpers, "question",
+                        lambda *a, **k: calls.append(a) or lm.dialog_helpers.QMessageBox.No)
+
+    editor = FakeEditor([FakeItem('cat', box_index=0)], [{'label': 'cat', 'x': 0, 'y': 0, 'width': 1, 'height': 1}], mode='all')
+    _manager(editor).delete_selected_label()
+
+    assert calls == []
+    assert editor.detection_boxes == []
+    assert editor.global_labels == set()
+
+
+def test_delete_label_still_confirms(monkeypatch):
+    """右键菜单路径必须保留确认框。"""
+    import pastelabel.engine.label_manager as lm
+    calls = []
+    monkeypatch.setattr(lm.dialog_helpers, "question",
+                        lambda *a, **k: calls.append(a) or lm.dialog_helpers.QMessageBox.No)
+
+    editor = FakeEditor([FakeItem('cat')], [{'label': 'cat', 'x': 0, 'y': 0, 'width': 1, 'height': 1}])
+    _manager(editor).delete_label()
+
+    assert len(calls) == 1
+    assert editor.detection_boxes  # 回答 No，未删除
+
+
+def test_confirming_no_leaves_everything_untouched(monkeypatch):
+    import pastelabel.engine.label_manager as lm
+    monkeypatch.setattr(lm.dialog_helpers, "question",
+                        lambda *a, **k: lm.dialog_helpers.QMessageBox.No)
+
+    editor = FakeEditor([FakeItem('cat')], [{'label': 'cat', 'x': 0, 'y': 0, 'width': 1, 'height': 1}])
+    _manager(editor).delete_label()
+
+    assert editor.detection_boxes_dict == {0: [{'label': 'cat', 'x': 0, 'y': 0, 'width': 1, 'height': 1}]}
+    assert editor.global_labels == {'cat'}
+    assert editor.saved == []
+
+
+def test_stats_mode_deletes_every_box_with_that_label(monkeypatch):
+    """Stats 模式快捷键删除当前图片该标签的所有框（不跨图片）。"""
+    import pastelabel.engine.label_manager as lm
+    monkeypatch.setattr(lm.dialog_helpers, "question", lambda *a, **k: lm.dialog_helpers.QMessageBox.Yes)
+
+    boxes = [{'label': 'cat', 'x': 0, 'y': 0, 'width': 1, 'height': 1},
+             {'label': 'cat', 'x': 5, 'y': 5, 'width': 1, 'height': 1},
+             {'label': 'dog', 'x': 9, 'y': 9, 'width': 1, 'height': 1}]
+    editor = FakeEditor([FakeItem('cat')], boxes)
+    _manager(editor).delete_selected_label()
+
+    # 当前图片的 cat 框全部删除，dog 保留
+    assert [b['label'] for b in editor.detection_boxes] == ['dog']
+    assert editor.global_labels == {'dog'}
+
+
+def test_all_mode_deletes_only_the_selected_box():
+    boxes = [{'label': 'cat', 'x': 0, 'y': 0, 'width': 1, 'height': 1},
+             {'label': 'cat', 'x': 5, 'y': 5, 'width': 1, 'height': 1}]
+    editor = FakeEditor([FakeItem('cat', box_index=1)], boxes, mode='all')
+    _manager(editor).delete_selected_label()
+
+    assert len(editor.detection_boxes) == 1
+    # 仍有一个 cat 框在用，全局标签不能被移除
+    assert editor.global_labels == {'cat'}
+
+
+def test_no_selection_is_a_noop(monkeypatch):
+    import pastelabel.engine.label_manager as lm
+    calls = []
+    monkeypatch.setattr(lm.dialog_helpers, "question",
+                        lambda *a, **k: calls.append(a) or lm.dialog_helpers.QMessageBox.Yes)
+
+    editor = FakeEditor([], [{'label': 'cat', 'x': 0, 'y': 0, 'width': 1, 'height': 1}])
+    _manager(editor).delete_selected_label()
+
+    assert calls == []
+    assert len(editor.detection_boxes) == 1
+
+
+def test_deleted_label_is_written_back_to_json():
+    editor = FakeEditor([FakeItem('cat')], [{'label': 'cat', 'x': 0, 'y': 0, 'width': 1, 'height': 1}])
+    _manager(editor).delete_selected_label()
+
+    assert editor.saved == [0]
+
+
+def test_canvas_selection_is_cleared_after_delete():
+    editor = FakeEditor([FakeItem('cat')], [{'label': 'cat', 'x': 0, 'y': 0, 'width': 1, 'height': 1}])
+    _manager(editor).delete_selected_label()
+
+    assert editor.canvas.selected_box is None
+    assert editor.canvas.selected_boxes == []
+
+
+# ---------- 主窗口转发 ----------
+
+def test_main_window_forwards_to_the_non_confirming_variant():
+    from pastelabel.ui.main_window import ImageEditor
+    source = inspect.getsource(ImageEditor.delete_selected_label)
+    assert "label_manager.delete_selected_label()" in source
+    # 不能误转发到带确认的 delete_label
+    assert "label_manager.delete_label()" not in source
+
+
+def test_label_manager_exposes_both_variants():
+    assert hasattr(LabelManager, "delete_selected_label")
+    assert hasattr(LabelManager, "delete_label")
+
+
+def test_shortcut_and_menu_have_different_scope():
+    """快捷键和右键菜单的删除范围不同。
+    
+    - 快捷键 delete_selected_label：stats 模式只删当前图片
+    - 右键菜单 delete_label：stats 模式跨图片删除（带确认）
+    """
+    source = LABEL_MANAGER_SRC.read_text(encoding="utf-8")
+    assert "def delete_selected_label(self)" in source
+    assert "def delete_label(self)" in source
+    # 快捷键不调用 _delete_label_from_item（独立实现）
+    delete_selected_src = source.split("def delete_selected_label(self)")[1].split("\n    def ")[0]
+    assert "_delete_label_from_item" not in delete_selected_src

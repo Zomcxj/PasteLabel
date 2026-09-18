@@ -85,6 +85,7 @@ class EventHandlerMixin:
             'redo': self.redo,
             'remove_image': lambda: self.canvas._remove_current_background(),
             'restore_image': lambda: self.canvas._restore_current_background(),
+            'delete_label': self.delete_selected_label,
             'fit_view': lambda: (self.canvas.reset_view(), self.canvas.update()),
             'copy_selected_labels': self.copy_selected_labels_to_active_cache_slot,
         }

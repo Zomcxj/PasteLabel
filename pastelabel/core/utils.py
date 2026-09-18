@@ -39,6 +39,27 @@ class PathUtils:
             return normalized.replace('\\', '/')
     
     @staticmethod
+    def to_relative_display_path(path, base):
+        """
+        把路径转成相对 base 目录的显示路径。
+
+        base 为空、path 与 base 不同盘符（Windows）时回退为绝对显示路径。
+        :param path: 要显示的路径
+        :param base: 基准目录
+        :return: 显示格式的相对路径，无法相对化时返回绝对显示路径
+        """
+        if not path:
+            return path
+        if not base:
+            return PathUtils.to_display_path(path)
+        try:
+            relative = os.path.relpath(path, base)
+        except ValueError:
+            # Windows 下跨盘符无法求相对路径
+            return PathUtils.to_display_path(path)
+        return PathUtils.to_display_path(relative)
+
+    @staticmethod
     def to_file_path(path):
         """
         将路径转换为文件系统格式

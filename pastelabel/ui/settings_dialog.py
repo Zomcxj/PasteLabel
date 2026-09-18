@@ -128,6 +128,7 @@ class SettingsDialog(QDialog):
             'zoom_out': tr("缩小"),
             'remove_image': tr("移除图片"),
             'restore_image': tr("恢复图片"),
+            'delete_label': tr("删除标签"),
             'label_cache_slot_1': tr("缓存槽1"),
             'label_cache_slot_2': tr("缓存槽2"),
             'label_cache_slot_3': tr("缓存槽3"),

@@ -109,13 +109,22 @@ def get_config_path():
 
 def load_config():
     """加载完整配置"""
+    config = {}
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                config = json.load(f)
         except Exception:
             pass
-    return {}
+    
+    # 迁移旧版快捷键：delete_label 从 Ctrl+Shift+Delete 改为 Ctrl+Shift+Z
+    shortcuts = config.get('shortcuts', {})
+    if shortcuts.get('delete_label') == 'Ctrl+Shift+Delete':
+        shortcuts['delete_label'] = 'Ctrl+Shift+Z'
+        config['shortcuts'] = shortcuts
+        save_config(config)  # 自动保存迁移后的配置
+    
+    return config
 
 
 def save_config(config):
@@ -300,6 +309,7 @@ def load_all():
         'label_font_size': config.get('label_font_size', DETECTION_BOX_CONFIG['label_font_size']),
         'label_position': config.get('label_position', DETECTION_BOX_CONFIG['label_position']),
         'canvas_image_copy_enabled': bool(config.get('canvas_image_copy_enabled', False)),
+        'relative_path_display': bool(config.get('relative_path_display', False)),
         'magnifier_enabled': bool(config.get('magnifier_enabled', False)),
         'magnifier_position': str(config.get('magnifier_position', MAGNIFIER_CONFIG['position'])),
         'magnifier_zoom': float(config.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom'])),
@@ -328,7 +338,8 @@ def load_all():
 def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
              grid_line_width=None, grid_alpha=None, resize_handle_size=None,
              label_font_size=None, label_position=None,
-             canvas_image_copy_enabled=None, magnifier_enabled=None,
+             canvas_image_copy_enabled=None, relative_path_display=None,
+             magnifier_enabled=None,
              magnifier_position=None, magnifier_zoom=None, magnifier_size=None,
              label_cache_slots=None, nudge_step=None,
                detection_box_scale_step=None, paste_item_scale_step=None,
@@ -357,6 +368,8 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['label_position'] = label_position
     if canvas_image_copy_enabled is not None:
         config['canvas_image_copy_enabled'] = bool(canvas_image_copy_enabled)
+    if relative_path_display is not None:
+        config['relative_path_display'] = bool(relative_path_display)
     if magnifier_enabled is not None:
         config['magnifier_enabled'] = bool(magnifier_enabled)
     if magnifier_position is not None:

@@ -2,6 +2,7 @@
 标签管理器模块 - 管理标签的增删改查操作
 """
 
+import os
 from typing import TYPE_CHECKING
 from PyQt5.QtCore import pyqtSignal, QObject
 from PyQt5.QtWidgets import QMenu, QAction, QListWidgetItem
@@ -239,6 +240,49 @@ class LabelManager(QObject):
         # Stats mode: full rename (memory + color + stats + disk)
         self.rename_detection_label(old_label, new_label, rewrite_disk=True)
     
+    def delete_selected_label(self):
+        """快捷键删除当前图片的整个标签文件（清空所有检测框 + 删除 JSON），不弹确认框。"""
+        idx = self.editor.current_background_index
+        if idx < 0 or idx >= len(self.editor.background_images):
+            return
+        
+        file_path = self.editor.background_images[idx]
+        json_path = os.path.splitext(file_path)[0] + ".json"
+        has_boxes = bool(self.editor.detection_boxes)
+        has_json = os.path.isfile(json_path)
+        
+        if not has_boxes and not has_json:
+            return
+        
+        # 清空内存中的检测框
+        self.editor.detection_boxes = []
+        self.editor.detection_boxes_dict[idx] = []
+        self.editor.canvas.selected_box = None
+        self.editor.canvas.selected_boxes = []
+        
+        # 删除磁盘 JSON 文件
+        if has_json:
+            try:
+                os.remove(json_path)
+            except OSError:
+                from ..core.exception_hook import _write_log
+                _write_log(f"删除标签文件失败: {json_path}")
+        
+        # 刷新界面
+        refresh = getattr(self.editor, "_refresh_background_item_status", None)
+        if callable(refresh):
+            refresh(idx, file_path)
+        self.editor.update_label_list()
+        self.editor.canvas.update()
+        
+        # 自动跳转下一张
+        if self.editor.background_images:
+            new_idx = min(idx, len(self.editor.background_images) - 1)
+            self.editor.switch_background_to_index(new_idx)
+            row = self.editor._find_bg_list_row_for_index(new_idx)
+            if row is not None:
+                self.editor.background_list.setCurrentRow(row)
+
     def delete_label(self):
         """删除标签。
 
@@ -248,8 +292,9 @@ class LabelManager(QObject):
         selected_items = self.editor.label_list.selectedItems()
         if not selected_items:
             return
+        self._delete_label_from_item(selected_items[0], confirm=True)
 
-        item = selected_items[0]
+    def _delete_label_from_item(self, item, confirm=True):
         label_text = item.text()
         label_to_delete = extract_label_name(label_text)
         mode = getattr(self.editor, '_bg_label_list_mode', 'stats')
@@ -258,14 +303,15 @@ class LabelManager(QObject):
         if mode == 'all' and isinstance(box_index, int):
             if not (0 <= box_index < len(self.editor.detection_boxes)):
                 return
-            reply = dialog_helpers.question(
-                self.editor, tr("确认删除"),
-                f"{tr('确定要删除此检测框')} '{label_to_delete}' {tr('吗？')}",
-                dialog_helpers.QMessageBox.Yes | dialog_helpers.QMessageBox.No,
-                dialog_helpers.QMessageBox.No
-            )
-            if reply != dialog_helpers.QMessageBox.Yes:
-                return
+            if confirm:
+                reply = dialog_helpers.question(
+                    self.editor, tr("确认删除"),
+                    f"{tr('确定要删除此检测框')} '{label_to_delete}' {tr('吗？')}",
+                    dialog_helpers.QMessageBox.Yes | dialog_helpers.QMessageBox.No,
+                    dialog_helpers.QMessageBox.No
+                )
+                if reply != dialog_helpers.QMessageBox.Yes:
+                    return
             del self.editor.detection_boxes[box_index]
             current_index = self.editor.current_background_index
             if current_index >= 0:
@@ -290,45 +336,47 @@ class LabelManager(QObject):
             self.data_changed.emit()
             return
 
-        delete_msg = f"{tr('吗？')}\n{tr('将从所有背景中删除该标签的检测框。')}"
-        reply = dialog_helpers.question(
-            self.editor, tr("确认删除"),
-            f"{tr('确定要删除标签')} '{label_to_delete}' {delete_msg}",
-            dialog_helpers.QMessageBox.Yes | dialog_helpers.QMessageBox.No,
-            dialog_helpers.QMessageBox.No
-        )
+        if confirm:
+            delete_msg = f"{tr('吗？')}\n{tr('将从所有背景中删除该标签的检测框。')}"
+            reply = dialog_helpers.question(
+                self.editor, tr("确认删除"),
+                f"{tr('确定要删除标签')} '{label_to_delete}' {delete_msg}",
+                dialog_helpers.QMessageBox.Yes | dialog_helpers.QMessageBox.No,
+                dialog_helpers.QMessageBox.No
+            )
+            if reply != dialog_helpers.QMessageBox.Yes:
+                return
 
-        if reply == dialog_helpers.QMessageBox.Yes:
-            current_index = self.editor.current_background_index
-            if current_index >= 0:
-                self.editor.detection_boxes_dict[current_index] = \
-                    self.editor.detection_boxes.copy()
+        current_index = self.editor.current_background_index
+        if current_index >= 0:
+            self.editor.detection_boxes_dict[current_index] = \
+                self.editor.detection_boxes.copy()
 
-            # 从所有背景的检测框中删除，并以当前背景索引重新同步当前列表
-            for index, boxes in list(self.editor.detection_boxes_dict.items()):
-                self.editor.detection_boxes_dict[index] = [
-                    box for box in boxes
-                    if box.get("label") != label_to_delete
-                ]
+        # 从所有背景的检测框中删除，并以当前背景索引重新同步当前列表
+        for index, boxes in list(self.editor.detection_boxes_dict.items()):
+            self.editor.detection_boxes_dict[index] = [
+                box for box in boxes
+                if box.get("label") != label_to_delete
+            ]
 
-            if current_index >= 0:
-                self.editor.detection_boxes = \
-                    self.editor.detection_boxes_dict.get(current_index, []).copy()
-            else:
-                self.editor.detection_boxes = []
-            self.editor.canvas.selected_box = None
-            self.editor.canvas.selected_boxes = []
+        if current_index >= 0:
+            self.editor.detection_boxes = \
+                self.editor.detection_boxes_dict.get(current_index, []).copy()
+        else:
+            self.editor.detection_boxes = []
+        self.editor.canvas.selected_box = None
+        self.editor.canvas.selected_boxes = []
 
-            # 更新全局标签
-            if label_to_delete in self.editor.global_labels:
-                self.editor.global_labels.remove(label_to_delete)
+        # 更新全局标签
+        if label_to_delete in self.editor.global_labels:
+            self.editor.global_labels.remove(label_to_delete)
 
-            # 保存到所有 JSON 文件：必须传 current_index，否则会把当前图片的标签写到其它图片
-            for index in self.editor.detection_boxes_dict:
-                self._save_detection_json_for_index(index)
+        # 保存到所有 JSON 文件：必须传 current_index，否则会把当前图片的标签写到其它图片
+        for index in self.editor.detection_boxes_dict:
+            self._save_detection_json_for_index(index)
 
-            self.label_list_changed.emit()
-            self.data_changed.emit()
+        self.label_list_changed.emit()
+        self.data_changed.emit()
 
     def _save_detection_json_for_index(self, index):
         """按背景索引保存检测框，避免当前图片与其它图片标签串写。"""
@@ -353,7 +401,6 @@ class LabelManager(QObject):
             file_path,
             background_name,
             "",
-            canvas_items=[],
             image_width=image_width,
             image_height=image_height,
             current_index=index,

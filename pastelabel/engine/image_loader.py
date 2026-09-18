@@ -296,6 +296,22 @@ class ImageLoaderMixin:
                 self._pixmap_cache.pop(old, None)
         return pixmap
 
+    def _relative_path_base(self):
+        """相对路径基准：已加载背景图文件夹的父目录。
+
+        没有基准（未加载文件夹）时返回空串，调用方回退为绝对路径。
+        """
+        folder = getattr(self, '_memory_background_path', '') or ''
+        if not folder:
+            return ''
+        return os.path.dirname(folder)
+
+    def _display_path_for(self, path):
+        """按「相对路径显示」开关决定列表项显示的路径文本。"""
+        if not getattr(self, '_relative_path_display', False):
+            return PathUtils.to_display_path(path)
+        return PathUtils.to_relative_display_path(path, self._relative_path_base())
+
     def upload_background(self):
         """上传背景图片"""
         files, _ = QFileDialog.getOpenFileNames(
@@ -315,7 +331,7 @@ class ImageLoaderMixin:
                 if not pixmap.isNull():
                     new_index = len(self.background_images)
                     self.background_images.append(file)
-                    display_path = PathUtils.to_display_path(file)
+                    display_path = self._display_path_for(file)
                     item = QListWidgetItem(display_path)
                     decorate_background_list_item(item, file, new_index)
                     self.background_list.addItem(item)
@@ -387,7 +403,7 @@ class ImageLoaderMixin:
 
         first_path = image_files[0]
         self.background_images.append(first_path)
-        display_path = PathUtils.to_display_path(first_path)
+        display_path = self._display_path_for(first_path)
         item = QListWidgetItem(display_path)
         decorate_background_list_item(item, first_path, 0)
         self.background_list.addItem(item)
@@ -464,7 +480,7 @@ class ImageLoaderMixin:
             file_path = self._pending_image_files[self._pending_image_index]
             idx = self._pending_image_index
             self.background_images.append(file_path)
-            display_path = PathUtils.to_display_path(file_path)
+            display_path = self._display_path_for(file_path)
             item = QListWidgetItem(display_path)
             decorate_background_list_item(item, file_path, idx)
             mode = getattr(self, '_bg_annotation_filter', 'all')

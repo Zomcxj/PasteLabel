@@ -86,4 +86,4 @@ def test_options_popup_uses_correct_core_import_depth():
     source = (ROOT / "pastelabel" / "ui" / "mixins" / "options_popup.py").read_text(encoding="utf-8")
 
     assert "from ..core import config_manager" not in source
-    assert source.count("from ...core import config_manager") == 2
+    assert source.count("from ...core import config_manager") == 3

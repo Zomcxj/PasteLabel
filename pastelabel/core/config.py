@@ -146,6 +146,7 @@ SHORTCUT_CONFIG = {
     'zoom_out': 'Ctrl+-',
     'remove_image': 'Ctrl+Shift+D',
     'restore_image': 'Ctrl+Shift+R',
+    'delete_label': 'Ctrl+Shift+Z',
 }
 
 LABEL_CACHE_SLOTS = [

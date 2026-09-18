@@ -114,6 +114,12 @@ class OptionsPopupMixin:
         self.magnifier_action.triggered.connect(self._on_magnifier_menu_changed)
         self._menu_actions.append((self.magnifier_action, None, None))
 
+        self.relative_path_action = self.options_menu.addAction(tr("相对路径显示"))
+        self.relative_path_action.setCheckable(True)
+        self.relative_path_action.setChecked(getattr(self, '_relative_path_display', False))
+        self.relative_path_action.triggered.connect(self._on_relative_path_menu_changed)
+        self._menu_actions.append((self.relative_path_action, None, None))
+
         self.options_btn.setMenu(self.options_menu)
         layout.addWidget(self.options_btn)
 
@@ -191,6 +197,7 @@ class OptionsPopupMixin:
             (tr("添加文件名前缀"), None, self.prefix_checkbox, lambda cb=self.prefix_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.prefix_checkbox: cb.isChecked()),
             (tr("画布图片复制"), None, None, lambda: self._on_canvas_copy_menu_changed(not getattr(self, '_canvas_image_copy_enabled', False)), lambda: getattr(self, '_canvas_image_copy_enabled', False)),
             (tr("窗口放大器"), None, None, lambda: self._on_magnifier_menu_changed(not getattr(self, '_magnifier_enabled', False)), lambda: getattr(self, '_magnifier_enabled', False)),
+            (tr("相对路径显示"), None, None, lambda: self._on_relative_path_menu_changed(not getattr(self, '_relative_path_display', False)), lambda: getattr(self, '_relative_path_display', False)),
         ]
         for text, shortcut_action, checkbox, handler, getter in items:
             button = QPushButton()
@@ -240,6 +247,16 @@ class OptionsPopupMixin:
         config_manager.save_all(magnifier_enabled=self._magnifier_enabled)
         if hasattr(self, 'canvas'):
             self.canvas.update()
+
+    def _on_relative_path_menu_changed(self, checked):
+        """切换背景列表的相对路径显示，并立即刷新列表文本。"""
+        self._relative_path_display = bool(checked)
+        if hasattr(self, 'relative_path_action'):
+            self.relative_path_action.setChecked(self._relative_path_display)
+        from ...core import config_manager
+        config_manager.save_all(relative_path_display=self._relative_path_display)
+        if hasattr(self, '_refresh_background_path_texts'):
+            self._refresh_background_path_texts()
 
     def _show_memory_records(self):
         """显示记忆记录弹窗"""

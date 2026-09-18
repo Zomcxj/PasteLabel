@@ -105,6 +105,7 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         if settings.get('label_position') in ('outside', 'inside'):
             DETECTION_BOX_CONFIG['label_position'] = settings['label_position']
         self._canvas_image_copy_enabled = bool(settings.get('canvas_image_copy_enabled', False))
+        self._relative_path_display = bool(settings.get('relative_path_display', False))
         self._magnifier_enabled = bool(settings.get('magnifier_enabled', False))
         MAGNIFIER_CONFIG['zoom'] = max(0.8, min(3.0, float(settings.get('magnifier_zoom', MAGNIFIER_CONFIG['zoom']))))
         MAGNIFIER_CONFIG['size'] = max(80, min(400, int(settings.get('magnifier_size', MAGNIFIER_CONFIG['size']))))
@@ -141,6 +142,8 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         self._canvas_drag_active = False
         if not hasattr(self, '_canvas_image_copy_enabled'):
             self._canvas_image_copy_enabled = False
+        if not hasattr(self, '_relative_path_display'):
+            self._relative_path_display = False
         if not hasattr(self, '_magnifier_enabled'):
             self._magnifier_enabled = False
         self.drag_offset = QPoint(0, 0)
@@ -239,6 +242,10 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
     def delete_label(self):
         """删除标签"""
         self.label_manager.delete_label()
+
+    def delete_selected_label(self):
+        """快捷键删除选中标签（不弹确认框）"""
+        self.label_manager.delete_selected_label()
 
     def update_global_labels(self):
         """更新全局标签列表"""
@@ -398,10 +405,15 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         self.show_grid_checkbox.setChecked(False)
         self._canvas_image_copy_enabled = False
         self._magnifier_enabled = False
+        self._relative_path_display = False
         if hasattr(self, 'canvas_copy_action'):
             self.canvas_copy_action.setChecked(False)
         if hasattr(self, 'magnifier_action'):
             self.magnifier_action.setChecked(False)
+        if hasattr(self, 'relative_path_action'):
+            self.relative_path_action.setChecked(False)
+        if hasattr(self, '_refresh_background_path_texts'):
+            self._refresh_background_path_texts()
         if hasattr(self, 'update_shortcuts'):
             self.update_shortcuts()
         if hasattr(self, '_refresh_menu_shortcuts'):
@@ -544,7 +556,6 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         """追加背景图片（不替换已有，自动去重）"""
         from PyQt5.QtGui import QPixmap
         from PyQt5.QtWidgets import QApplication
-        from ..core.utils import PathUtils
         first_new = len(self.background_images)
         for file in files:
             if file in self.background_images:
@@ -553,7 +564,7 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
             if not pixmap.isNull():
                 new_index = len(self.background_images)
                 self.background_images.append(file)
-                display_path = PathUtils.to_display_path(file)
+                display_path = self._display_path_for(file)
                 from PyQt5.QtWidgets import QListWidgetItem
                 from ..engine.image_loader import decorate_background_list_item
                 item = QListWidgetItem(display_path)

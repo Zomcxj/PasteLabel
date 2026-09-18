@@ -73,6 +73,8 @@ class ListsMixin:
         self.background_list = DragOutListWidget()
         self.background_list.setObjectName("bgList")
         self.background_list.itemClicked.connect(self.select_background)
+        self.background_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.background_list.customContextMenuRequested.connect(self.show_background_context_menu)
         self.background_list.setMinimumHeight(0)
         group_layout.addWidget(self.background_list, 1)
 

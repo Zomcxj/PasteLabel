@@ -255,17 +255,74 @@ class BackgroundListMixin:
         self.status_label.setText(f"Path: {mode_text}")
         QTimer.singleShot(2000, lambda: self.status_label.setText(""))
 
+    def _refresh_background_path_texts(self):
+        """开关切换后原地刷新列表项文本，无需重载数据集。"""
+        from ...core.utils import PathUtils
+        try:
+            if getattr(self, '_is_delete_view', False):
+                files = list(getattr(self, '_delete_files', []) or [])
+            else:
+                files = list(getattr(self, 'background_images', []) or [])
+            lst = getattr(self, 'background_list', None)
+            if lst is None:
+                return
+            for row in range(lst.count()):
+                item = lst.item(row)
+                if item is None:
+                    continue
+                path = self._bg_path_for_item(item, row, files)
+                if path:
+                    item.setText(self._display_path_for(path))
+        except Exception as e:
+            from ...core.exception_hook import _write_log
+            _write_log(f"刷新背景路径显示失败: {e}")
+
+    def _bg_path_for_item(self, item, row, files):
+        """取列表项对应的真实文件路径（优先用索引/路径元数据，回退按行号）。"""
+        from ...engine.image_loader import BG_ROLE_INDEX, BG_ROLE_PATH
+        stored = item.data(BG_ROLE_PATH) if hasattr(item, 'data') else None
+        if stored:
+            return stored
+        index = item.data(BG_ROLE_INDEX) if hasattr(item, 'data') else None
+        if isinstance(index, int) and 0 <= index < len(files):
+            return files[index]
+        if 0 <= row < len(files):
+            return files[row]
+        return ''
+
+    def show_background_context_menu(self, position):
+        """背景图列表右键菜单：复制图片全局路径。"""
+        lst = getattr(self, 'background_list', None)
+        if lst is None:
+            return
+        item = lst.itemAt(position)
+        if item is None:
+            return
+        files = list(getattr(self, '_delete_files', []) or []) \
+            if getattr(self, '_is_delete_view', False) \
+            else list(getattr(self, 'background_images', []) or [])
+        path = self._bg_path_for_item(item, lst.row(item), files)
+        if not path:
+            return
+        from PyQt5.QtWidgets import QMenu
+        from PyQt5.QtGui import QGuiApplication
+        from ..i18n import t as tr
+        menu = QMenu(self)
+        copy_action = menu.addAction(tr("复制图片路径"))
+        chosen = menu.exec_(lst.mapToGlobal(position))
+        if chosen == copy_action:
+            QGuiApplication.clipboard().setText(os.path.abspath(path))
+
     def _show_work_view(self):
         """显示工作路径列表"""
         self.background_list.clear()
-        from ...core.utils import PathUtils
         from ...core.config import SUPPORTED_IMAGE_EXTENSIONS
         from ...engine.image_loader import decorate_background_list_item
         for i, path in enumerate(self.background_images):
             ext = os.path.splitext(path)[1].lower()
             if ext in SUPPORTED_IMAGE_EXTENSIONS:
                 from PyQt5.QtWidgets import QListWidgetItem
-                item = QListWidgetItem(PathUtils.to_display_path(path))
+                item = QListWidgetItem(self._display_path_for(path))
                 decorate_background_list_item(item, path, i)
                 self.background_list.addItem(item)
         self._refresh_bg_filter_button()
@@ -298,13 +355,12 @@ class BackgroundListMixin:
             delete_dir = os.path.join(
                 os.path.dirname(self.background_images[0]), '_delete_')
             if os.path.isdir(delete_dir):
-                from ...core.utils import PathUtils
                 for f in sorted(os.listdir(delete_dir)):
                     fp = os.path.join(delete_dir, f)
                     ext = os.path.splitext(f)[1].lower()
                     if os.path.isfile(fp) and ext in SUPPORTED_IMAGE_EXTENSIONS:
                         self._delete_files.append(fp)
-                        self.background_list.addItem(PathUtils.to_display_path(fp))
+                        self.background_list.addItem(self._display_path_for(fp))
         if self._delete_files:
             target = getattr(self, '_saved_delete_idx', 0)
             target = min(target, len(self._delete_files) - 1)

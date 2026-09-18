@@ -112,7 +112,7 @@ class TranslationMixin:
             sc = self._get_shortcut('draw_box')
             self._draw_box_action.setText(f"{tr('绘制BOX')}\t{sc}")
         if hasattr(self, '_menu_actions'):
-            menu_texts = [tr("显示BOX"), tr("显示Label"), tr("显示贴图名"), tr("自动保存B"), tr("自动保存P"), tr("显示网格线"), tr("添加文件名前缀"), tr("画布图片复制"), tr("窗口放大器")]
+            menu_texts = [tr("显示BOX"), tr("显示Label"), tr("显示贴图名"), tr("自动保存B"), tr("自动保存P"), tr("显示网格线"), tr("添加文件名前缀"), tr("画布图片复制"), tr("窗口放大器"), tr("相对路径显示")]
             for i, item in enumerate(self._menu_actions):
                 action = item[0]
                 shortcut_action = item[2] if len(item) > 2 else None
@@ -155,7 +155,7 @@ class TranslationMixin:
             sc = self._get_shortcut('draw_box')
             self._draw_box_action.setText(f"{tr('绘制BOX')}\t{sc}")
         if hasattr(self, '_menu_actions'):
-            menu_texts = [tr("显示BOX"), tr("显示Label"), tr("显示贴图名"), tr("自动保存B"), tr("自动保存P"), tr("显示网格线"), tr("添加文件名前缀"), tr("画布图片复制"), tr("窗口放大器")]
+            menu_texts = [tr("显示BOX"), tr("显示Label"), tr("显示贴图名"), tr("自动保存B"), tr("自动保存P"), tr("显示网格线"), tr("添加文件名前缀"), tr("画布图片复制"), tr("窗口放大器"), tr("相对路径显示")]
             for i, item in enumerate(self._menu_actions):
                 action = item[0]
                 shortcut_action = item[2] if len(item) > 2 else None

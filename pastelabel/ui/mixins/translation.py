@@ -128,8 +128,10 @@ class TranslationMixin:
             self.upload_b_btn.setToolTip(tr("选择贴图"))
         if hasattr(self, 'load_small_folder_btn'):
             self.load_small_folder_btn.setToolTip(tr("加载贴图文件夹"))
+        if hasattr(self, 'upload_bg_label_btn'):
+            self.upload_bg_label_btn.setToolTip(tr("导入背景标签文件"))
         if hasattr(self, 'upload_paste_label_btn'):
-            self.upload_paste_label_btn.setToolTip(tr("选择标签文件"))
+            self.upload_paste_label_btn.setToolTip(tr("导入贴图标签文件"))
         if hasattr(self, 'random_paste_btn'):
             self.random_paste_btn.setToolTip(tr("随机贴图"))
         if hasattr(self, 'batch_paste_btn'):

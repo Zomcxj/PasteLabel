@@ -164,7 +164,9 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
             if total > 2 and i % 5 == 0:
                 QApplication.processEvents()
         if labels and hasattr(self._editor, 'background_dataset_labels'):
-            self._editor.background_dataset_labels = set(labels)
+            self._editor._scanned_background_labels = set(labels)
+            imported = set(getattr(self._editor, 'imported_background_labels', None) or ())
+            self._editor.background_dataset_labels = set(labels) | imported
         return sorted(labels)
 
     def _fast_labels(self):

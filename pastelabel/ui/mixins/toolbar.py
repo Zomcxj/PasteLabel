@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButt
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
 from ...core.config import WINDOW_CONFIG, PASTE_PARAMS, THUMBNAIL_CONFIG, DEFAULT_PREFIX
-from ..icons import _load_svg_icon, SVG_FILE, SVG_FOLDER, SUN_SVG
+from ..icons import _load_svg_icon, SVG_FILE, SVG_FOLDER, SVG_IMPORT, SVG_PASTE_LABEL, SUN_SVG
 from ..i18n import t as tr
 from ..segmented_control import AnimatedSegmentedControl
 
@@ -81,8 +81,14 @@ class ToolbarMixin:
         upload_layout.addSpacing(2)
         self.label_lbl = QLabel(tr("标签:"))
         upload_layout.addWidget(self.label_lbl)
+        # 背景图标签导入：读 txt 后并入背景标签集合（与扫描结果取并集）
+        self.upload_bg_label_btn = self._create_svg_button(
+            SVG_IMPORT, self.upload_background_labels,
+            tr("导入背景标签文件"), label_color, "labelBtn"
+        )
+        upload_layout.addWidget(self.upload_bg_label_btn)
         self.upload_paste_label_btn = self._create_svg_button(
-            SVG_FILE, self.upload_paste_labels, tr("选择标签文件"), label_color, "labelBtn"
+            SVG_PASTE_LABEL, self.upload_paste_labels, tr("导入贴图标签文件"), label_color, "labelBtn"
         )
         upload_layout.addWidget(self.upload_paste_label_btn)
 

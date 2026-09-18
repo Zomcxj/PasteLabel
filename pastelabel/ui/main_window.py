@@ -153,6 +153,10 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         self._last_paste_count = 0
         self.global_labels = set()
         self.background_dataset_labels = set()
+        # 扫描结果（每次扫描整体替换）与手动导入的类别分开存，
+        # 对外暴露的 background_dataset_labels 是两者并集。
+        self._scanned_background_labels = set()
+        self.imported_background_labels = set()
         self._bg_label_list_mode = 'stats'
         self.pressed_box_index = None
         self._bg_annotation_filter = 'all'  # all | annotated | unannotated | empty

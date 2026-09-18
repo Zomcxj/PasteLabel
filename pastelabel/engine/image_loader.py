@@ -250,6 +250,12 @@ class ImageLoaderMixin:
             self.background_dataset_labels.clear()
         else:
             self.background_dataset_labels = set()
+        # 换数据集等于换一套类别，手动导入的也要清掉
+        if hasattr(self, 'imported_background_labels'):
+            self.imported_background_labels.clear()
+        else:
+            self.imported_background_labels = set()
+        self._scanned_background_labels = set()
         self._cached_bg_label_stats = []
         self._cached_bg_label_stats_path = ""
         if hasattr(self, '_dataset_stats_dirty'):
@@ -574,10 +580,59 @@ class ImageLoaderMixin:
     def upload_paste_labels(self):
         """上传贴图标签文件"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, tr("选择贴图标签文件"), "", "Text Files (*.txt)"
+            self, tr("导入贴图标签文件"), "", "Text Files (*.txt)"
         )
         if file_path:
             self.load_paste_label_file(file_path)
+
+    def upload_background_labels(self):
+        """上传背景标签文件（一行一个类别）。"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, tr("选择背景标签文件"), "", "Text Files (*.txt)"
+        )
+        if file_path:
+            self.load_background_label_file(file_path)
+
+    def load_background_label_file(self, file_path):
+        """从 txt 读背景图类别，与扫描结果取并集（不覆盖已有类别）。
+
+        导入的类别记在 imported_background_labels 里，因为
+        background_dataset_labels 每次扫描都是整体赋值，单独存一份才不会丢。
+        """
+        if not hasattr(self, 'imported_background_labels'):
+            self.imported_background_labels = set()
+        try:
+            labels = []
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        parts = line.split()
+                        if parts:
+                            labels.append(parts[0])
+        except Exception as e:
+            QMessageBox.critical(self, tr("错误"), f"{tr('读取标签文件失败：')}{e}")
+            return
+
+        labels = [label for label in labels if label]
+        if not labels:
+            QMessageBox.warning(self, tr("警告"), tr("未找到有效的标签"))
+            return
+
+        self.imported_background_labels.update(labels)
+        self._sync_background_labels()
+        self._memory_label_path = file_path
+
+    def _sync_background_labels(self):
+        """把导入的类别并进扫描结果，并刷新标签列表。"""
+        if not hasattr(self, 'background_dataset_labels'):
+            self.background_dataset_labels = set()
+        scanned = set(getattr(self, '_scanned_background_labels', None) or ())
+        imported = set(getattr(self, 'imported_background_labels', None) or ())
+        self.background_dataset_labels = scanned | imported
+        self.global_labels.update(imported)
+        if hasattr(self, 'update_label_list'):
+            self.update_label_list()
 
     def load_paste_label_file(self, file_path):
         """从指定标签文件加载贴图标签，供文件按钮和记忆记录复用。"""
@@ -760,9 +815,12 @@ class ImageLoaderMixin:
         self._background_label_scan_in_progress = False
         self._background_label_scan_pending = False
         labels = set(labels or ())
+        # 扫描结果单独存一份；对外暴露的是「扫描 ∪ 手动导入」，手动导入不丢
+        self._scanned_background_labels = set(labels)
+        imported = set(getattr(self, 'imported_background_labels', None) or ())
         if not hasattr(self, 'background_dataset_labels'):
             self.background_dataset_labels = set()
-        self.background_dataset_labels = set(labels)
+        self.background_dataset_labels = labels | imported
         self.global_labels.update(labels)
         if isinstance(counts, dict):
             color_map = getattr(self, 'label_color_map', None) or {}

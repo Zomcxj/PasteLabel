@@ -113,28 +113,37 @@ class MemoryRecordMixin:
         if isinstance(stats, list):
             self._cached_bg_label_stats = list(stats)
             self._cached_bg_label_stats_path = bg_path or ''
-            restored = {
-                str(item.get('label', '')).strip()
-                for item in stats
-                if isinstance(item, dict) and str(item.get('label', '')).strip()
-            }
-            if restored:
-                if not hasattr(self, 'background_dataset_labels'):
-                    self.background_dataset_labels = set()
-                self.background_dataset_labels.update(restored)
-                self.global_labels.update(restored)
-                for item in stats:
-                    if not isinstance(item, dict):
-                        continue
-                    label = str(item.get('label', '')).strip()
-                    color = str(item.get('color', '') or '').strip()
-                    if label and color and hasattr(self, 'label_color_map'):
-                        self.label_color_map.setdefault(label, color)
-                if hasattr(self, 'update_label_list'):
-                    self.update_label_list()
+            self._restore_bg_label_stats(stats)
 
         if missing and hasattr(self, 'status_label'):
             self.status_label.setText(f"{tr('路径不存在')}: {missing[0]}")
+
+    def _restore_bg_label_stats(self, stats):
+        """把记忆记录里的类别恢复成可用的标签集合。"""
+        restored = {
+            str(item.get('label', '')).strip()
+            for item in stats
+            if isinstance(item, dict) and str(item.get('label', '')).strip()
+        }
+        if not restored:
+            return
+        if not hasattr(self, 'background_dataset_labels'):
+            self.background_dataset_labels = set()
+        if not hasattr(self, 'imported_background_labels'):
+            self.imported_background_labels = set()
+        # 记录里的类别不算「扫描结果」，放进 imported 才能扛住之后的重新扫描
+        self.imported_background_labels.update(restored)
+        self.background_dataset_labels.update(restored)
+        self.global_labels.update(restored)
+        for item in stats:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get('label', '')).strip()
+            color = str(item.get('color', '') or '').strip()
+            if label and color and hasattr(self, 'label_color_map'):
+                self.label_color_map.setdefault(label, color)
+        if hasattr(self, 'update_label_list'):
+            self.update_label_list()
 
     def _clear_memory_content(self):
         """加载记录前清空当前素材，避免新旧内容混在一起。"""
@@ -149,6 +158,11 @@ class MemoryRecordMixin:
             self.background_dataset_labels.clear()
         else:
             self.background_dataset_labels = set()
+        if hasattr(self, 'imported_background_labels'):
+            self.imported_background_labels.clear()
+        else:
+            self.imported_background_labels = set()
+        self._scanned_background_labels = set()
         self._cached_bg_label_stats = []
         self._cached_bg_label_stats_path = ""
         self._background_label_scan_pending = False

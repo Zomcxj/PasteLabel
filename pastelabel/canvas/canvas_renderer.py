@@ -3,6 +3,7 @@ Canvas 绘制混入 - 负责所有绘制逻辑（背景、贴图、检测框、�
 """
 from PyQt5.QtGui import QPainter, QPixmap, QColor, QPen, QFontMetrics
 from PyQt5.QtCore import Qt, QPointF, QRectF
+import numpy as np
 
 from ..core.config import DETECTION_BOX_CONFIG, PASTE_ITEM_CONFIG, GRID_CONFIG, MAGNIFIER_CONFIG, CROSSHAIR_CONFIG
 from ..ui.theme import ThemeManager
@@ -12,6 +13,9 @@ class CanvasRendererMixin:
 
     def paintEvent(self, event):
         """绘制事件"""
+        # 所有切图路径最终都会重绘，亮度/对比度在此单点重新套用
+        self.apply_display_adjustments()
+
         scene = QPixmap(self.size())
         scene.fill(Qt.transparent)
         sp = QPainter(scene)
@@ -434,3 +438,91 @@ class CanvasRendererMixin:
         painter.drawLine(QPointF(center_x, dst.top()), QPointF(center_x, dst.bottom()))
         painter.drawLine(QPointF(dst.left(), center_y), QPointF(dst.right(), center_y))
         painter.restore()
+
+    # ---------- 画布显示（亮度/对比度）----------
+
+    def apply_brightness_contrast(self, brightness, contrast):
+        """滑块入口：更新参数并立刻套用到当前图。"""
+        self._brightness = brightness
+        self._contrast = contrast
+        self.apply_display_adjustments()
+        self.update()
+
+    def _resolve_adjust_source(self):
+        """找出本轮调整的源图（未套用亮度/对比度的那张）。
+
+        切图时 current_background 会被直接换成新图，这里用身份比较识别：
+        当前图只要不是本方法上一次产出的结果，就说明换图了。
+        """
+        current = getattr(self._editor, 'current_background', None)
+        if current is None:
+            return None
+        if current is getattr(self, '_adjusted_background', None):
+            return getattr(self, '_adjusted_source', None)
+        return current
+
+    def _render_adjusted_background(self, source, brightness, contrast):
+        """按亮度/对比度生成新图；中性参数直接返回源图。"""
+        b_factor = brightness / 50.0
+        c_factor = contrast / 50.0
+        if b_factor == 1.0 and c_factor == 1.0:
+            return source
+        from PyQt5.QtGui import QImage
+        img = source.toImage().convertToFormat(QImage.Format_ARGB32)
+        w, h = img.width(), img.height()
+        ptr = img.bits()
+        ptr.setsize(w * h * 4)
+        pixels = np.frombuffer(ptr, dtype=np.uint8).reshape(h, w, 4)
+        rgb = (pixels[:, :, :3].astype(np.float32) - 128.0) * \
+            (b_factor * c_factor) + 128.0
+        pixels[:, :, :3] = np.clip(rgb, 0, 255).astype(np.uint8)
+        return QPixmap.fromImage(img)
+
+    def apply_display_adjustments(self):
+        """让当前图片带上当前的亮度/对比度。
+
+        由 paintEvent 每次调用，所以切图后会自动重新套用，滑块值本身不重置。
+        按「源图身份 + 参数」跳过重复计算，避免鼠标移动重绘时反复跑像素处理。
+        调整失败时退化为不调整，绝不让绘制路径抛异常。
+        """
+        if getattr(self, '_editor', None) is None:
+            return
+        brightness = getattr(self, '_brightness', 50)
+        contrast = getattr(self, '_contrast', 50)
+        current = getattr(self._editor, 'current_background', None)
+
+        if current is None:
+            self._adjusted_source = None
+            self._adjusted_background = None
+            return
+
+        source = self._resolve_adjust_source()
+        if source is None:
+            self._adjusted_source = None
+            self._adjusted_background = None
+            return
+
+        unchanged = (
+            current is getattr(self, '_adjusted_background', None)
+            and getattr(self, '_adjusted_brightness', None) == brightness
+            and getattr(self, '_adjusted_contrast', None) == contrast
+        )
+        if unchanged:
+            return
+
+        try:
+            result = self._render_adjusted_background(
+                source, brightness, contrast)
+        except Exception as exc:
+            from ..core.exception_hook import _write_log
+            _write_log(f"画布显示调整失败，已跳过: {exc}")
+            self._adjusted_source = source
+            self._adjusted_background = current
+            return
+
+        self._adjusted_source = source
+        self._adjusted_background = result
+        self._adjusted_brightness = brightness
+        self._adjusted_contrast = contrast
+        if result is not source:
+            self._editor.current_background = result

@@ -117,6 +117,28 @@ def natural_sort_key(s):
     return [convert(c) for c in re.split('([0-9]+)', s)]
 
 
+def format_size_ratio(width, height, image_width, image_height):
+    """把框的像素宽高格式化成「像素 + 占图片百分比」。
+
+    占比基准是图片原始宽高，与画布缩放无关。图片尺寸缺失或非正时
+    只返回像素部分，避免除零。
+    """
+    try:
+        w, h = int(width), int(height)
+    except (TypeError, ValueError):
+        w, h = 0, 0
+    base = f"W:{w} H:{h}"
+    try:
+        img_w, img_h = float(image_width), float(image_height)
+        raw_w, raw_h = float(width), float(height)
+    except (TypeError, ValueError):
+        return base
+    if img_w <= 0 or img_h <= 0:
+        return base
+    return (f"{base} ({raw_w / img_w * 100:.1f}% × "
+            f"{raw_h / img_h * 100:.1f}%)")
+
+
 def create_thumbnail(pixmap, max_width, max_height):
     """
     创建缩略图，等比缩放到网格大小，边缘填充透明背景

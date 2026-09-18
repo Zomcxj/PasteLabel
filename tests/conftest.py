@@ -413,7 +413,7 @@ qtgui.QDragEnterEvent = type('QDragEnterEvent', (), {'__init__': lambda self, *a
 qtgui.QDropEvent = type('QDropEvent', (), {'__init__': lambda self, *a: None})
 qtgui.QDrag = type('QDrag', (), {'__init__': lambda self, *a: None, 'exec_': lambda self, *a: 0})
 qtgui.QFontDatabase = type('QFontDatabase', (), {'addApplicationFont': staticmethod(lambda *a: 0)})
-qtgui.QImage = type('QImage', (), {})
+qtgui.QImage = type('QImage', (), {'Format_ARGB32': 5})
 
 qtwidgets = types.ModuleType('PyQt5.QtWidgets')
 qtwidgets.QWidget = _MockQWidget

@@ -144,7 +144,7 @@ class OptionsPopupMixin:
         self.format_btn.setObjectName("optionsBtn")
         self.format_btn.setFixedWidth(70)
         self.format_btn.setFixedHeight(24)
-        self.format_btn.setToolTip(tr("数据集格式转换"))
+        self.format_btn.setToolTip(tr("格式转换"))
         self.format_btn.clicked.connect(self._open_dataset_tools)
         layout.addWidget(self.format_btn)
 

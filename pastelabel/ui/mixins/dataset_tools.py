@@ -11,7 +11,7 @@ class DatasetToolsMixin:
         return ""
 
     def _open_dataset_tools(self):
-        """打开数据集格式转换对话框。"""
+        """打开格式转换对话框。"""
         from ..dataset_tools_dialog import DatasetToolsDialog
         dialog = DatasetToolsDialog(self, default_folder=self._get_dataset_tools_folder())
         dialog.exec_()

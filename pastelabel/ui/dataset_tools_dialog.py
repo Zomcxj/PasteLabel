@@ -1,4 +1,4 @@
-"""数据集格式转换对话框（自研实现，无外部依赖）
+"""格式转换对话框（自研实现，无外部依赖）
 
 流程:
 1. 选择输入格式 -> 图片目录 + 标注路径（yolo 额外需要 data.yaml）
@@ -33,14 +33,26 @@ FORMAT_CHOICES = (
     ("LabelMe", "labelme"),
 )
 
+#: 默认选中的输入/输出格式（最常见的转换方向：LabelMe -> YOLO）
+DEFAULT_INPUT_FORMAT = "labelme"
+DEFAULT_OUTPUT_FORMAT = "yolo"
+
+
+def _format_index(key):
+    """格式键 -> 下拉框索引。"""
+    for index, (_name, fmt_key) in enumerate(FORMAT_CHOICES):
+        if fmt_key == key:
+            return index
+    raise ValueError(f"未知格式: {key}")
+
 
 class DatasetToolsDialog(QDialog):
-    """数据集格式转换与校验。"""
+    """格式转换与校验。"""
 
     def __init__(self, parent=None, default_folder=None):
         super().__init__(parent)
         self._classify_workers = set()
-        self.setWindowTitle(tr("数据集格式转换"))
+        self.setWindowTitle(tr("格式转换"))
         self.setMinimumWidth(560)
 
         t = ThemeManager.get_theme()
@@ -71,7 +83,6 @@ class DatasetToolsDialog(QDialog):
         self._out_combo = QComboBox()
         for name, _key in FORMAT_CHOICES:
             self._out_combo.addItem(name)
-        self._out_combo.setCurrentIndex(1)
         fmt_row.addWidget(self._out_combo)
         fmt_row.addStretch()
         layout.addLayout(fmt_row)
@@ -120,6 +131,10 @@ class DatasetToolsDialog(QDialog):
         ])
         layout.addLayout(btn_row)
 
+        # 默认转换方向：LabelMe -> YOLO。必须等 _on_input_format_changed
+        # 依赖的控件都建好之后再设，否则信号会在半初始化状态下触发。
+        self._in_combo.setCurrentIndex(_format_index(DEFAULT_INPUT_FORMAT))
+        self._out_combo.setCurrentIndex(_format_index(DEFAULT_OUTPUT_FORMAT))
         self._on_input_format_changed()
         self._refresh_availability()
 
@@ -158,7 +173,7 @@ class DatasetToolsDialog(QDialog):
         对话框每次打开都会重新构造，正常路径下文案已经正确；
         showEvent 里再刷一次，避免语言在构造之后变化时整体过期。
         """
-        self.setWindowTitle(tr("数据集格式转换"))
+        self.setWindowTitle(tr("格式转换"))
         for widget, key in self._text_widgets:
             widget.setText(tr(key))
         self._log_area.setPlaceholderText(tr("操作日志将显示在这里..."))
@@ -309,7 +324,7 @@ class DatasetToolsDialog(QDialog):
             return st.validate_dataset(dataset).as_dict()
 
         result, error = _run_with_progress(
-            self, tr("数据集格式转换"), tr("正在校验数据集..."), task)
+            self, tr("格式转换"), tr("正在校验数据集..."), task)
         if error == "canceled":
             return
         if error:
@@ -338,7 +353,7 @@ class DatasetToolsDialog(QDialog):
                 is_interrupted=is_interrupted)
 
         result, error = _run_with_progress(
-            self, tr("数据集格式转换"), tr("正在转换数据集..."), task)
+            self, tr("格式转换"), tr("正在转换数据集..."), task)
         if error == "canceled":
             self._log(tr("log_sv_cancelled"))
             return

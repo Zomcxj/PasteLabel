@@ -26,7 +26,7 @@ THEME_SRC = ROOT / "pastelabel" / "ui" / "theme.py"
 POPUP_SRC = ROOT / "pastelabel" / "ui" / "mixins" / "options_popup.py"
 
 DATASET_KEYS = (
-    "格式", "数据集格式转换", "输入格式:", "输出格式:", "图片目录:",
+    "格式", "格式转换", "输入格式:", "输出格式:", "图片目录:",
     "标注目录:", "标注文件:", "输出目录:", "覆盖输出目录", "校验", "开始转换",
     "关闭", "选择图片目录", "选择标注目录", "选择标注文件", "选择输出目录",
     "正在转换数据集...", "正在校验数据集...", "操作日志将显示在这里...",
@@ -231,7 +231,7 @@ def test_english_dataset_tool_values_are_sensible():
     try:
         i18n.set_lang("en")
         assert i18n.t("格式") == "Format"
-        assert i18n.t("数据集格式转换") == "Dataset Format Conversion"
+        assert i18n.t("格式转换") == "Dataset Format Conversion"
         assert i18n.t("校验") == "Validate"
         assert i18n.t("开始转换") == "Convert"
         assert i18n.t("sv_same_dir") == "Output directory must differ from the input directory"
@@ -277,6 +277,68 @@ def test_format_choices_cover_four_formats():
         )
     )
     assert tuple(key for _, key in choices) == ("yolo", "coco", "voc", "labelme")
+
+
+def test_default_conversion_direction_is_labelme_to_yolo():
+    """最常见的转换方向是 LabelMe -> YOLO，打开对话框即为该组合。"""
+    assert dataset_tools_dialog.DEFAULT_INPUT_FORMAT == "labelme"
+    assert dataset_tools_dialog.DEFAULT_OUTPUT_FORMAT == "yolo"
+    assert dataset_tools_dialog._format_index("labelme") == 3
+    assert dataset_tools_dialog._format_index("yolo") == 0
+    src = DIALOG_SRC.read_text(encoding="utf-8")
+    assert "self._in_combo.setCurrentIndex(_format_index(DEFAULT_INPUT_FORMAT))" in src
+    assert "self._out_combo.setCurrentIndex(_format_index(DEFAULT_OUTPUT_FORMAT))" in src
+
+
+def test_default_index_is_set_after_dependent_widgets_exist():
+    """_on_input_format_changed 依赖 _ann_lbl/_yaml_*；默认值必须在其后设置。
+
+    否则信号会在半初始化状态下触发，抛 AttributeError。
+    """
+    tree = ast.parse(DIALOG_SRC.read_text(encoding="utf-8"))
+    cls = next(
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "DatasetToolsDialog"
+    )
+    init = next(
+        node for node in cls.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+    )
+
+    set_line = None
+    for node in ast.walk(init):
+        if (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "setCurrentIndex"
+                and isinstance(node.func.value, ast.Attribute)
+                and node.func.value.attr == "_in_combo"):
+            set_line = node.lineno
+    assert set_line is not None, "未找到输入格式默认值设置"
+
+    for widget in ("_ann_lbl", "_yaml_lbl", "_yaml_edit"):
+        create_line = min(
+            node.lineno for node in ast.walk(init)
+            if isinstance(node, ast.Assign)
+            and isinstance(node.targets[0], ast.Attribute)
+            and node.targets[0].attr == widget
+        )
+        assert create_line < set_line, f"{widget} 必须在设置默认值之前创建"
+
+    # 默认值设置必须先于 _on_input_format_changed() 调用，否则刷新的是旧状态
+    call_line = min(
+        node.lineno for node in ast.walk(init)
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Attribute)
+        and node.value.func.attr == "_on_input_format_changed"
+    )
+    assert call_line > set_line
+
+
+def test_format_index_rejects_unknown_key():
+    import pytest
+    with pytest.raises(ValueError):
+        dataset_tools_dialog._format_index("does-not-exist")
 
 
 def test_input_format_changed_toggles_coco_file_label_and_gates_yaml_row():
@@ -432,7 +494,7 @@ def test_refresh_ui_texts_source_refreshes_format_btn_with_hasattr_guard():
     src = inspect.getsource(TranslationMixin._refresh_ui_texts)
     assert "format_btn" in src
     assert 'self.format_btn.setText(tr("格式"))' in src
-    assert 'self.format_btn.setToolTip(tr("数据集格式转换"))' in src
+    assert 'self.format_btn.setToolTip(tr("格式转换"))' in src
     assert "hasattr(self, 'format_btn')" in src
     # 必须紧跟 theme_btn 的 tooltip 刷新之后（新增语句的实际位置）
     theme_idx = src.index('self.theme_btn.setToolTip(tr("切换深色/浅色主题"))')
@@ -443,7 +505,7 @@ def test_refresh_ui_texts_source_refreshes_format_btn_with_hasattr_guard():
 
 def test_refresh_ui_texts_switches_format_btn_language():
     """行为断言：切 en 后按钮变 "Format" / tooltip 变 "Dataset Format Conversion"，
-    切回 zh 变 "格式" / "数据集格式转换"。
+    切回 zh 变 "格式" / "格式转换"。
 
     不构造 ImageEditor（offscreen 下会挂住），改用最小假对象只挂上
     _refresh_ui_texts 无条件访问的属性；其余分支均被 hasattr 守卫，
@@ -488,7 +550,7 @@ def test_refresh_ui_texts_switches_format_btn_language():
         i18n.set_lang("zh")
         owner._refresh_ui_texts()
         assert owner.format_btn.text == "格式"
-        assert owner.format_btn.tooltip == "数据集格式转换"
+        assert owner.format_btn.tooltip == "格式转换"
     finally:
         i18n.set_lang(original_lang)
 
@@ -507,7 +569,7 @@ def test_show_event_refreshes_ui_texts():
 
 def test_refresh_ui_texts_source_refreshes_title_and_registry():
     src = _dialog_method_src("_refresh_ui_texts")
-    assert 'self.setWindowTitle(tr("数据集格式转换"))' in src
+    assert 'self.setWindowTitle(tr("格式转换"))' in src
     assert "for widget, key in self._text_widgets" in src
     assert "widget.setText(tr(key))" in src
     # 标注行标签的 key 随输入格式变化，交给 _on_input_format_changed 处理
@@ -562,7 +624,7 @@ def test_refresh_ui_texts_switches_title_and_registered_widgets():
 
         i18n.set_lang("zh")
         DatasetToolsDialog._refresh_ui_texts(owner)
-        assert owner.title == "数据集格式转换"
+        assert owner.title == "格式转换"
         assert [w.text for w in widgets] == list(zh.values())
         assert owner._log_area.placeholder == "操作日志将显示在这里..."
         assert owner.format_changed == 2

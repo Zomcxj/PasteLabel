@@ -11,7 +11,7 @@ if os.path.exists(_ffi_dll):
 
 _icon = [os.path.join(_root, 'ico_image', 'icoo.png')] if sys.platform == 'win32' else []
 
-# 数据集格式转换（自研实现，零外部依赖，仅用标准库 + numpy）
+# 格式转换（自研实现，零外部依赖，仅用标准库 + numpy）
 _extra_hiddenimports = [
     'pastelabel.engine.dataset_converter',
     'pastelabel.ui.dataset_tools_dialog',

@@ -100,10 +100,23 @@ class ListsMixin:
         self.bg_label_mode_btn.setToolTip(tr("切换到每框一行"))
         self.bg_label_mode_btn.clicked.connect(self._toggle_bg_label_list_mode)
         original_label_header.addWidget(self.bg_label_mode_btn)
+        self.task_filter_btn = QPushButton("")
+        self.task_filter_btn.setObjectName("navBtn")
+        self.task_filter_btn.setFixedSize(22, 20)
+        self.task_filter_btn.setToolTip(tr("按任务筛选"))
+        original_label_header.addWidget(self.task_filter_btn)
+        self.group_filter_btn = QPushButton("")
+        self.group_filter_btn.setObjectName("navBtn")
+        self.group_filter_btn.setFixedSize(22, 20)
+        self.group_filter_btn.setToolTip(tr("按分组筛选"))
+        original_label_header.addWidget(self.group_filter_btn)
+        self._setup_filter_menus()
         original_label_header.addStretch()
         original_label_layout.addLayout(original_label_header)
         if hasattr(self, '_refresh_bg_label_mode_button'):
             self._refresh_bg_label_mode_button()
+        if hasattr(self, '_refresh_filter_buttons'):
+            self._refresh_filter_buttons()
 
         self.label_list = QListWidget()
         self.label_list.setObjectName("labelList")
@@ -112,6 +125,7 @@ class ListsMixin:
         self.label_list.customContextMenuRequested.connect(self.label_manager.show_label_context_menu)
         self.label_list.itemPressed.connect(self.label_list_item_pressed)
         self.label_list.itemClicked.connect(self.label_list_item_clicked)
+        self._attach_task_badge_delegate(self.label_list)
         self.pressed_label = None
         self.pressed_box_index = None
         original_label_layout.addWidget(self.label_list)
@@ -143,6 +157,14 @@ class ListsMixin:
         group_layout.addLayout(label_layout)
 
         layout.addWidget(group, 1)
+
+    def _attach_task_badge_delegate(self, list_widget):
+        """给标签列表挂上任务徽标绘制器（Qt 缺失时静默跳过）。"""
+        try:
+            from ...widgets.task_badge import TaskBadgeDelegate
+            list_widget.setItemDelegate(TaskBadgeDelegate(list_widget))
+        except Exception:
+            pass
 
     def _create_small_list_section(self, layout):
         """创建贴图列表区域"""

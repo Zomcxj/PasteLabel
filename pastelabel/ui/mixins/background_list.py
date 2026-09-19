@@ -9,6 +9,130 @@ from ...engine.image_loader import BG_ROLE_INDEX, BG_ROLE_PATH, BG_ROLE_STATUS
 
 
 class BackgroundListMixin:
+    TASK_FILTER_ORDER = ("det", "seg", "pose", "obb")
+
+    def _setup_filter_menus(self):
+        """T/G 用与顶部选项一致的不自动关闭菜单（点击切换，移开收起）。"""
+        from ...widgets.hover_menu import HoverKeepMenu
+        self._task_filter_menu = HoverKeepMenu(self, first_action_momentary=False)
+        self._task_filter_menu.setObjectName("optionsMenu")
+        self._task_filter_menu.aboutToShow.connect(self._rebuild_task_filter_menu)
+        self.task_filter_btn.setMenu(self._task_filter_menu)
+
+        self._group_filter_menu = HoverKeepMenu(self, first_action_momentary=False)
+        self._group_filter_menu.setObjectName("optionsMenu")
+        self._group_filter_menu.aboutToShow.connect(self._rebuild_group_filter_menu)
+        self.group_filter_btn.setMenu(self._group_filter_menu)
+
+    def _rebuild_task_filter_menu(self):
+        from PyQt5.QtWidgets import QAction
+        menu = self._task_filter_menu
+        menu.clear()
+        current = set(getattr(self, '_task_filter', set()))
+        for task in self.TASK_FILTER_ORDER:
+            act = QAction(tr(task), self)
+            act.setCheckable(True)
+            act.setChecked(task in current)
+            act.triggered.connect(lambda checked, t=task: self._toggle_task_filter(t, checked))
+            menu.addAction(act)
+        menu.addSeparator()
+        clear = QAction(f"{'√ ' if not current else ''}{tr('全部')}", self)
+        clear.triggered.connect(self._clear_task_filter)
+        self._task_filter_clear_action = clear
+        menu.addAction(clear)
+
+    def _rebuild_group_filter_menu(self):
+        from PyQt5.QtWidgets import QAction
+        menu = self._group_filter_menu
+        menu.clear()
+        current = set(getattr(self, '_group_filter', set()))
+        for gid in self._current_group_ids():
+            text = tr("未分组") if gid is None else str(gid)
+            act = QAction(text, self)
+            act.setCheckable(True)
+            act.setChecked(gid in current)
+            act.triggered.connect(lambda checked, g=gid: self._toggle_group_filter(g, checked))
+            menu.addAction(act)
+        menu.addSeparator()
+        clear = QAction(f"{'√ ' if not current else ''}{tr('全部')}", self)
+        clear.triggered.connect(self._clear_group_filter)
+        self._group_filter_clear_action = clear
+        menu.addAction(clear)
+
+    def _current_group_ids(self):
+        """当前图出现过的 group_id（None 表示未分组），无分组时也保留 None 选项。"""
+        gids = set()
+        has_ungrouped = False
+        for box in getattr(self, 'detection_boxes', []) or []:
+            gid = box.get("group_id")
+            if gid is None:
+                has_ungrouped = True
+            else:
+                gids.add(gid)
+        ordered = sorted(gids)
+        if has_ungrouped:
+            ordered.append(None)
+        return ordered
+
+    def _toggle_task_filter(self, task, checked):
+        current = set(getattr(self, '_task_filter', set()))
+        if checked:
+            current.add(task)
+        else:
+            current.discard(task)
+        self._task_filter = current
+        self._after_filter_changed()
+
+    def _clear_task_filter(self):
+        self._task_filter = set()
+        self._after_filter_changed()
+
+    def _toggle_group_filter(self, gid, checked):
+        current = set(getattr(self, '_group_filter', set()))
+        if checked:
+            current.add(gid)
+        else:
+            current.discard(gid)
+        self._group_filter = current
+        self._after_filter_changed()
+
+    def _clear_group_filter(self):
+        self._group_filter = set()
+        self._after_filter_changed()
+
+    def _after_filter_changed(self):
+        self._refresh_filter_buttons()
+        self.update_label_list()
+        self.canvas.update()
+        self._refresh_filter_menu_checks()
+
+    def _refresh_filter_menu_checks(self):
+        """菜单不自动关闭，就地刷新"全部"行的勾选标记。"""
+        for attr, current in (
+            ('_task_filter_clear_action', getattr(self, '_task_filter', set())),
+            ('_group_filter_clear_action', getattr(self, '_group_filter', set())),
+        ):
+            act = getattr(self, attr, None)
+            if act is not None:
+                act.setText(f"{'√ ' if not current else ''}{tr('全部')}")
+
+    def _refresh_filter_buttons(self):
+        task_btn = getattr(self, 'task_filter_btn', None)
+        if task_btn is not None:
+            n = len(getattr(self, '_task_filter', set()))
+            task_btn.setText(str(n) if n else "T")
+            task_btn.setToolTip(tr("按任务筛选") if not n
+                                else f"{tr('按任务筛选')}: {', '.join(sorted(getattr(self, '_task_filter', set())))}")
+        group_btn = getattr(self, 'group_filter_btn', None)
+        if group_btn is not None:
+            n = len(getattr(self, '_group_filter', set()))
+            group_btn.setText(str(n) if n else "G")
+            names = [tr("未分组") if g is None else str(g)
+                     for g in sorted(getattr(self, '_group_filter', set()),
+                                     key=lambda v: (v is None, v))]
+            group_btn.setToolTip(tr("按分组筛选") if not n
+                                 else f"{tr('按分组筛选')}: {', '.join(names)}")
+
     def _toggle_bg_label_list_mode(self):
         """Switch background label list between stats counts and per-box rows."""
         current = getattr(self, '_bg_label_list_mode', 'stats')

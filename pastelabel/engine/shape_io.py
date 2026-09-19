@@ -5,10 +5,21 @@ def box_from_labelme_shape(shape):
     if not isinstance(shape, dict):
         return None
     points = shape.get("points") or []
+    shape_type = shape.get("shape_type") or "rectangle"
+    if shape_type == "point":
+        if len(points) != 1:
+            return None
+        x, y = points[0][0], points[0][1]
+        return {
+            "x": x, "y": y, "width": 0, "height": 0,
+            "label": shape.get("label") or "",
+            "shape_type": shape_type,
+            "group_id": shape.get("group_id"),
+            "points": [list(points[0])],
+        }
     if len(points) < 2:
         return None
     label = shape.get("label") or ""
-    shape_type = shape.get("shape_type") or "rectangle"
     x_coords = [point[0] for point in points]
     y_coords = [point[1] for point in points]
     x = min(x_coords)
@@ -55,6 +66,39 @@ def format_label_display(label, group_id=None):
     return label
 
 
+def point_warning(point_box, all_boxes):
+    """关键点校验：优先无同组框 → '无同组框'，否则不在框内 → '不在框内'，正常为 None。"""
+    gid = point_box.get("group_id")
+    if gid is None:
+        return "无同组框"
+    candidates = [
+        box for box in (all_boxes or [])
+        if (box.get("shape_type") or "rectangle") != "point"
+        and box.get("group_id") == gid
+    ]
+    if not candidates:
+        return "无同组框"
+    points = point_box.get("points") or []
+    px = points[0][0] if points else point_box.get("x", 0)
+    py = points[0][1] if points else point_box.get("y", 0)
+    for box in candidates:
+        if point_in_box(px, py, box):
+            return None
+    return "不在框内"
+
+
+def point_in_box(x, y, box):
+    """(x, y) 是否落在框内。矩形用 bbox，多边形/旋转框有 points 时用多边形判定。"""
+    if not isinstance(box, dict):
+        return False
+    points = box.get("points")
+    if points and (box.get("shape_type") or "rectangle") != "rectangle":
+        return point_in_polygon(x, y, points)
+    bx, by = box.get("x", 0), box.get("y", 0)
+    bw, bh = box.get("width", 0), box.get("height", 0)
+    return bx <= x <= bx + bw and by <= y <= by + bh
+
+
 def point_in_polygon(x, y, points):
     """Ray-casting; True if (x, y) is inside the polygon."""
     if len(points) < 3:
@@ -97,6 +141,23 @@ def nearest_polygon_edge(point, points, epsilon):
             min_dist = dist
             best_i = i
     return best_i
+
+
+def yolo_pose_line(class_id, bbox, keypoints, image_width, image_height):
+    """`cls cx cy w h x1 y1 v1 ...`; visibility fixed 2 (visible)."""
+    if not image_width or not image_height:
+        return None
+    x, y, w, h = bbox
+    parts = [str(class_id),
+             f"{(x + w / 2) / image_width:.6f}",
+             f"{(y + h / 2) / image_height:.6f}",
+             f"{w / image_width:.6f}",
+             f"{h / image_height:.6f}"]
+    for kx, ky in keypoints:
+        parts.append(f"{kx / image_width:.6f}")
+        parts.append(f"{ky / image_height:.6f}")
+        parts.append("2")
+    return " ".join(parts)
 
 
 def yolo_seg_line(box, class_id, image_width, image_height):

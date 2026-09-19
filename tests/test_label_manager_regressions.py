@@ -79,6 +79,87 @@ def test_update_label_list_ignores_non_string_labels():
     assert len(editor.label_list.items) == 2
 
 
+def test_update_label_list_flags_point_without_matching_box_group():
+    editor = FakeEditor()
+    editor._bg_label_list_mode = 'all'
+    editor.detection_boxes = [
+        {"label": "person", "shape_type": "rectangle",
+         "x": 0, "y": 0, "width": 10, "height": 10, "group_id": 1},
+        {"label": "nose", "shape_type": "point",
+         "points": [[5, 5]], "x": 5, "y": 5, "width": 1, "height": 1,
+         "group_id": 1},
+        {"label": "eye", "shape_type": "point",
+         "points": [[8, 8]], "x": 8, "y": 8, "width": 1, "height": 1,
+         "group_id": 2},
+    ]
+
+    manager = LabelManager(editor)
+    import pastelabel.engine.label_manager as lm
+    lm.QListWidgetItem = FakeItem
+    try:
+        manager.update_label_list()
+    finally:
+        import importlib
+        importlib.reload(lm)
+
+    texts = [item.text() for item in editor.label_list.items]
+    assert any(t.startswith("nose [1]") for t in texts)
+    orphan = next(t for t in texts if t.startswith("eye [2]"))
+    assert "无同组框" in orphan
+    person = next(t for t in texts if t.startswith("person"))
+    assert "⚠" not in person
+
+
+def test_point_inside_group_box_has_no_warning():
+    """关键点在同组框内部时不警告。"""
+    editor = FakeEditor()
+    editor._bg_label_list_mode = 'all'
+    editor.detection_boxes = [
+        {"label": "person", "shape_type": "rectangle",
+         "x": 0, "y": 0, "width": 10, "height": 10, "group_id": 1},
+        {"label": "nose", "shape_type": "point",
+         "points": [[5, 5]], "x": 5, "y": 5, "width": 1, "height": 1,
+         "group_id": 1},
+    ]
+    manager = LabelManager(editor)
+    import pastelabel.engine.label_manager as lm
+    lm.QListWidgetItem = FakeItem
+    try:
+        manager.update_label_list()
+    finally:
+        import importlib
+        importlib.reload(lm)
+
+    nose = next(t for t in (i.text() for i in editor.label_list.items)
+                if t.startswith("nose"))
+    assert "⚠" not in nose
+
+
+def test_point_outside_group_box_warns_not_inside():
+    """关键点有同组框但落在框外时提示'不在框内'。"""
+    editor = FakeEditor()
+    editor._bg_label_list_mode = 'all'
+    editor.detection_boxes = [
+        {"label": "person", "shape_type": "rectangle",
+         "x": 0, "y": 0, "width": 10, "height": 10, "group_id": 1},
+        {"label": "nose", "shape_type": "point",
+         "points": [[50, 50]], "x": 50, "y": 50, "width": 1, "height": 1,
+         "group_id": 1},
+    ]
+    manager = LabelManager(editor)
+    import pastelabel.engine.label_manager as lm
+    lm.QListWidgetItem = FakeItem
+    try:
+        manager.update_label_list()
+    finally:
+        import importlib
+        importlib.reload(lm)
+
+    nose = next(t for t in (i.text() for i in editor.label_list.items)
+                if t.startswith("nose"))
+    assert "不在框内" in nose
+
+
 def test_delete_label_does_not_pass_detection_boxes_as_canvas_items(monkeypatch):
     editor = FakeEditor()
     editor._bg_label_list_mode = "stats"
@@ -331,6 +412,81 @@ def test_modify_label_all_mode_renames_only_selected_box(monkeypatch):
     assert "Car" in editor.global_labels
 
 
+def test_modify_label_all_mode_changes_group_without_label_change(monkeypatch):
+    """只改 group（标签不变）也要写回内存/磁盘。"""
+    class RoleItem(FakeItem):
+        def __init__(self, text, box_index):
+            super().__init__(text)
+            self._data = {0x0100: box_index}
+
+        def data(self, role):
+            return self._data.get(role)
+
+    editor = FakeEditor()
+    editor._bg_label_list_mode = "all"
+    editor.label_list = FakeList([RoleItem("nose [1]", 0)])
+    editor.global_labels = {"nose"}
+    editor.background_images = ["img.png"]
+    editor.detection_boxes = [
+        {"label": "nose", "shape_type": "point", "points": [[5, 5]],
+         "x": 5, "y": 5, "width": 1, "height": 1, "group_id": 1},
+    ]
+    editor.detection_boxes_dict = {0: list(editor.detection_boxes)}
+    editor.label_color_map = {"nose": "#111"}
+
+    monkeypatch.setattr(
+        "pastelabel.ui.dialogs.LabelSelectionDialog.select_label",
+        staticmethod(lambda *a, **kw: ("nose", 3)),
+    )
+    monkeypatch.setattr("pastelabel.core.config_manager.save_all", lambda **kw: None)
+    manager = LabelManager(editor)
+    manager.label_list_changed = FakeSignal()
+    manager.data_changed = FakeSignal()
+
+    manager.modify_label()
+
+    assert editor.detection_boxes[0]["group_id"] == 3
+    assert editor.detection_boxes[0]["label"] == "nose"
+    assert editor.saved, "group-only change must be persisted"
+
+
+def test_modify_label_all_mode_clears_group_to_none(monkeypatch):
+    """分组留空（None）也要生效，不能被 None 判断吞掉。"""
+    class RoleItem(FakeItem):
+        def __init__(self, text, box_index):
+            super().__init__(text)
+            self._data = {0x0100: box_index}
+
+        def data(self, role):
+            return self._data.get(role)
+
+    editor = FakeEditor()
+    editor._bg_label_list_mode = "all"
+    editor.label_list = FakeList([RoleItem("nose [3]", 0)])
+    editor.global_labels = {"nose"}
+    editor.background_images = ["img.png"]
+    editor.detection_boxes = [
+        {"label": "nose", "shape_type": "point", "points": [[5, 5]],
+         "x": 5, "y": 5, "width": 1, "height": 1, "group_id": 3},
+    ]
+    editor.detection_boxes_dict = {0: list(editor.detection_boxes)}
+    editor.label_color_map = {"nose": "#111"}
+
+    monkeypatch.setattr(
+        "pastelabel.ui.dialogs.LabelSelectionDialog.select_label",
+        staticmethod(lambda *a, **kw: ("nose", None)),
+    )
+    monkeypatch.setattr("pastelabel.core.config_manager.save_all", lambda **kw: None)
+    manager = LabelManager(editor)
+    manager.label_list_changed = FakeSignal()
+    manager.data_changed = FakeSignal()
+
+    manager.modify_label()
+
+    assert editor.detection_boxes[0].get("group_id") is None
+    assert editor.saved
+
+
 def test_delete_label_all_mode_removes_only_selected_box(monkeypatch):
     class RoleItem(FakeItem):
         def __init__(self, text, box_index):
@@ -456,6 +612,107 @@ def test_rename_detection_label_updates_memory_sets_and_color_map(tmp_path, monk
     assert manager.rename_detection_label("kitty", "kitty") is False
 
 
+def test_update_label_list_stats_mode_aggregates_task_types(monkeypatch):
+    """统计模式下同一标签跨任务时，行上要聚合出多个任务徽标。"""
+    from pastelabel.engine import label_manager as lm
+    from pastelabel.core.utils import TASK_DATA_ROLE
+
+    class RoleItem(FakeItem):
+        def __init__(self, text):
+            super().__init__(text)
+            self._data = {}
+
+        def setData(self, role, value):
+            self._data[role] = value
+
+        def data(self, role):
+            return self._data.get(role)
+
+    monkeypatch.setattr(lm, "QListWidgetItem", RoleItem)
+    editor = FakeEditor()
+    editor.current_background = object()
+    editor._bg_label_list_mode = "stats"
+    editor.detection_boxes = [
+        {"label": "car", "shape_type": "rectangle"},
+        {"label": "car", "shape_type": "polygon", "points": [[0, 0], [1, 0], [1, 1]]},
+    ]
+    manager = LabelManager(editor)
+
+    manager.update_label_list()
+
+    row = next(i for i in editor.label_list.items if i.text().startswith("car"))
+    assert row.data(TASK_DATA_ROLE) == "det seg"
+
+
+def test_update_label_list_all_mode_stores_task_type_per_row(monkeypatch):
+    """每框一行时，行上要带 det/seg/pose/obb 任务类型供右侧徽标绘制。"""
+    from pastelabel.engine import label_manager as lm
+    from pastelabel.core.utils import TASK_DATA_ROLE
+
+    class RoleItem(FakeItem):
+        def __init__(self, text):
+            super().__init__(text)
+            self._data = {}
+
+        def setData(self, role, value):
+            self._data[role] = value
+
+        def data(self, role):
+            return self._data.get(role)
+
+    monkeypatch.setattr(lm, "QListWidgetItem", RoleItem)
+    editor = FakeEditor()
+    editor.current_background = object()
+    editor._bg_label_list_mode = "all"
+    editor.detection_boxes = [
+        {"label": "car", "shape_type": "rectangle"},
+        {"label": "road", "shape_type": "polygon", "points": [[0, 0], [1, 0], [1, 1]]},
+        {"label": "nose", "shape_type": "point", "points": [[0, 0]], "group_id": 1},
+        {"label": "sign", "shape_type": "rotation"},
+    ]
+    manager = LabelManager(editor)
+
+    manager.update_label_list()
+
+    # 先无组别（det/seg/obb），再组别 1（pose）
+    assert [item.data(TASK_DATA_ROLE) for item in editor.label_list.items] == [
+        "det", "seg", "obb", "pose",
+    ]
+
+
+def test_update_label_list_all_mode_sorts_by_group(monkeypatch):
+    """每框一行：先无组别，再按 group_id 从小到大。"""
+    from pastelabel.engine import label_manager as lm
+
+    class RoleItem(FakeItem):
+        def __init__(self, text):
+            super().__init__(text)
+            self._data = {}
+
+        def setData(self, role, value):
+            self._data[role] = value
+
+        def data(self, role):
+            return self._data.get(role)
+
+    monkeypatch.setattr(lm, "QListWidgetItem", RoleItem)
+    editor = FakeEditor()
+    editor.current_background = object()
+    editor._bg_label_list_mode = "all"
+    editor.detection_boxes = [
+        {"label": "c2", "group_id": 2},
+        {"label": "none1"},
+        {"label": "c1", "group_id": 1},
+        {"label": "none2"},
+    ]
+    manager = LabelManager(editor)
+
+    manager.update_label_list()
+
+    texts = [item.text() for item in editor.label_list.items]
+    assert texts == ["none1", "none2", "c1 [1]", "c2 [2]"]
+
+
 def test_update_label_list_all_mode_one_row_per_box(monkeypatch):
     from pastelabel.engine import label_manager as lm
 
@@ -544,3 +801,96 @@ def test_rename_paste_label_updates_list_and_canvas_items():
     assert editor.canvas_items[0]["label"] == "badge"
     assert editor.canvas_items_dict[0][0]["label"] == "badge"
     assert editor.label_color_map == {"badge": "#123"}
+
+
+def test_update_label_list_all_mode_hides_filtered_out_boxes(monkeypatch):
+    """每框一行时，被任务筛选排除的框不出现在列表。"""
+    from pastelabel.engine import label_manager as lm
+
+    class RoleItem(FakeItem):
+        def __init__(self, text):
+            super().__init__(text)
+            self._data = {}
+
+        def setData(self, role, value):
+            self._data[role] = value
+
+        def data(self, role):
+            return self._data.get(role)
+
+    monkeypatch.setattr(lm, "QListWidgetItem", RoleItem)
+    editor = FakeEditor()
+    editor.current_background = object()
+    editor._bg_label_list_mode = "all"
+    editor._task_filter = {"det"}
+    editor.detection_boxes = [
+        {"label": "car", "shape_type": "rectangle"},
+        {"label": "road", "shape_type": "polygon", "points": [[0, 0], [1, 0], [1, 1]]},
+        {"label": "sign", "shape_type": "rectangle"},
+    ]
+    manager = LabelManager(editor)
+
+    manager.update_label_list()
+
+    texts = [item.text() for item in editor.label_list.items]
+    assert texts == ["car", "sign"]
+    # 隐藏的是显示，不是删除：底层数据仍在
+    assert len(editor.detection_boxes) == 3
+
+
+def test_update_label_list_all_mode_hides_filtered_out_groups(monkeypatch):
+    """按分组筛选：只保留选中分组的框。"""
+    from pastelabel.engine import label_manager as lm
+
+    class RoleItem(FakeItem):
+        def __init__(self, text):
+            super().__init__(text)
+            self._data = {}
+
+        def setData(self, role, value):
+            self._data[role] = value
+
+        def data(self, role):
+            return self._data.get(role)
+
+    monkeypatch.setattr(lm, "QListWidgetItem", RoleItem)
+    editor = FakeEditor()
+    editor.current_background = object()
+    editor._bg_label_list_mode = "all"
+    editor._group_filter = {1}
+    editor.detection_boxes = [
+        {"label": "a", "group_id": 1},
+        {"label": "b", "group_id": 2},
+        {"label": "c", "group_id": 1},
+    ]
+    manager = LabelManager(editor)
+
+    manager.update_label_list()
+
+    texts = [item.text() for item in editor.label_list.items]
+    assert texts == ["a [1]", "c [1]"]
+
+
+def test_update_label_list_stats_mode_hides_filtered_out_labels(monkeypatch):
+    """统计模式下，筛选后不并入无框的数据集标签。"""
+    from pastelabel.engine import label_manager as lm
+
+    monkeypatch.setattr(lm, "QListWidgetItem", FakeItem)
+    editor = FakeEditor()
+    editor.current_background = object()
+    editor._bg_label_list_mode = "stats"
+    editor._task_filter = {"det"}
+    editor.global_labels = {"zebra"}
+    editor.background_dataset_labels = {"zebra"}
+    editor.detection_boxes = [
+        {"label": "car", "shape_type": "rectangle"},
+        {"label": "road", "shape_type": "polygon", "points": [[0, 0], [1, 0], [1, 1]]},
+    ]
+    manager = LabelManager(editor)
+
+    manager.update_label_list()
+
+    texts = [item.text() for item in editor.label_list.items]
+    assert any(t.startswith("car") for t in texts)
+    assert not any(t.startswith("road") for t in texts)
+    assert not any(t.startswith("zebra") for t in texts)

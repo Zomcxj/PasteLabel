@@ -13,6 +13,12 @@ from .canvas_menu import CanvasMenuMixin
 class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
     """Canvas 交互混入类 - 事件入口 + 通用操作"""
 
+    def _box_visible(self, box):
+        """框是否通过任务/分组筛选（未启用筛选则全部可见）。"""
+        from ..core.utils import box_visible
+        return box_visible(self._editor, box)
+
+
     def enterEvent(self, event):
         self.mouse_inside = True
         self.update_status_label()
@@ -52,6 +58,12 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 self._handle_polygon_press(mouse_pos)
             elif event.button() == Qt.RightButton:
                 self._prompt_finish_polygon()
+            return
+
+        if getattr(self, 'is_drawing_point', False):
+            self._drag_out_pending = False
+            if event.button() == Qt.LeftButton:
+                self._handle_point_press(mouse_pos)
             return
 
         if event.button() == Qt.RightButton:
@@ -176,6 +188,10 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         best_box = best_handle = None
         min_dist = float('inf')
         for i, box in enumerate(self._editor.detection_boxes):
+            if not self._box_visible(box):
+                continue
+            if box.get("shape_type") == "point":
+                continue
             if box.get("shape_type") == "polygon" and box.get("points"):
                 corners = [
                     (f"v{n}", (
@@ -215,6 +231,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             (mouse_pos.y() - background_rect.top()) / self.background_scale,
         )
         for i, box in enumerate(self._editor.detection_boxes):
+            if not self._box_visible(box):
+                continue
             if box.get("shape_type") != "polygon" or not box.get("points"):
                 continue
             idx = nearest_polygon_edge(img_pt, box["points"], eps)
@@ -254,8 +272,16 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 return True
 
         # 第二遍：按顺序检查框内命中
+        # 命中顺序与绘制顺序相反：关键点在最上层，先于框被命中；
+        # 其余框后画的在上层，故倒序遍历。
         from ..engine.shape_io import point_in_polygon
-        for i, box in enumerate(self._editor.detection_boxes):
+        eps = DETECTION_BOX_CONFIG['resize_handle_size']
+
+        def _hit(i, box):
+            if box.get("shape_type") == "point" and box.get("points"):
+                cx = box["points"][0][0] * self.background_scale + background_rect.left()
+                cy = box["points"][0][1] * self.background_scale + background_rect.top()
+                return (mouse_pos.x() - cx) ** 2 + (mouse_pos.y() - cy) ** 2 <= eps * eps
             if box.get("shape_type") == "polygon" and box.get("points"):
                 canvas_pts = [
                     [
@@ -264,13 +290,27 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                     ]
                     for p in box["points"]
                 ]
-                hit = point_in_polygon(mouse_pos.x(), mouse_pos.y(), canvas_pts)
-            else:
-                box_x = box["x"] * self.background_scale + background_rect.left()
-                box_y = box["y"] * self.background_scale + background_rect.top()
-                box_width = box["width"] * self.background_scale
-                box_height = box["height"] * self.background_scale
-                hit = QRectF(box_x, box_y, box_width, box_height).contains(mouse_pos)
+                return point_in_polygon(mouse_pos.x(), mouse_pos.y(), canvas_pts)
+            box_x = box["x"] * self.background_scale + background_rect.left()
+            box_y = box["y"] * self.background_scale + background_rect.top()
+            box_width = box["width"] * self.background_scale
+            box_height = box["height"] * self.background_scale
+            return QRectF(box_x, box_y, box_width, box_height).contains(mouse_pos)
+
+        indexed = [
+            (i, box) for i, box in enumerate(self._editor.detection_boxes)
+            if self._box_visible(box)
+        ]
+        points_first = [(i, b) for i, b in indexed if b.get("shape_type") == "point"]
+        rest = [(i, b) for i, b in indexed if b.get("shape_type") != "point"]
+        # 与绘制一致：已选中的点在最上层，优先命中；其余点后画的在上层。
+        selected = set(getattr(self, 'selected_boxes', []) or [])
+        if self.selected_box is not None:
+            selected.add(self.selected_box)
+        points_first.sort(key=lambda item: item[0] in selected)
+        points_first = list(reversed(points_first))
+        for i, box in points_first + list(reversed(rest)):
+            hit = _hit(i, box)
             if hit:
                 self.hover_resize_target = None
                 self.hover_resize_handle = None
@@ -571,8 +611,16 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             return True
 
         from ..engine.shape_io import point_in_polygon
+        eps = DETECTION_BOX_CONFIG['resize_handle_size']
         for i, box in enumerate(self._editor.detection_boxes):
-            if box.get("shape_type") == "polygon" and box.get("points"):
+            if not self._box_visible(box):
+                continue
+            if box.get("shape_type") == "point" and box.get("points"):
+                cx = box["points"][0][0] * self.background_scale + background_rect.left()
+                cy = box["points"][0][1] * self.background_scale + background_rect.top()
+                hit = ((self.mouse_pos.x() - cx) ** 2 +
+                       (self.mouse_pos.y() - cy) ** 2) <= eps * eps
+            elif box.get("shape_type") == "polygon" and box.get("points"):
                 canvas_pts = [
                     [
                         p[0] * self.background_scale + background_rect.left(),

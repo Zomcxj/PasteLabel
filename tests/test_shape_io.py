@@ -104,6 +104,20 @@ def test_nearest_polygon_edge_insert_index():
     assert nearest_polygon_edge((70, 25), pts, 3.0) is None
 
 
+def test_point_shape_roundtrips_through_labelme():
+    shape = {"label": "nose", "points": [[12.5, 30.0]],
+             "group_id": 2, "shape_type": "point", "flags": {}}
+    box = box_from_labelme_shape(shape)
+    assert box is not None
+    assert box["shape_type"] == "point"
+    assert box["points"] == [[12.5, 30.0]]
+    assert box["x"] == 12.5 and box["y"] == 30.0
+
+    back = labelme_shape_from_box(box)
+    assert back["shape_type"] == "point"
+    assert back["points"] == [[12.5, 30.0]]
+
+
 def test_yolo_seg_line_skips_fewer_than_three_points():
     box = {"shape_type": "polygon", "points": [[1, 1], [2, 2]]}
     assert yolo_seg_line(box, 0, 100, 100) is None

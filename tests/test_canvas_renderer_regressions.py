@@ -63,6 +63,305 @@ def test_offset_overlapping_paste_group_keeps_boxes_inside_background_bounds():
     assert rect.y() + rect.height() <= editor.current_background.height()
 
 
+def test_point_brush_does_not_leak_into_later_rectangles():
+    """画完关键点后残留的实心画刷不能污染后续矩形，否则矩形被填成实心色块。"""
+    script = '''
+from PyQt5.QtCore import Qt, QRectF
+from PyQt5.QtGui import QImage, QPainter
+from PyQt5.QtWidgets import QApplication
+from pastelabel.canvas.canvas_renderer import CanvasRendererMixin
+
+class Check:
+    def isChecked(self): return False
+
+class Editor:
+    show_label_names_checkbox = Check()
+    def get_label_color(self, label):
+        return {"nose": "#43A047", "car": "#1E88E5"}[label]
+
+class Rect:
+    def left(self): return 0
+    def top(self): return 0
+
+class Renderer(CanvasRendererMixin):
+    def __init__(self):
+        self._editor = Editor()
+        self.hover_resize_target = None
+        self.hover_resize_handle = None
+        self.background_scale = 1.0
+        self.selected_box = None
+        self.selected_boxes = []
+
+app = QApplication.instance() or QApplication([])
+
+# 关键点（绿色）在前，矩形（蓝色）在后
+renderer = Renderer()
+renderer._editor.detection_boxes = [
+    {"label": "nose", "shape_type": "point", "points": [[10.0, 10.0]],
+     "x": 10.0, "y": 10.0, "width": 0, "height": 0},
+    {"label": "car", "shape_type": "rectangle",
+     "x": 40.0, "y": 40.0, "width": 60.0, "height": 60.0},
+]
+
+image = QImage(120, 120, QImage.Format_ARGB32)
+image.fill(Qt.white)
+painter = QPainter(image)
+renderer._draw_detection_boxes(painter, Rect())
+painter.end()
+
+# 矩形中心应是白底 + 蓝色 alpha60 淡填充，而不是不透明绿色
+px = image.pixelColor(70, 70)
+expected = (round((0x1E * 60 + 255 * 195) / 255),
+            round((0x88 * 60 + 255 * 195) / 255),
+            round((0xE5 * 60 + 255 * 195) / 255))
+assert px.getRgb()[:3] == expected, (px.getRgb()[:3], expected)
+'''
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        env=os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(ROOT)},
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_point_with_zero_bbox_still_renders():
+    """载入的关键点 width/height 为 0，不能被矩形的退化判断跳过而不显示。"""
+    script = '''
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QImage, QPainter
+from PyQt5.QtWidgets import QApplication
+from pastelabel.canvas.canvas_renderer import CanvasRendererMixin
+
+class Check:
+    def isChecked(self): return False
+
+class Editor:
+    show_label_names_checkbox = Check()
+    def get_label_color(self, label): return "#E53935"
+
+class Rect:
+    def left(self): return 0
+    def top(self): return 0
+
+class Renderer(CanvasRendererMixin):
+    def __init__(self):
+        self._editor = Editor()
+        self.hover_resize_target = None
+        self.hover_resize_handle = None
+        self.background_scale = 1.0
+        self.selected_box = None
+        self.selected_boxes = []
+
+app = QApplication.instance() or QApplication([])
+
+image = QImage(60, 60, QImage.Format_ARGB32)
+image.fill(Qt.white)
+painter = QPainter(image)
+editor = Renderer()
+editor._editor.detection_boxes = [{
+    "label": "nose", "shape_type": "point", "points": [[30.0, 30.0]],
+    "x": 30.0, "y": 30.0, "width": 0, "height": 0,
+}]
+editor._draw_detection_boxes(painter, Rect())
+painter.end()
+
+# 圆心必须被点形状涂成标签色，而不是保持白底
+px = image.pixelColor(30, 30)
+assert (px.red(), px.green(), px.blue()) != (255, 255, 255), px.getRgb()
+'''
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        env=os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(ROOT)},
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_keypoint_selected_state_is_visually_distinct_from_idle():
+    script = '''
+from PyQt5.QtCore import Qt, QPointF
+from PyQt5.QtGui import QColor, QImage, QPainter
+from PyQt5.QtWidgets import QApplication
+from pastelabel.canvas.canvas_renderer import CanvasRendererMixin
+
+class Check:
+    def isChecked(self): return False
+
+class Editor:
+    show_label_names_checkbox = Check()
+    def get_label_color(self, label): return "#E53935"
+
+class Rect:
+    def left(self): return 0
+    def top(self): return 0
+
+class Renderer(CanvasRendererMixin):
+    def __init__(self):
+        self._editor = Editor()
+        self.hover_resize_target = None
+        self.hover_resize_handle = None
+        self.background_scale = 1.0
+
+# 正常关键点：同组框存在且点在其内，走圆点绘制
+box = {"label": "nose", "shape_type": "point", "points": [[30.0, 30.0]],
+       "x": 30.0, "y": 30.0, "width": 1, "height": 1, "group_id": 1}
+group_box = {"label": "person", "shape_type": "rectangle",
+             "x": 10.0, "y": 10.0, "width": 40.0, "height": 40.0, "group_id": 1}
+
+def render(is_selected):
+    image = QImage(60, 60, QImage.Format_ARGB32)
+    image.fill(Qt.white)
+    painter = QPainter(image)
+    r = Renderer()
+    r._editor.detection_boxes = [group_box, box]
+    r._draw_point_shape(painter, box, Rect(), is_selected, False)
+    painter.end()
+    # 采样圆心外沿：编辑态有白色外圈/更大实心点
+    return [image.pixelColor(30 + r, 30).getRgb() for r in (2, 4, 5, 6)]
+
+app = QApplication.instance() or QApplication([])
+idle = render(False)
+selected = render(True)
+assert idle != selected, (idle, selected)
+'''
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        env=os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(ROOT)},
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_warned_keypoint_renders_as_square_with_white_outline():
+    """异常关键点（无同组框/不在框内）画成方形 + 白色描边，与正常圆点不同。"""
+    script = '''
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QImage, QPainter
+from PyQt5.QtWidgets import QApplication
+from pastelabel.canvas.canvas_renderer import CanvasRendererMixin
+
+class Check:
+    def isChecked(self): return False
+
+class Editor:
+    show_label_names_checkbox = Check()
+    detection_boxes = []
+    def get_label_color(self, label): return "#E53935"
+
+class Rect:
+    def left(self): return 0
+    def top(self): return 0
+
+class Renderer(CanvasRendererMixin):
+    def __init__(self):
+        self._editor = Editor()
+        self.hover_resize_target = None
+        self.hover_resize_handle = None
+        self.background_scale = 1.0
+
+app = QApplication.instance() or QApplication([])
+
+def render(box, boxes):
+    image = QImage(60, 60, QImage.Format_ARGB32)
+    image.fill(Qt.white)
+    painter = QPainter(image)
+    r = Renderer()
+    r._editor.detection_boxes = boxes
+    r._draw_point_shape(painter, box, Rect(), False, False)
+    painter.end()
+    return image
+
+# 无同组框 -> 方形：角上 (cx-4, cy-4) 有颜色，圆点在该处应为白
+warned = {"label": "nose", "shape_type": "point", "points": [[30.0, 30.0]],
+          "x": 30.0, "y": 30.0, "width": 1, "height": 1, "group_id": 1}
+ok = {"label": "nose", "shape_type": "point", "points": [[30.0, 30.0]],
+      "x": 30.0, "y": 30.0, "width": 1, "height": 1, "group_id": 1}
+group_box = {"label": "person", "shape_type": "rectangle",
+             "x": 10.0, "y": 10.0, "width": 40.0, "height": 40.0, "group_id": 1}
+
+warned_img = render(warned, [])
+ok_img = render(ok, [group_box])
+# 采样方形左上角区域：方形覆盖，圆点不覆盖
+wp = warned_img.pixelColor(26, 26).getRgb()[:3]
+op = ok_img.pixelColor(26, 26).getRgb()[:3]
+assert wp != (255, 255, 255), wp
+assert op == (255, 255, 255), op
+'''
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        env=os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(ROOT)},
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_keypoint_drawn_on_top_of_its_box():
+    """关键点即使排在框之前，也要画在框上方（不被框填充遮盖）。"""
+    script = '''
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QImage, QPainter
+from PyQt5.QtWidgets import QApplication
+from pastelabel.canvas.canvas_renderer import CanvasRendererMixin
+
+class Check:
+    def isChecked(self): return False
+
+class Editor:
+    show_label_names_checkbox = Check()
+    def get_label_color(self, label):
+        return {"person": "#1E88E5", "nose": "#43A047"}[label]
+
+class Rect:
+    def left(self): return 0
+    def top(self): return 0
+
+class Renderer(CanvasRendererMixin):
+    def __init__(self):
+        self._editor = Editor()
+        self.hover_resize_target = None
+        self.hover_resize_handle = None
+        self.background_scale = 1.0
+        self.selected_box = None
+        self.selected_boxes = []
+
+app = QApplication.instance() or QApplication([])
+renderer = Renderer()
+# 关键点在前，同组框在后；框会覆盖该位置
+renderer._editor.detection_boxes = [
+    {"label": "nose", "shape_type": "point", "points": [[30.0, 30.0]],
+     "x": 30.0, "y": 30.0, "width": 0, "height": 0, "group_id": 1},
+    {"label": "person", "shape_type": "rectangle",
+     "x": 10.0, "y": 10.0, "width": 40.0, "height": 40.0, "group_id": 1},
+]
+
+image = QImage(60, 60, QImage.Format_ARGB32)
+image.fill(Qt.white)
+painter = QPainter(image)
+renderer._draw_detection_boxes(painter, Rect())
+painter.end()
+
+# 圆心应为关键点绿色，而不是被框的蓝色填充盖住
+px = image.pixelColor(30, 30)
+assert px.green() > px.blue(), px.getRgb()
+'''
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        env=os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(ROOT)},
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_boxes_use_label_color_fills_with_expected_alpha_states():
     script = '''
 from PyQt5.QtCore import Qt, QRectF

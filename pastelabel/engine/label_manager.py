@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from PyQt5.QtCore import pyqtSignal, QObject
 from PyQt5.QtWidgets import QMenu, QAction, QListWidgetItem
 
-from ..core.utils import extract_label_name
+from ..core.utils import extract_label_name, shape_task_type, TASK_DATA_ROLE
 from ..ui import dialog_helpers
 from ..ui.i18n import t as tr
 
@@ -204,17 +204,23 @@ class LabelManager(QObject):
         )
         if isinstance(result, tuple):
             new_label, new_group = result
+            has_group_field = True
         else:
             new_label, new_group = result, None
+            has_group_field = False
         if not new_label or not str(new_label).strip():
             return
         new_label = str(new_label).strip()
-        group_only_change = (
-            new_label == old_label
-            and isinstance(box_index, int)
-            and new_group is not None
-            and self.editor.detection_boxes[box_index].get("group_id") != new_group
+        current_box = (
+            self.editor.detection_boxes[box_index]
+            if isinstance(box_index, int) and 0 <= box_index < len(self.editor.detection_boxes)
+            else None
         )
+        group_changed = (
+            has_group_field and current_box is not None
+            and current_box.get("group_id") != new_group
+        )
+        group_only_change = new_label == old_label and group_changed
         if new_label == old_label and not group_only_change:
             return
 
@@ -224,7 +230,7 @@ class LabelManager(QObject):
             # Decide color BEFORE membership of new_label changes.
             target_exists = self._label_already_exists(new_label)
             self.editor.detection_boxes[box_index]["label"] = new_label
-            if new_group is not None:
+            if has_group_field:
                 self.editor.detection_boxes[box_index]["group_id"] = new_group
             current_index = self.editor.current_background_index
             if current_index >= 0:
@@ -860,6 +866,10 @@ class LabelManager(QObject):
                 if isinstance(box.get("label"), str) and box.get("label").strip():
                     self.editor.global_labels.add(box["label"])
     
+    def _point_warning(self, point_box):
+        from .shape_io import point_warning
+        return point_warning(point_box, self.editor.detection_boxes)
+
     def update_label_list(self):
         """更新标签列表显示"""
         self.update_global_labels()
@@ -880,30 +890,60 @@ class LabelManager(QObject):
         }
 
         label_counts = {}
+        label_tasks = {}
+        from ..core.utils import box_visible
+        filter_active = bool(
+            getattr(self.editor, '_task_filter', None)
+            or getattr(self.editor, '_group_filter', None)
+        )
         for box in self.editor.detection_boxes:
+            if not box_visible(self.editor, box):
+                continue
             if isinstance(box.get("label"), str) and box.get("label").strip():
                 label = box["label"]
                 label_counts[label] = label_counts.get(label, 0) + 1
+                label_tasks.setdefault(label, set()).add(shape_task_type(box))
 
         if mode == 'all':
-            # One row per detection box on the current image (order = box order).
+            # One row per detection box on the current image.
+            # 排序：先无组别，再按 group_id 从小到大；同组保持原框顺序。
             # Qt.ItemDataRole.UserRole == 0x0100 (avoid Qt mock AttributeError in tests)
-            for box_index, box in enumerate(self.editor.detection_boxes):
+            def _group_sort_key(entry):
+                box_index, box = entry
+                gid = box.get("group_id")
+                if gid is None:
+                    return (0, 0, box_index)
+                return (1, gid, box_index)
+
+            ordered = sorted(enumerate(self.editor.detection_boxes), key=_group_sort_key)
+            for box_index, box in ordered:
                 label = box.get("label")
                 if not (isinstance(label, str) and label.strip()):
                     continue
+                if not box_visible(self.editor, box):
+                    continue
                 from .shape_io import format_label_display
-                item = QListWidgetItem(format_label_display(label, box.get("group_id")))
+                display = format_label_display(label, box.get("group_id"))
+                if box.get("shape_type") == "point":
+                    warning = self._point_warning(box)
+                    if warning:
+                        display = f"{display} ⚠{tr(warning)}"
+                item = QListWidgetItem(display)
                 if hasattr(item, 'setData'):
                     item.setData(0x0100, box_index)
+                    item.setData(TASK_DATA_ROLE, shape_task_type(box))
                 self.editor.label_list.addItem(item)
             return
 
-        all_labels = (
-            set(self.editor.global_labels)
-            | set(bg_labels)
-            | set(label_counts.keys())
-        )
+        if filter_active:
+            # 有筛选时只列当前通过筛选的标签，不并入无框的数据集标签。
+            all_labels = set(label_counts.keys())
+        else:
+            all_labels = (
+                set(self.editor.global_labels)
+                | set(bg_labels)
+                | set(label_counts.keys())
+            )
         label_count_list = []
         for label in all_labels:
             count = label_counts.get(label, 0)
@@ -913,4 +953,6 @@ class LabelManager(QObject):
 
         for label, count in label_count_list:
             item = QListWidgetItem(f"{label} ({count})")
+            if hasattr(item, 'setData') and label in label_tasks:
+                item.setData(TASK_DATA_ROLE, " ".join(sorted(label_tasks[label])))
             self.editor.label_list.addItem(item)

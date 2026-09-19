@@ -50,9 +50,17 @@ class CanvasMenuMixin:
         if not background_rect:
             return None
         from PyQt5.QtCore import QRectF
+        from ..core.config import DETECTION_BOX_CONFIG
         from ..engine.shape_io import point_in_polygon
         mx, my = mouse_pos.x(), mouse_pos.y()
+        eps = DETECTION_BOX_CONFIG['resize_handle_size']
         for i, box in enumerate(self._editor.detection_boxes):
+            if box.get("shape_type") == "point" and box.get("points"):
+                cx = box["points"][0][0] * self.background_scale + background_rect.left()
+                cy = box["points"][0][1] * self.background_scale + background_rect.top()
+                if (mx - cx) ** 2 + (my - cy) ** 2 <= eps * eps:
+                    return i
+                continue
             if box.get("shape_type") == "polygon" and box.get("points"):
                 canvas_pts = [
                     [
@@ -185,7 +193,7 @@ class CanvasMenuMixin:
             return
         new_label = str(new_label).strip()
         box = self._editor.detection_boxes[box_index]
-        group_changed = (box.get("group_id") != new_group) and new_group is not None
+        group_changed = box.get("group_id") != new_group
         box["group_id"] = new_group
         if self._editor.current_background_index >= 0:
             self._editor.detection_boxes_dict[self._editor.current_background_index] = \

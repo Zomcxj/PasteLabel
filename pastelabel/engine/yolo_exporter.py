@@ -39,6 +39,9 @@ class YoloExporter(BaseExporter):
                     if line:
                         f.write(line + "\n")
                     continue
+                if self.mode == "pose":
+                    self._pose_instances(f, boxes, classes, iw, ih)
+                    break
                 x1 = max(0, b["x"])
                 y1 = max(0, b["y"])
                 x2 = min(iw, b["x"] + b["width"])
@@ -57,6 +60,31 @@ class YoloExporter(BaseExporter):
                     continue
                 f.write(f"{class_id} {x_c:.6f} {y_c:.6f} {w_n:.6f} {h_n:.6f}\n")
         self._copy_image(item)
+
+    def _pose_instances(self, f, boxes, classes, iw, ih):
+        """YOLO-Pose: 按 group_id 组合矩形(bbox) + 关键点，一行一个实例。"""
+        from .shape_io import yolo_pose_line
+        rects, kpts = {}, {}
+        for b in boxes:
+            gid = b.get("group_id")
+            st = b.get("shape_type") or "rectangle"
+            if gid is None:
+                continue
+            if st == "point" and b.get("points"):
+                kpts.setdefault(gid, []).append(b["points"][0])
+            elif st == "rectangle":
+                rects[gid] = b
+        for gid, rect in rects.items():
+            pts = kpts.get(gid)
+            if not pts:
+                continue
+            line = yolo_pose_line(
+                classes.index(rect["label"]),
+                (rect["x"], rect["y"], rect["width"], rect["height"]),
+                pts, iw, ih,
+            )
+            if line:
+                f.write(line + "\n")
 
     def _write_classes_file(self, classes: List[str]):
         path = os.path.join(self.output_dir, "classes.txt")

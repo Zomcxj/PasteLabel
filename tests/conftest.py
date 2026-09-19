@@ -5,6 +5,16 @@ pytest conftest - 在收集测试前 mock PyQt5
 import sys
 import types
 
+# 隔离测试：默认把配置指向临时文件，避免污染用户真实的 ~/.pastelabel.json
+# （部分用例会真实构造 ImageEditor 并触发 save_all）。
+import os as _os
+import tempfile as _tempfile
+_os.environ.setdefault(
+    'PASTELABEL_CONFIG_PATH',
+    _os.path.join(_tempfile.mkdtemp(prefix='pastelabel_test_'), 'config.json'),
+)
+del _os, _tempfile
+
 # 子进程默认使用当前测试解释器；需要指定其他解释器时显式设置环境变量
 import os as _os
 _sub = _os.environ.get('PASTELABEL_SUBPROC_PYTHON')

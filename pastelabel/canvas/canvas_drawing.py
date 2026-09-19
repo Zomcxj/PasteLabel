@@ -199,6 +199,41 @@ class CanvasDrawingMixin:
         box["points"] = new_points
         self._sync_polygon_bbox(box)
 
+    def _create_point_at(self, img_point, label, group_id=None):
+        px = float(img_point[0])
+        py = float(img_point[1])
+        self._create_detection_box(
+            px, py, 1, 1, label,
+            shape_type="point", points=[[px, py]], group_id=group_id,
+        )
+
+    def _handle_point_press(self, mouse_pos):
+        from ..ui.dialogs import LabelSelectionDialog
+        if not self._can_edit_canvas():
+            return True
+        if (not self._editor.background_images or
+            self._editor.current_background_index < 0):
+            return True
+        background_rect = self.get_background_rect()
+        if not background_rect or not background_rect.contains(mouse_pos):
+            return True
+        point = self._canvas_to_image_point(mouse_pos, background_rect)
+        if point is None:
+            return True
+        self._editor.save_undo_state()
+        result = LabelSelectionDialog.select_label(
+            self, self._label_choices_for_draw(), show_group=True,
+        )
+        if isinstance(result, tuple):
+            label, group_id = result
+        else:
+            label, group_id = result, None
+        if label:
+            self._create_point_at(point, label, group_id)
+        self.update_status_label()
+        self.update()
+        return True
+
     def _can_close_polygon(self):
         return len(self.temp_polygon_points) >= 3
 
@@ -371,6 +406,9 @@ class CanvasDrawingMixin:
 
             self._sync_detection_box_to_dict(self.selected_box)
             self._needs_save = True
+            if box.get("shape_type") == "point":
+                # 关键点移动后位置/状态可能变化，刷新列表警告标记
+                self._editor.update_label_list()
             self.update()
 
     def _resize_box(self):
@@ -462,6 +500,8 @@ class CanvasDrawingMixin:
         box = self._editor.detection_boxes[box_index]
         background_rect = self.get_background_rect()
         if background_rect is None:
+            return None
+        if box.get("shape_type") == "point":
             return None
         handle_size = DETECTION_BOX_CONFIG['resize_handle_size']
         if box.get("shape_type") == "polygon" and box.get("points"):

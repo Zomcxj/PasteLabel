@@ -105,6 +105,34 @@ class TestExtractLabelName:
         assert extract_label_name("nose [1]") == "nose"
         assert extract_label_name("nose [1] (3)") == "nose"
 
+    def test_strips_warning_suffix(self):
+        assert extract_label_name("nose [1] ⚠无det") == "nose"
+        assert extract_label_name("nose ⚠不在框内") == "nose"
+        assert extract_label_name("nose [2] ⚠无det (3)") == "nose"
+
+
+class TestBoxMatchesFilter:
+    """任务/分组筛选（仅显示用）。"""
+
+    def test_empty_filters_pass_all(self):
+        from pastelabel.core.utils import box_matches_filter
+        assert box_matches_filter({"shape_type": "rectangle"})
+        assert box_matches_filter({"shape_type": "point", "group_id": 5})
+
+    def test_task_filter_matches_shape_type(self):
+        from pastelabel.core.utils import box_matches_filter
+        rect = {"shape_type": "rectangle"}
+        poly = {"shape_type": "polygon", "points": [[0, 0], [1, 0], [1, 1]]}
+        assert box_matches_filter(rect, task_filter={"det"})
+        assert not box_matches_filter(rect, task_filter={"seg"})
+        assert box_matches_filter(poly, task_filter={"seg", "pose"})
+
+    def test_group_filter_matches_group_id(self):
+        from pastelabel.core.utils import box_matches_filter
+        assert box_matches_filter({"group_id": 1}, group_filter={1})
+        assert not box_matches_filter({"group_id": 2}, group_filter={1})
+        assert not box_matches_filter({}, group_filter={1})
+
 
 class TestPathUtils:
     """PathUtils 测试"""

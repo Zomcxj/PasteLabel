@@ -166,6 +166,8 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         self._bg_label_list_mode = 'stats'
         self.pressed_box_index = None
         self._bg_annotation_filter = 'all'  # all | annotated | unannotated | empty
+        self._task_filter = set()  # 任务筛选（det/seg/pose/obb），空=全部
+        self._group_filter = set()  # 分组筛选（group_id），空=全部
         self._bg_filter_saved_index = 0
         self._cached_bg_label_stats = []
         self._cached_bg_label_stats_path = ""

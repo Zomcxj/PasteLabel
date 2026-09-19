@@ -66,7 +66,7 @@ def test_group_input_allows_empty_group():
 
 def test_group_input_wired_into_all_label_dialogs():
     draw_src = open("pastelabel/canvas/canvas_drawing.py", encoding="utf-8").read()
-    assert draw_src.count("show_group=True") == 2  # 矩形绘制 + 多边形绘制
+    assert draw_src.count("show_group=True") == 3  # 矩形 + 多边形 + 关键点
     menu_src = open("pastelabel/canvas/canvas_menu.py", encoding="utf-8").read()
     assert "show_group=True" in menu_src  # 右键修改标签
     assert "current_group_id=" in menu_src

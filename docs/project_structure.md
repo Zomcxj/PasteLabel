@@ -43,11 +43,13 @@ PasteLabel/
 │   │   ├── base_exporter.py
 │   │   ├── coco_exporter.py
 │   │   ├── dataset_classifier.py
+│   │   ├── dataset_converter.py # 数据集格式转换（LabelMe/YOLO/COCO/VOC + 任务类型）
 │   │   ├── event_handler.py
 │   │   ├── image_loader.py
 │   │   ├── label_manager.py
 │   │   ├── paste_engine.py
 │   │   ├── save_manager.py
+│   │   ├── shape_io.py         # 形状编解码与 YOLO 行生成（矩形/多边形/关键点/旋转框）
 │   │   ├── splitter.py
 │   │   ├── undo_manager.py
 │   │   ├── voc_exporter.py
@@ -63,6 +65,8 @@ PasteLabel/
 │   │       └── translate.py
 │   ├── ui/                    # 主窗口、对话框、主题与国际化
 │   │   ├── __init__.py
+│   │   ├── dataset_classifier_dialog.py # KMeans 数据集分类窗口
+│   │   ├── dataset_tools_dialog.py      # 数据集格式转换窗口
 │   │   ├── dialog_helpers.py
 │   │   ├── dialogs.py
 │   │   ├── dwm.py
@@ -110,6 +114,14 @@ PasteLabel/
 │   ├── test_i18n_regressions.py
 │   ├── test_label_cache_multi_select_red.py
 │   ├── test_background_label_scan.py # ProcessingPanel/background scan regression
+│   ├── test_shape_io.py              # 形状编解码与 YOLO 行生成
+│   ├── test_polygon_drawing.py       # 分割多边形绘制/编辑
+│   ├── test_pose_drawing.py          # 关键点标注
+│   ├── test_obb_drawing.py           # 旋转框绘制/旋转/导出
+│   ├── test_dataset_converter.py     # 格式转换（含各任务往返）
+│   ├── test_annotation_shortcuts.py  # 标注快捷键与分组对话框
+│   ├── test_exporters.py             # YOLO/VOC/COCO 导出
+│   ├── test_augmenter.py             # 数据增强（含形状保真）
 │   ├── test_theme_style_consolidation.py
 │   ├── test_silent_interaction_theme.py
 │   ├── test_ui_layout_regressions.py

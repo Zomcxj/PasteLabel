@@ -152,7 +152,7 @@ class ProcessingPanelBuilderMixin:
         btn_layout = QHBoxLayout()
         self._exp_btn = QPushButton()
         self._exp_btn.setObjectName("successBtn")
-        self._exp_btn.clicked.connect(self._show_export_menu)
+        self._exp_btn.clicked.connect(self._run_export)
         btn_layout.addWidget(self._exp_btn, 5)
         btn_layout.addWidget(self._make_btn_with_stop(self._exp_btn, lambda: self._do_interrupt()), 1)
         self._exp_clear_btn = QPushButton()

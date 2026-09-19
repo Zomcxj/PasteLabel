@@ -245,6 +245,10 @@ def extract_label_name(label_text):
         label_text = label_text.split("⚠")[0].rstrip()
     if " (" in label_text:
         label_text = label_text.split(" (")[0]
+    if label_text.endswith('°'):
+        head, _, tail = label_text.rpartition(' ')
+        if head and tail[:-1].strip().replace('.', '', 1).isdigit():
+            label_text = head
     if label_text.endswith(']') and ' [' in label_text:
         label_text = label_text.rsplit(' [', 1)[0]
     return label_text

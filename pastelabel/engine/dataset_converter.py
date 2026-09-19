@@ -87,9 +87,39 @@ class Detections:
     class_id: List[int] = field(default_factory=list)
     box_xyxy: List[Tuple[float, float, float, float]] = field(default_factory=list)
     mask_points: Optional[List[Optional[List[Tuple[float, float]]]]] = None
+    #: 与 class_id 等长的形状类型（rectangle/polygon/rotation/point）。
+    #: 空列表表示未知，写出侧按 mask_points 推断（有多边形即 polygon）。
+    shape_types: List[str] = field(default_factory=list)
+    #: 与 class_id 等长的原始像素点集（rotation 存 4 角点，point 存 1 点，
+    #: polygon 存全部顶点，rectangle 可空）。obb/pose 转换依赖它。
+    points_list: List[Optional[List[Tuple[float, float]]]] = field(default_factory=list)
+    #: pose 分组用；None 表示无分组。
+    group_ids: List[Optional[int]] = field(default_factory=list)
 
     def __len__(self) -> int:
         return len(self.class_id)
+
+    def type_of(self, index: int) -> str:
+        """第 index 个标注的形状类型；缺失时按 mask 推断。"""
+        if index < len(self.shape_types) and self.shape_types[index]:
+            return self.shape_types[index]
+        masks = self.mask_points or []
+        if index < len(masks) and masks[index]:
+            return "polygon"
+        return "rectangle"
+
+    def points_of(self, index: int) -> Optional[List[Tuple[float, float]]]:
+        if index < len(self.points_list) and self.points_list[index]:
+            return self.points_list[index]
+        masks = self.mask_points or []
+        if index < len(masks) and masks[index]:
+            return masks[index]
+        return None
+
+    def group_of(self, index: int) -> Optional[int]:
+        if index < len(self.group_ids):
+            return self.group_ids[index]
+        return None
 
     @property
     def mask(self):
@@ -409,7 +439,20 @@ def _list_images(directory: str) -> List[str]:
 
 def _empty_detections() -> Detections:
     # mask_points 用空列表而不是 None，方便读者逐个 append
-    return Detections(class_id=[], box_xyxy=[], mask_points=[])
+    return Detections(class_id=[], box_xyxy=[], mask_points=[],
+                      shape_types=[], points_list=[], group_ids=[])
+
+
+def _append_detection(det: "Detections", class_id, box_xyxy, *,
+                      shape_type="rectangle", points=None, group_id=None,
+                      mask=None):
+    """统一追加一个标注，保证各并行列表长度一致。"""
+    det.class_id.append(class_id)
+    det.box_xyxy.append(box_xyxy)
+    det.mask_points.append(mask)
+    det.shape_types.append(shape_type)
+    det.points_list.append(points)
+    det.group_ids.append(group_id)
 
 
 def _bounding_box(points) -> Tuple[float, float, float, float]:
@@ -423,7 +466,8 @@ def _bounding_box(points) -> Tuple[float, float, float, float]:
 # 读取
 # ==========================================================================
 
-def _read_yolo(images_dir: str, labels_dir: str, data_yaml_path: str) -> Dataset:
+def _read_yolo(images_dir: str, labels_dir: str, data_yaml_path: str,
+               task: str = "auto") -> Dataset:
     yaml_path = _check_file(data_yaml_path, "data.yaml")
     with open(yaml_path, "r", encoding="utf-8", errors="replace") as fh:
         yaml_text = fh.read()
@@ -449,20 +493,25 @@ def _read_yolo(images_dir: str, labels_dir: str, data_yaml_path: str) -> Dataset
         label_path = os.path.join(labels_abs, stem + ".txt")
         annotations = _empty_detections()
         if os.path.isfile(label_path):
-            annotations = _parse_yolo_labels(label_path, path, dataset)
+            annotations = _parse_yolo_labels(label_path, path, dataset, task)
         dataset.annotations[path] = annotations
     return dataset
 
 
 def _parse_yolo_labels(label_path: str, image_path: str,
-                       dataset: Dataset) -> Detections:
-    """解析 YOLO 标注文件：4 列是框，8 列及以上是分割多边形。"""
+                       dataset: Dataset, task: str = "auto") -> Detections:
+    """解析 YOLO 标注文件，按任务类型区分行格式：
+
+    - det/hbb: `cls cx cy w h` -> rectangle
+    - seg:     `cls x1 y1 x2 y2 ...`(>=3点) -> polygon
+    - obb:     `cls x0 y0 x1 y1 x2 y2 x3 y3`(恰好4点) -> rotation
+    - pose:    `cls cx cy w h (kx ky v)*` -> rectangle + point(按行分组)
+    - auto:    4列=框，>=8列偶数=多边形（历史行为，无法区分 obb/seg）
+    """
     width, height = dataset.size_of(image_path)
-    class_ids: List[int] = []
-    boxes: List[Tuple[float, float, float, float]] = []
-    masks: List[Optional[List[Tuple[float, float]]]] = []
+    det = _empty_detections()
     with open(label_path, "r", encoding="utf-8", errors="replace") as fh:
-        for line in fh:
+        for line_no, line in enumerate(fh):
             tokens = line.replace(",", " ").split()
             if len(tokens) < 5:
                 continue
@@ -471,22 +520,59 @@ def _parse_yolo_labels(label_path: str, image_path: str,
                 coords = [float(value) for value in tokens[1:]]
             except ValueError:
                 continue
-            if len(coords) == 4:
-                center_x, center_y, box_w, box_h = coords
-                boxes.append(((center_x - box_w / 2) * width,
-                              (center_y - box_h / 2) * height,
-                              (center_x + box_w / 2) * width,
-                              (center_y + box_h / 2) * height))
-                masks.append(None)
-            elif len(coords) >= 8 and len(coords) % 2 == 0:
-                points = [(coords[i] * width, coords[i + 1] * height)
-                          for i in range(0, len(coords) - 1, 2)]
-                boxes.append(_bounding_box(points))
-                masks.append(points)
-            else:
-                continue
-            class_ids.append(class_id)
-    return Detections(class_id=class_ids, box_xyxy=boxes, mask_points=masks)
+            if task in ("det", "hbb") and len(coords) >= 4:
+                _yolo_rect(det, class_id, coords[:4], width, height)
+            elif task == "seg" and len(coords) >= 6 and len(coords) % 2 == 0:
+                _yolo_polygon(det, class_id, coords, width, height)
+            elif task == "obb" and len(coords) == 8:
+                pts = [(coords[i] * width, coords[i + 1] * height)
+                       for i in range(0, 8, 2)]
+                _append_detection(det, class_id, _bounding_box(pts),
+                                  shape_type="rotation", points=pts)
+            elif task == "pose" and len(coords) >= 4:
+                _yolo_pose(det, class_id, coords, width, height, line_no)
+            elif task == "auto":
+                if len(coords) == 4:
+                    _yolo_rect(det, class_id, coords, width, height)
+                elif len(coords) >= 8 and len(coords) % 2 == 0:
+                    _yolo_polygon(det, class_id, coords, width, height)
+    return det
+
+
+def _yolo_rect(det, class_id, coords, width, height):
+    cx, cy, bw, bh = coords[:4]
+    _append_detection(det, class_id,
+                      ((cx - bw / 2) * width, (cy - bh / 2) * height,
+                       (cx + bw / 2) * width, (cy + bh / 2) * height),
+                      shape_type="rectangle")
+
+
+def _yolo_polygon(det, class_id, coords, width, height):
+    pts = [(coords[i] * width, coords[i + 1] * height)
+           for i in range(0, len(coords) - 1, 2)]
+    _append_detection(det, class_id, _bounding_box(pts),
+                      shape_type="polygon", points=pts, mask=pts)
+
+
+def _yolo_pose(det, class_id, coords, width, height, group_id):
+    """一行 pose = 一个矩形 + 若干关键点，共享 group_id；关键点类名不可逆，
+    统一用占位标签（导回 YOLO 仍按 group 聚合，语义不丢）。"""
+    cx, cy, bw, bh = coords[:4]
+    _append_detection(det, class_id,
+                      ((cx - bw / 2) * width, (cy - bh / 2) * height,
+                       (cx + bw / 2) * width, (cy + bh / 2) * height),
+                      shape_type="rectangle", group_id=group_id)
+    kpts = coords[4:]
+    step = 3 if len(kpts) % 3 == 0 else 2
+    for i in range(0, len(kpts) - (step - 1), step):
+        if step == 3 and kpts[i + 2] == 0:
+            continue
+        kx, ky = kpts[i] * width, kpts[i + 1] * height
+        if kx == 0 and ky == 0:
+            continue
+        _append_detection(det, class_id, (kx, ky, kx, ky),
+                          shape_type="point", points=[(kx, ky)],
+                          group_id=group_id)
 
 
 def _read_coco(images_dir: str, annotations_path: str) -> Dataset:
@@ -527,9 +613,8 @@ def _read_coco(images_dir: str, annotations_path: str) -> Dataset:
                 if index is None:
                     continue
                 x, y, width, height = (float(value) for value in bbox)
-                annotations.class_id.append(index)
-                annotations.box_xyxy.append((x, y, x + width, y + height))
-                annotations.mask_points.append(None)
+                _append_detection(annotations, index, (x, y, x + width, y + height),
+                                  shape_type="rectangle")
         dataset.annotations[path] = annotations
     return dataset
 
@@ -733,9 +818,8 @@ def _read_voc(images_dir: str, annotations_dir: str) -> Dataset:
             index = class_index.get(label)
             if index is None:
                 continue
-            annotations.class_id.append(index)
-            annotations.box_xyxy.append((xmin, ymin, xmax, ymax))
-            annotations.mask_points.append(None)
+            _append_detection(annotations, index, (xmin, ymin, xmax, ymax),
+                              shape_type="rectangle")
         dataset.annotations[path] = annotations
     return dataset
 
@@ -746,9 +830,8 @@ def _read_labelme(images_dir: str, annotations_dir: str) -> Dataset:
                         if os.path.splitext(name)[1].lower() == ".json")
     classes: List[str] = []
     class_index: Dict[str, int] = {}
-    rows: List[Tuple[str, Optional[Tuple[int, int]],
-                     List[Tuple[str, Optional[List[Tuple[float, float]]],
-                                    Tuple[float, float, float, float]]]]] = []
+    # 每个 shape: (label, shape_type, points像素, polygon或None, bbox, group_id)
+    rows = []
     for json_path in json_files:
         with open(json_path, "r", encoding="utf-8", errors="replace") as fh:
             payload = json.load(fh)
@@ -757,19 +840,25 @@ def _read_labelme(images_dir: str, annotations_dir: str) -> Dataset:
         width = payload.get("imageWidth")
         height = payload.get("imageHeight")
         size = (int(width), int(height)) if width and height else None
-        shapes: List[Tuple[str, Optional[List[Tuple[float, float]]],
-                                  Tuple[float, float, float, float]]] = []
+        shapes = []
         for shape in payload.get("shapes") or []:
             label = str(shape.get("label") or "")
             points = shape.get("points") or []
-            if not label or len(points) < 2:
+            shape_type = shape.get("shape_type") or "polygon"
+            # point 只需 1 点，其余至少 2 点
+            min_pts = 1 if shape_type == "point" else 2
+            if not label or len(points) < min_pts:
                 continue
             coords = [(float(point[0]), float(point[1])) for point in points]
-            # LabelMe 的 rectangle 只用两个角点定义矩形，其余角点冗余
-            is_rectangle = shape.get("shape_type") == "rectangle"
-            polygon = None if is_rectangle and len(coords) == 2 else coords
-            box = _bounding_box(coords[:2] if is_rectangle else coords)
-            shapes.append((label, polygon, box))
+            is_rectangle = shape_type == "rectangle"
+            polygon = coords if shape_type == "polygon" else None
+            box = _bounding_box(coords[:2] if is_rectangle and len(coords) == 2 else coords)
+            group_id = shape.get("group_id")
+            try:
+                group_id = int(group_id) if group_id is not None else None
+            except (TypeError, ValueError):
+                group_id = None
+            shapes.append((label, shape_type, coords, polygon, box, group_id))
             if label not in class_index:
                 class_index[label] = len(classes)
                 classes.append(label)
@@ -782,13 +871,12 @@ def _read_labelme(images_dir: str, annotations_dir: str) -> Dataset:
         if size:
             dataset.image_sizes[path] = size
         annotations = _empty_detections()
-        for label, polygon, box in shapes:
+        for label, shape_type, coords, polygon, box, group_id in shapes:
             index = class_index.get(label)
             if index is None:
                 continue
-            annotations.class_id.append(index)
-            annotations.box_xyxy.append(box)
-            annotations.mask_points.append(polygon)
+            _append_detection(annotations, index, box, shape_type=shape_type,
+                              points=coords, group_id=group_id, mask=polygon)
         dataset.annotations[path] = annotations
     return dataset
 
@@ -816,7 +904,8 @@ def _copy_image(path: str, images_dir: str) -> None:
         shutil.copy2(path, destination)
 
 
-def _write_yolo(dataset: Dataset, layout: dict, first: bool) -> None:
+def _write_yolo(dataset: Dataset, layout: dict, first: bool,
+                task: str = "det") -> None:
     if first:
         with open(layout["data_yaml"], "w", encoding="utf-8") as fh:
             fh.write("names: [" + ", ".join(_quote_yaml(name)
@@ -826,16 +915,65 @@ def _write_yolo(dataset: Dataset, layout: dict, first: bool) -> None:
         width, height = dataset.size_of(path)
         annotations = dataset.annotations.get(path) or _empty_detections()
         stem = os.path.splitext(os.path.basename(path))[0]
-        lines = []
-        for class_id, (x1, y1, x2, y2) in zip(annotations.class_id,
-                                              annotations.box_xyxy):
-            lines.append(f"{class_id} {(x1 + x2) / 2 / width:.6f} "
-                         f"{(y1 + y2) / 2 / height:.6f} "
-                         f"{(x2 - x1) / width:.6f} {(y2 - y1) / height:.6f}")
+        lines = _yolo_lines_for(annotations, task, width, height)
         label_path = os.path.join(layout["annotations"], stem + ".txt")
         os.makedirs(layout["annotations"], exist_ok=True)
         with open(label_path, "w", encoding="utf-8") as fh:
             fh.write("\n".join(lines) + ("\n" if lines else ""))
+
+
+def _yolo_lines_for(det: "Detections", task: str, width: int, height: int) -> List[str]:
+    """按任务类型把一张图的标注渲染成 YOLO 文本行，只输出与任务匹配的形状。"""
+    from .shape_io import yolo_obb_line, yolo_seg_line, yolo_pose_line
+    lines: List[str] = []
+    if task == "pose":
+        # 按 group_id 聚合：矩形 + 关键点
+        groups: Dict[object, dict] = {}
+        for i in range(len(det)):
+            gid = det.group_of(i)
+            if gid is None:
+                continue
+            slot = groups.setdefault(gid, {"box": None, "cls": 0, "kpts": []})
+            if det.type_of(i) == "rectangle":
+                slot["box"] = det.box_xyxy[i]
+                slot["cls"] = det.class_id[i]
+            elif det.type_of(i) == "point":
+                pts = det.points_of(i)
+                if pts:
+                    slot["kpts"].append(pts[0])
+        for slot in groups.values():
+            if not slot["box"]:
+                continue
+            x1, y1, x2, y2 = slot["box"]
+            line = yolo_pose_line(slot["cls"], (x1, y1, x2 - x1, y2 - y1),
+                                  slot["kpts"], width, height)
+            if line:
+                lines.append(line)
+        return lines
+    for i in range(len(det)):
+        cls = det.class_id[i]
+        stype = det.type_of(i)
+        pts = det.points_of(i)
+        if task == "obb":
+            if stype != "rotation" or not pts or len(pts) != 4:
+                continue
+            line = yolo_obb_line({"points": pts}, cls, width, height)
+            if line:
+                lines.append(line)
+        elif task == "seg":
+            if stype != "polygon" or not pts or len(pts) < 3:
+                continue
+            line = yolo_seg_line({"points": pts}, cls, width, height)
+            if line:
+                lines.append(line)
+        else:  # det / hbb：所有形状取外接框
+            x1, y1, x2, y2 = det.box_xyxy[i]
+            if not width or not height:
+                continue
+            lines.append(f"{cls} {(x1 + x2) / 2 / width:.6f} "
+                         f"{(y1 + y2) / 2 / height:.6f} "
+                         f"{(x2 - x1) / width:.6f} {(y2 - y1) / height:.6f}")
+    return lines
 
 
 def _write_coco(dataset: Dataset, layout: dict) -> None:
@@ -913,29 +1051,29 @@ def _write_labelme(dataset: Dataset, layout: dict) -> None:
         _copy_image(path, layout["images"])
         width, height = dataset.size_of(path)
         detections = dataset.annotations.get(path) or _empty_detections()
-        masks = detections.mask_points
         shapes = []
-        for class_id, (x1, y1, x2, y2), polygon in zip(
-                detections.class_id, detections.box_xyxy,
-                (masks or [None] * len(detections.class_id))):
-            if polygon and len(polygon) >= 3:
-                shapes.append({
-                    "label": dataset.classes[class_id],
-                    "points": [[round(float(x), 6), round(float(y), 6)]
-                               for x, y in polygon],
-                    "group_id": None,
-                    "shape_type": "polygon",
-                    "flags": {},
-                })
+        for i in range(len(detections)):
+            class_id = detections.class_id[i]
+            stype = detections.type_of(i)
+            pts = detections.points_of(i)
+            group_id = detections.group_of(i)
+            x1, y1, x2, y2 = detections.box_xyxy[i]
+            if stype == "rotation" and pts and len(pts) == 4:
+                shape = {"shape_type": "rotation",
+                         "points": [[round(float(x), 6), round(float(y), 6)] for x, y in pts]}
+            elif stype == "point" and pts:
+                shape = {"shape_type": "point",
+                         "points": [[round(float(pts[0][0]), 6), round(float(pts[0][1]), 6)]]}
+            elif stype == "polygon" and pts and len(pts) >= 3:
+                shape = {"shape_type": "polygon",
+                         "points": [[round(float(x), 6), round(float(y), 6)] for x, y in pts]}
             else:
-                shapes.append({
-                    "label": dataset.classes[class_id],
-                    "points": [[round(float(x1), 6), round(float(y1), 6)],
-                               [round(float(x2), 6), round(float(y2), 6)]],
-                    "group_id": None,
-                    "shape_type": "rectangle",
-                    "flags": {},
-                })
+                shape = {"shape_type": "rectangle",
+                         "points": [[round(float(x1), 6), round(float(y1), 6)],
+                                    [round(float(x2), 6), round(float(y2), 6)]]}
+            shape.update({"label": dataset.classes[class_id],
+                          "group_id": group_id, "flags": {}})
+            shapes.append(shape)
         payload = {
             "version": "5.3.1",
             "flags": {},
@@ -952,9 +1090,9 @@ def _write_labelme(dataset: Dataset, layout: dict) -> None:
 
 
 def _write_chunk(chunk: "Dataset", output_format: str, layout: dict,
-                 first: bool) -> None:
+                 first: bool, task: str = "det") -> None:
     if output_format == "yolo":
-        _write_yolo(chunk, layout, first)
+        _write_yolo(chunk, layout, first, task)
     elif output_format == "voc":
         _write_voc(chunk, layout)
     else:
@@ -978,10 +1116,12 @@ def _slice_dataset(dataset: Dataset, paths: List[str]) -> Dataset:
 # ==========================================================================
 
 def load_dataset(input_format: str, images_dir: str, annotations_path: str,
-                 data_yaml_path: Optional[str] = None) -> Dataset:
+                 data_yaml_path: Optional[str] = None,
+                 task: str = "auto") -> Dataset:
     """按指定格式加载数据集，返回 Dataset。
 
     annotations_path 对 yolo/voc/labelme 是目录，对 coco 是 json 文件。
+    task 决定 YOLO 标注行的解析方式（det/seg/obb/pose/auto）。
     """
     fmt = (input_format or "").strip().lower()
     if fmt not in INPUT_FORMATS:
@@ -991,7 +1131,7 @@ def load_dataset(input_format: str, images_dir: str, annotations_path: str,
         if fmt == "yolo":
             annotations_dir = _check_dir(annotations_path, "标注目录")
             yaml_path = _check_file(data_yaml_path, "data.yaml")
-            return _read_yolo(images_dir, annotations_dir, yaml_path)
+            return _read_yolo(images_dir, annotations_dir, yaml_path, task)
         if fmt == "coco":
             json_path = _check_file(annotations_path, "COCO 标注文件")
             return _read_coco(images_dir, json_path)
@@ -1006,8 +1146,21 @@ def load_dataset(input_format: str, images_dir: str, annotations_path: str,
         raise DatasetToolError(f"读取 {fmt} 数据集失败：{exc}") from exc
 
 
-def validate_dataset(dataset) -> ValidationReport:
-    """检查数据集的图片、标注、类别一致性。"""
+#: 任务类型 -> 该任务在 YOLO 输出时会保留的形状类型
+_TASK_SHAPE = {
+    "seg": {"polygon"},
+    "obb": {"rotation"},
+    "pose": {"rectangle", "point"},
+    # det/hbb/auto 对所有形状取外接框，不丢弃
+}
+
+
+def validate_dataset(dataset, task: str = "auto") -> ValidationReport:
+    """检查数据集的图片、标注、类别一致性。
+
+    task 为 seg/obb/pose 时，额外统计与任务不匹配、转 YOLO 会被跳过的标注，
+    并按形状类型给出明细提示（避免多类型混标时静默丢框）。
+    """
     classes = list(getattr(dataset, "classes", []) or [])
     image_paths = list(getattr(dataset, "image_paths", []) or [])
     annotations = dict(getattr(dataset, "annotations", {}) or {})
@@ -1036,6 +1189,7 @@ def validate_dataset(dataset) -> ValidationReport:
     max_class_id = len(classes) - 1
     bad_class = 0
     empty_images = 0
+    shape_counts: Dict[str, int] = {}
     for path in image_paths:
         detections = annotations.get(path)
         if detections is None:
@@ -1046,6 +1200,10 @@ def validate_dataset(dataset) -> ValidationReport:
         if count == 0:
             empty_images += 1
             continue
+        for i in range(count):
+            if hasattr(detections, "type_of"):
+                stype = detections.type_of(i)
+                shape_counts[stype] = shape_counts.get(stype, 0) + 1
         class_ids = getattr(detections, "class_id", None)
         if class_ids is None:
             bad_class += count
@@ -1057,6 +1215,21 @@ def validate_dataset(dataset) -> ValidationReport:
         errors.append(f"存在 {bad_class} 个标注的类别 ID 超出类别列表范围")
     if empty_images:
         warnings.append(f"{empty_images} 张图片没有标注框")
+
+    # 多类型混标：转 YOLO 时只保留与任务匹配的形状，其余会被跳过
+    keep_types = _TASK_SHAPE.get((task or "").lower())
+    if keep_types and shape_counts:
+        kept = sum(n for t, n in shape_counts.items() if t in keep_types)
+        skipped = sum(n for t, n in shape_counts.items() if t not in keep_types)
+        if skipped:
+            detail = "、".join(f"{t}×{n}" for t, n in sorted(shape_counts.items()))
+            warnings.append(
+                f"当前任务[{task}]只导出 {'/'.join(sorted(keep_types))} 形状，"
+                f"将跳过 {skipped} 个其它类型标注（本数据集形状分布：{detail}）")
+        if kept == 0:
+            errors.append(
+                f"当前任务[{task}]没有可导出的标注：数据集里没有 "
+                f"{'/'.join(sorted(keep_types))} 形状")
     if len(warnings) > 20:
         extra = len(warnings) - 20
         warnings = warnings[:20] + [f"另有 {extra} 条提示已省略"]
@@ -1117,7 +1290,8 @@ def output_layout(output_format: str, output_dir: str) -> dict:
 def convert_dataset(dataset, output_format: str, output_dir: str,
                     overwrite: bool = False,
                     on_progress: Optional[Callable] = None,
-                    is_interrupted: Optional[Callable] = None) -> dict:
+                    is_interrupted: Optional[Callable] = None,
+                    task: str = "det") -> dict:
     """把已加载的数据集写出为目标格式。
 
     返回 {"output_dir", "format", "layout", "image_count", "annotation_count",
@@ -1127,7 +1301,8 @@ def convert_dataset(dataset, output_format: str, output_dir: str,
     if fmt not in OUTPUT_FORMATS:
         raise DatasetToolError(f"不支持的输出格式：{output_format}")
 
-    report = validate_dataset(dataset)
+    # 只有导出 YOLO 时任务才影响形状取舍；其它格式按 auto 校验（不误报跳过）
+    report = validate_dataset(dataset, task=task if fmt == "yolo" else "auto")
     if not report.ok:
         raise DatasetToolError("数据集校验未通过：\n" + "\n".join(report.errors))
 
@@ -1153,7 +1328,7 @@ def convert_dataset(dataset, output_format: str, output_dir: str,
                     raise _Cancelled()
                 paths = image_paths[start:start + _CHUNK_SIZE]
                 _write_chunk(_slice_dataset(dataset, paths), fmt, layout,
-                             first=(start == 0))
+                             first=(start == 0), task=task)
                 done += len(paths)
                 if on_progress:
                     on_progress(done, total)
@@ -1189,15 +1364,23 @@ def convert_paths(input_format: str, images_dir: str, annotations_path: str,
                   data_yaml_path: Optional[str] = None,
                   overwrite: bool = False,
                   on_progress: Optional[Callable] = None,
-                  is_interrupted: Optional[Callable] = None) -> dict:
-    """加载 + 校验 + 转换的一站式入口，供 UI 在后台线程调用。"""
+                  is_interrupted: Optional[Callable] = None,
+                  task: str = "auto") -> dict:
+    """加载 + 校验 + 转换的一站式入口，供 UI 在后台线程调用。
+
+    task 同时决定 YOLO 输入的解析方式与 YOLO 输出的行格式；
+    输入为 auto（非 YOLO 时的默认）时输出退化为 det。
+    """
     dataset = load_dataset(input_format, images_dir, annotations_path,
-                           data_yaml_path=data_yaml_path)
+                           data_yaml_path=data_yaml_path, task=task)
+    out_task = task if task in ("det", "seg", "obb", "pose") else "det"
     result = convert_dataset(dataset, output_format, output_dir,
                              overwrite=overwrite,
                              on_progress=on_progress,
-                             is_interrupted=is_interrupted)
-    result["report"] = validate_dataset(dataset).as_dict()
+                             is_interrupted=is_interrupted,
+                             task=out_task)
+    report_task = out_task if output_format.strip().lower() == "yolo" else "auto"
+    result["report"] = validate_dataset(dataset, task=report_task).as_dict()
     return result
 
 

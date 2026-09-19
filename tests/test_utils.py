@@ -110,6 +110,13 @@ class TestExtractLabelName:
         assert extract_label_name("nose ⚠不在框内") == "nose"
         assert extract_label_name("nose [2] ⚠无det (3)") == "nose"
 
+    def test_strips_obb_angle_suffix(self):
+        assert extract_label_name("car 33°") == "car"
+        assert extract_label_name("car 30.0°") == "car"
+        assert extract_label_name("car [1] 45°") == "car"
+        # 非角度的度数不误删
+        assert extract_label_name("90°car") == "90°car"
+
 
 class TestBoxMatchesFilter:
     """任务/分组筛选（仅显示用）。"""

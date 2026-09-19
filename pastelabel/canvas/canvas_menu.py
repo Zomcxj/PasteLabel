@@ -61,7 +61,7 @@ class CanvasMenuMixin:
                 if (mx - cx) ** 2 + (my - cy) ** 2 <= eps * eps:
                     return i
                 continue
-            if box.get("shape_type") == "polygon" and box.get("points"):
+            if box.get("shape_type") in ("polygon", "rotation") and box.get("points"):
                 canvas_pts = [
                     [
                         p[0] * self.background_scale + background_rect.left(),
@@ -150,6 +150,26 @@ class CanvasMenuMixin:
         )
         menu.addAction(remove_action)
 
+        box = self._editor.detection_boxes[box_index]
+        shape_type = box.get("shape_type") or "rectangle"
+        if shape_type == "rotation":
+            reset_action = QAction(tr("重置旋转"), self)
+            reset_action.triggered.connect(
+                lambda checked, idx=box_index: self._reset_box_rotation(idx)
+            )
+            menu.addAction(reset_action)
+            to_hbb_action = QAction(tr("转为HBB"), self)
+            to_hbb_action.triggered.connect(
+                lambda checked, idx=box_index: self._rotation_to_rectangle(idx)
+            )
+            menu.addAction(to_hbb_action)
+        elif shape_type == "rectangle":
+            to_obb_action = QAction(tr("转为OBB"), self)
+            to_obb_action.triggered.connect(
+                lambda checked, idx=box_index: self._rectangle_to_rotation(idx)
+            )
+            menu.addAction(to_obb_action)
+
         menu.addSeparator()
 
         for label in self._collect_dataset_labels():
@@ -222,6 +242,65 @@ class CanvasMenuMixin:
                     list(self._editor.detection_boxes)
         self._editor.update_label_list()
         self.update()
+
+    def _reset_box_rotation(self, box_index):
+        """将 OBB 旋转角度归零，恢复水平矩形。"""
+        if not (0 <= box_index < len(self._editor.detection_boxes)):
+            return
+        box = self._editor.detection_boxes[box_index]
+        if box.get("shape_type") != "rotation":
+            return
+        from ..engine.shape_io import rect_to_rotation_points
+        self._editor.save_undo_state()
+        x, y, w, h = box["x"], box["y"], box["width"], box["height"]
+        box["points"] = rect_to_rotation_points(x, y, w, h)
+        if self._editor.current_background_index >= 0:
+            self._editor.detection_boxes_dict[self._editor.current_background_index] = \
+                list(self._editor.detection_boxes)
+        self._persist_boxes()
+        self.update()
+
+    def _rotation_to_rectangle(self, box_index):
+        """将 OBB 转为普通矩形（丢弃旋转，保留外接框）。"""
+        if not (0 <= box_index < len(self._editor.detection_boxes)):
+            return
+        box = self._editor.detection_boxes[box_index]
+        if box.get("shape_type") != "rotation":
+            return
+        self._editor.save_undo_state()
+        box["shape_type"] = "rectangle"
+        box.pop("points", None)
+        if self._editor.current_background_index >= 0:
+            self._editor.detection_boxes_dict[self._editor.current_background_index] = \
+                list(self._editor.detection_boxes)
+        self._persist_boxes()
+        self._editor.update_label_list()
+        self.update()
+
+    def _rectangle_to_rotation(self, box_index):
+        """将普通矩形转为 OBB（角度 0，points 为四角）。"""
+        if not (0 <= box_index < len(self._editor.detection_boxes)):
+            return
+        box = self._editor.detection_boxes[box_index]
+        if (box.get("shape_type") or "rectangle") != "rectangle":
+            return
+        from ..engine.shape_io import rect_to_rotation_points
+        self._editor.save_undo_state()
+        box["shape_type"] = "rotation"
+        box["points"] = rect_to_rotation_points(
+            box["x"], box["y"], box["width"], box["height"]
+        )
+        if self._editor.current_background_index >= 0:
+            self._editor.detection_boxes_dict[self._editor.current_background_index] = \
+                list(self._editor.detection_boxes)
+        self._persist_boxes()
+        self._editor.update_label_list()
+        self.update()
+
+    def _persist_boxes(self):
+        lm = getattr(self._editor, 'label_manager', None)
+        if lm is not None and hasattr(lm, '_save_detection_json_for_index'):
+            lm._save_detection_json_for_index(self._editor.current_background_index)
 
     def _change_box_label(self, box_index, new_label):
         """切换单个检测框标签到数据集中已有标签。"""

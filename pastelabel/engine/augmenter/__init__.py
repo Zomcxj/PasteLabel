@@ -197,15 +197,8 @@ class Augmenter:
         })
 
     def _save_labelme_json(self, json_path, image_name, boxes, width, height):
-        shapes = []
-        for b in boxes:
-            x, y, w, h = b["x"], b["y"], b["width"], b["height"]
-            shapes.append({
-                "label": b["label"],
-                "points": [[x, y], [x + w, y], [x + w, y + h], [x, y + h]],
-                "group_id": None, "description": "",
-                "shape_type": "rectangle", "flags": {}
-            })
+        from ..shape_io import labelme_shape_from_box
+        shapes = [labelme_shape_from_box(b) for b in boxes]
         data = {
             "version": "5.2.1", "flags": {},
             "shapes": shapes, "imagePath": image_name,

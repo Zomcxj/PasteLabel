@@ -5,7 +5,7 @@ from typing import List, Tuple
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QImage, QPainter
 
-from .base import BaseTransform, register_transform
+from .base import BaseTransform, register_transform, map_box_points
 
 
 @register_transform
@@ -51,27 +51,10 @@ class RandomRotation(BaseTransform):
         painter.rotate(angle)
         painter.drawImage(int(-cx), int(-cy), image)
         painter.end()
-        new_boxes = []
-        for b in boxes:
-            cos_a = math.cos(theta)
-            sin_a = math.sin(theta)
-            bx, by = b["x"], b["y"]
-            bw, bh = b["width"], b["height"]
-            box_corners = [(bx, by), (bx + bw, by), (bx + bw, by + bh), (bx, by + bh)]
-            rotated = []
-            for px, py in box_corners:
-                rx = (px - cx) * cos_a - (py - cy) * sin_a + new_w / 2.0
-                ry = (px - cx) * sin_a + (py - cy) * cos_a + new_h / 2.0
-                rotated.append((rx, ry))
-            rxs = [p[0] for p in rotated]
-            rys = [p[1] for p in rotated]
-            new_x = min(rxs)
-            new_y = min(rys)
-            new_w_box = max(rxs) - new_x
-            new_h_box = max(rys) - new_y
-            new_boxes.append({
-                "x": new_x, "y": new_y,
-                "width": new_w_box, "height": new_h_box,
-                "label": b["label"]
-            })
+
+        def _rotate_pt(px, py):
+            return ((px - cx) * cos_a - (py - cy) * sin_a + new_w / 2.0,
+                    (px - cx) * sin_a + (py - cy) * cos_a + new_h / 2.0)
+
+        new_boxes = [map_box_points(b, _rotate_pt) for b in boxes]
         return result, new_boxes

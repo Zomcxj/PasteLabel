@@ -569,7 +569,7 @@ class LabelManager(QObject):
         canvas/list edits are reflected without missing unloaded files.
         """
         import os
-        from .image_loader import collect_background_label_counts
+        from .image_loader import collect_background_label_counts, collect_background_label_tasks
 
         color_map = getattr(self.editor, 'label_color_map', None)
         images = list(getattr(self.editor, 'background_images', None) or [])
@@ -577,6 +577,7 @@ class LabelManager(QObject):
 
         # 1) Start from disk scan for the whole dataset.
         counts = collect_background_label_counts(images) if images else {}
+        label_tasks = collect_background_label_tasks(images) if images else {}
 
         # 2) Override counts for images loaded in memory (source of truth).
         if images and boxes_dict:
@@ -605,6 +606,7 @@ class LabelManager(QObject):
                         continue
                     label = label.strip()
                     counts[label] = counts.get(label, 0) + 1
+                    label_tasks.setdefault(label, set()).add(shape_task_type(box))
         elif boxes_dict:
             # No image list: count memory only.
             counts = {}
@@ -617,6 +619,7 @@ class LabelManager(QObject):
                         continue
                     label = label.strip()
                     counts[label] = counts.get(label, 0) + 1
+                    label_tasks.setdefault(label, set()).add(shape_task_type(box))
             for box in getattr(self.editor, 'detection_boxes', []) or []:
                 if not isinstance(box, dict):
                     continue
@@ -629,6 +632,7 @@ class LabelManager(QObject):
                     continue
                 label = label.strip()
                 counts[label] = counts.get(label, 0) + 1
+                label_tasks.setdefault(label, set()).add(shape_task_type(box))
 
         def _color_for(label):
             if isinstance(color_map, dict) and color_map.get(label):
@@ -638,7 +642,8 @@ class LabelManager(QObject):
             return ''
 
         self.editor._cached_bg_label_stats = [
-            {'label': label, 'count': count, 'color': _color_for(label)}
+            {'label': label, 'count': count, 'color': _color_for(label),
+             'tasks': sorted(label_tasks.get(label, set()))}
             for label, count in sorted(counts.items(), key=lambda x: (-x[1], x[0]))
             if count > 0
         ]
@@ -922,8 +927,8 @@ class LabelManager(QObject):
                     continue
                 if not box_visible(self.editor, box):
                     continue
-                from .shape_io import format_label_display
-                display = format_label_display(label, box.get("group_id"))
+                from .shape_io import box_display_label
+                display = box_display_label(box)
                 if box.get("shape_type") == "point":
                     warning = self._point_warning(box)
                     if warning:

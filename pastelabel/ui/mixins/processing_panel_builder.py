@@ -122,7 +122,8 @@ class ProcessingPanelBuilderMixin:
         fmt_layout.addWidget(self._exp_fmt_label)
         self._exp_format = QComboBox()
         self._exp_format.addItems([
-            "YOLO Detection", "YOLO Seg", "YOLO Pose", "VOC Detection", "COCO Detection"
+            "YOLO Detection", "YOLO Seg", "YOLO Pose", "YOLO OBB",
+            "VOC Detection", "COCO Detection"
         ])
         self._exp_format.setFixedWidth(150)
         fmt_layout.addWidget(self._exp_format)

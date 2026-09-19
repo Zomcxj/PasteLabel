@@ -82,6 +82,8 @@ class EventHandlerMixin:
             'draw_polygon': self.toggle_polygon_mode,
             'draw_point': self.toggle_point_mode,
             'draw_obb': self.toggle_obb_mode,
+            'rotate_cw': lambda: self.rotate_selected_box(1),
+            'rotate_ccw': lambda: self.rotate_selected_box(-1),
             'quit_draw': self._quit_draw,
             'delete_selected': self._delete_selected_box,
             'undo': self.undo,
@@ -135,6 +137,8 @@ class EventHandlerMixin:
             (tr("绘制多边形"), 'draw_polygon'),
             (tr("标注关键点"), 'draw_point'),
             (tr("绘制旋转框"), 'draw_obb'),
+            (tr("顺时针旋转"), 'rotate_cw'),
+            (tr("逆时针旋转"), 'rotate_ccw'),
             (tr("退出绘制"), 'quit_draw'),
             (tr("删除选中"), 'delete_selected'),
         ]
@@ -267,7 +271,8 @@ class EventHandlerMixin:
         if hasattr(self.canvas, '_reset_drawing_state'):
             self.canvas._reset_drawing_state()
         self.canvas.current_draw_mode = mode
-        self.canvas.is_drawing_box = mode == 'rectangle'
+        # rotation 与 rectangle 共用两点式绘制流程，靠 current_draw_mode 区分形状
+        self.canvas.is_drawing_box = mode in ('rectangle', 'rotation')
         self.canvas.is_drawing_polygon = mode == 'polygon'
         self.canvas.is_drawing_point = mode == 'point'
         self.canvas.is_drawing_obb = mode == 'rotation'
@@ -291,6 +296,30 @@ class EventHandlerMixin:
 
     def toggle_obb_mode(self):
         self._begin_draw_mode('rotation')
+
+    def rotate_selected_box(self, direction):
+        """键盘旋转选中的 OBB：direction=+1 顺时针，-1 逆时针，步长取 OBB_CONFIG。"""
+        from ..core.config import OBB_CONFIG
+        box_index = getattr(self.canvas, 'selected_box', None)
+        if box_index is None or not (0 <= box_index < len(self.detection_boxes)):
+            return
+        box = self.detection_boxes[box_index]
+        if box.get("shape_type") != "rotation" or len(box.get("points") or []) != 4:
+            return
+        import math
+        from .shape_io import rotate_points, rotation_center, rotation_points_bbox
+        step = math.radians(float(OBB_CONFIG.get('rotate_step', 1)) or 1)
+        self.save_undo_state()
+        box["points"] = rotate_points(box["points"], rotation_center(box["points"]), direction * step)
+        box["x"], box["y"], box["width"], box["height"] = rotation_points_bbox(box["points"])
+        if self.current_background_index >= 0:
+            self.detection_boxes_dict[self.current_background_index] = list(self.detection_boxes)
+        lm = getattr(self, 'label_manager', None)
+        if lm is not None and hasattr(lm, '_save_detection_json_for_index'):
+            lm._save_detection_json_for_index(self.current_background_index)
+        if hasattr(self, 'update_label_list'):
+            self.update_label_list()
+        self.canvas.update()
 
     def switch_background(self, direction):
         """切换背景图"""

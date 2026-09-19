@@ -76,8 +76,16 @@ class CanvasDrawingMixin:
             group_id = None
 
         if selected_label:
-            self._create_detection_box(x, y, width, height, selected_label,
-                                       group_id=group_id)
+            if getattr(self, 'current_draw_mode', None) == 'rotation':
+                from ..engine.shape_io import rect_to_rotation_points
+                points = rect_to_rotation_points(x, y, width, height)
+                self._create_detection_box(
+                    x, y, width, height, selected_label,
+                    shape_type="rotation", points=points, group_id=group_id,
+                )
+            else:
+                self._create_detection_box(x, y, width, height, selected_label,
+                                           group_id=group_id)
 
         self._reset_drawing_state()
 
@@ -432,7 +440,11 @@ class CanvasDrawingMixin:
                         bh = self._editor.current_background.height()
                         px = max(0, min(px, bw))
                         py = max(0, min(py, bh))
-                    box["points"][idx] = [px, py]
+                    if box.get("shape_type") == "rotation" and len(box["points"]) == 4:
+                        from ..engine.shape_io import move_rotation_vertex
+                        box["points"] = move_rotation_vertex(box["points"], idx, (px, py))
+                    else:
+                        box["points"][idx] = [px, py]
                     xs = [p[0] for p in box["points"]]
                     ys = [p[1] for p in box["points"]]
                     box["x"], box["y"] = min(xs), min(ys)
@@ -472,6 +484,70 @@ class CanvasDrawingMixin:
             self._needs_save = True
             self.update()
 
+    def _rotation_handle_at_pos(self, mouse_pos, box_index):
+        """鼠标是否落在旋转框的旋转手柄上（返回 True 并进入旋转拖拽）。"""
+        if box_index is None or not (0 <= box_index < len(self._editor.detection_boxes)):
+            return False
+        box = self._editor.detection_boxes[box_index]
+        if box.get("shape_type") != "rotation" or len(box.get("points") or []) != 4:
+            return False
+        background_rect = self.get_background_rect()
+        if background_rect is None:
+            return False
+        from ..engine.shape_io import rotation_handle_point, rotation_center
+        handle = rotation_handle_point(box["points"], 20 / max(self.background_scale, 1e-6))
+        if handle is None:
+            return False
+        hx = handle[0] * self.background_scale + background_rect.left()
+        hy = handle[1] * self.background_scale + background_rect.top()
+        if (mouse_pos.x() - hx) ** 2 + (mouse_pos.y() - hy) ** 2 > 12 * 12:
+            return False
+        self.selected_box = box_index
+        self.selected_boxes = [box_index]
+        self.is_rotating_box = True
+        self.rotation_center = rotation_center(box["points"])
+        self.rotation_prev_angle = self._mouse_angle(mouse_pos, background_rect)
+        self._editor.selected_item = None
+        self.selected_item_size = None
+        self.setCursor(Qt.ClosedHandCursor)
+        self.update_status_label()
+        self.update()
+        return True
+
+    def _mouse_angle(self, mouse_pos, background_rect):
+        if not self.rotation_center:
+            return None
+        import math
+        cx = self.rotation_center[0] * self.background_scale + background_rect.left()
+        cy = self.rotation_center[1] * self.background_scale + background_rect.top()
+        return math.atan2(mouse_pos.y() - cy, mouse_pos.x() - cx)
+
+    def _rotate_selected_box(self):
+        """按当前鼠标角度增量旋转选中的 OBB。"""
+        import math
+        box_index = self.selected_box
+        if box_index is None or not (0 <= box_index < len(self._editor.detection_boxes)):
+            return
+        box = self._editor.detection_boxes[box_index]
+        if box.get("shape_type") != "rotation" or len(box.get("points") or []) != 4:
+            return
+        background_rect = self.get_background_rect()
+        if background_rect is None:
+            return
+        angle = self._mouse_angle(self.mouse_pos, background_rect)
+        if angle is None or self.rotation_prev_angle is None:
+            return
+        theta = angle - self.rotation_prev_angle
+        if abs(theta) < 1e-9:
+            return
+        from ..engine.shape_io import rotate_points, rotation_center, rotation_points_bbox
+        box["points"] = rotate_points(box["points"], rotation_center(box["points"]), theta)
+        box["x"], box["y"], box["width"], box["height"] = rotation_points_bbox(box["points"])
+        self.rotation_prev_angle = angle
+        self._sync_detection_box_to_dict(box_index)
+        self._needs_save = True
+        self.update()
+
     def _check_box_handle(self, mouse_pos, x, y, width, height, box_index):
         if not self._can_edit_canvas():
             return False
@@ -504,7 +580,7 @@ class CanvasDrawingMixin:
         if box.get("shape_type") == "point":
             return None
         handle_size = DETECTION_BOX_CONFIG['resize_handle_size']
-        if box.get("shape_type") == "polygon" and box.get("points"):
+        if box.get("shape_type") in ("polygon", "rotation") and box.get("points"):
             mx, my = mouse_pos.x(), mouse_pos.y()
             half = handle_size / 2
             for i, p in enumerate(box["points"]):

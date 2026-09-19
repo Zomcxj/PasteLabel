@@ -141,6 +141,8 @@ SHORTCUT_CONFIG = {
     'draw_polygon': 'P',
     'draw_point': 'K',
     'draw_obb': 'O',
+    'rotate_cw': 'Z',
+    'rotate_ccw': 'X',
     'quit_draw': 'Q',
     'next_image': 'D',
     'prev_image': 'A',
@@ -189,6 +191,11 @@ CROSSHAIR_CONFIG = {
     'width': 1.0,
     'color': '#00FF80',
     'alpha': 160,
+}
+
+# OBB 旋转配置
+OBB_CONFIG = {
+    'rotate_step': 1,  # 键盘旋转单次角度（度）
 }
 
 # 出厂默认快照：这些字典在运行时会被就地修改（设置对话框、加载配置），

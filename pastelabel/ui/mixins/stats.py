@@ -56,19 +56,44 @@ class StatsMixin:
             if bg_stats:
                 return bg_stats
 
-        from ...engine.image_loader import collect_background_label_counts
+        from ...engine.image_loader import collect_background_label_counts, collect_background_label_tasks
         bg_stats = collect_background_label_counts(list(self.background_images or []))
+        bg_tasks = collect_background_label_tasks(list(self.background_images or []))
         for lbl in getattr(self, 'background_dataset_labels', set()) or set():
             bg_stats.setdefault(lbl, 0)
         for lbl in self.global_labels:
             if lbl in bg_stats or lbl in (getattr(self, 'background_dataset_labels', set()) or set()):
                 bg_stats.setdefault(lbl, 0)
         self._cached_bg_label_stats = [
-            {'label': label, 'count': count, 'color': self.get_label_color(label)}
+            {'label': label, 'count': count, 'color': self.get_label_color(label),
+             'tasks': sorted(bg_tasks.get(label, set()))}
             for label, count in sorted(bg_stats.items(), key=lambda x: (-x[1], x[0]))
         ]
         self._cached_bg_label_stats_path = current_path
         return bg_stats
+
+    def _collect_bg_label_tasks_for_dialog(self):
+        """{label: [task,...]} 用于统计界面「框类型」列。"""
+        from ...core.utils import shape_task_type
+        cached = getattr(self, '_cached_bg_label_stats', None) or []
+        tasks = {}
+        for item in cached:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get('label', '') or '').strip()
+            if not label:
+                continue
+            for t in item.get('tasks') or []:
+                tasks.setdefault(label, set()).add(t)
+        # 实时内存框（改名/新建后缓存可能滞后）
+        for boxes in list(getattr(self, 'detection_boxes_dict', {}).values()) + [getattr(self, 'detection_boxes', [])]:
+            for box in boxes or []:
+                if not isinstance(box, dict):
+                    continue
+                label = str(box.get('label', '') or '').strip()
+                if label:
+                    tasks.setdefault(label, set()).add(shape_task_type(box))
+        return {label: sorted(ts) for label, ts in tasks.items()}
 
     def _show_label_stats(self):
         """显示标签统计弹窗"""
@@ -117,8 +142,9 @@ class StatsMixin:
         bg_header.setFixedHeight(24)
         layout.addWidget(bg_header)
         bg_stats = self._collect_bg_stats_for_dialog()
-        bg_table = QTableWidget(len(bg_stats), 3)
-        bg_table.setHorizontalHeaderLabels([tr("类别"), tr("数量"), tr("颜色")])
+        bg_tasks = self._collect_bg_label_tasks_for_dialog()
+        bg_table = QTableWidget(len(bg_stats), 4)
+        bg_table.setHorizontalHeaderLabels([tr("类别"), tr("数量"), tr("框类型"), tr("颜色")])
         bg_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         bg_table.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed | QAbstractItemView.SelectedClicked)
         for row, (label, count) in enumerate(sorted(bg_stats.items(), key=lambda x: -x[1])):
@@ -129,10 +155,13 @@ class StatsMixin:
             count_item = QTableWidgetItem(str(count))
             count_item.setFlags(count_item.flags() & ~QtCore.ItemIsEditable)
             bg_table.setItem(row, 1, count_item)
+            task_item = QTableWidgetItem(" ".join(bg_tasks.get(label, [])))
+            task_item.setFlags(task_item.flags() & ~QtCore.ItemIsEditable)
+            bg_table.setItem(row, 2, task_item)
             color_button = QPushButton()
             self._set_label_color_button(color_button, self.get_label_color(label))
             color_button.clicked.connect(lambda _, value=label, button=color_button: self._change_label_color(value, dialog, button))
-            bg_table.setCellWidget(row, 2, color_button)
+            bg_table.setCellWidget(row, 3, color_button)
 
         def _on_bg_label_changed(item):
             if item is None or item.column() != 0:
@@ -271,6 +300,7 @@ class StatsMixin:
         from PyQt5.QtWidgets import QTableWidgetItem, QPushButton
         from PyQt5.QtCore import Qt as QtCore
         bg_stats = self._collect_bg_stats_for_dialog()
+        bg_tasks = self._collect_bg_label_tasks_for_dialog()
         rows = sorted(bg_stats.items(), key=lambda x: (-x[1], x[0]))
         bg_table.blockSignals(True)
         bg_table.setRowCount(len(rows))
@@ -282,10 +312,13 @@ class StatsMixin:
             count_item = QTableWidgetItem(str(count))
             count_item.setFlags(count_item.flags() & ~QtCore.ItemIsEditable)
             bg_table.setItem(row, 1, count_item)
+            task_item = QTableWidgetItem(" ".join(bg_tasks.get(label, [])))
+            task_item.setFlags(task_item.flags() & ~QtCore.ItemIsEditable)
+            bg_table.setItem(row, 2, task_item)
             color_button = QPushButton()
             self._set_label_color_button(color_button, self.get_label_color(label))
             color_button.clicked.connect(lambda _, value=label, button=color_button: self._change_label_color(value, dialog, button))
-            bg_table.setCellWidget(row, 2, color_button)
+            bg_table.setCellWidget(row, 3, color_button)
         bg_table.blockSignals(False)
 
     def _set_label_color_button(self, button, color):

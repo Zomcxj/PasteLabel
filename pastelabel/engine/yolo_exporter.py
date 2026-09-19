@@ -39,6 +39,12 @@ class YoloExporter(BaseExporter):
                     if line:
                         f.write(line + "\n")
                     continue
+                if self.mode == "obb" and (b.get("shape_type") or "rectangle") == "rotation":
+                    from .shape_io import yolo_obb_line
+                    line = yolo_obb_line(b, class_id, iw, ih)
+                    if line:
+                        f.write(line + "\n")
+                    continue
                 if self.mode == "pose":
                     self._pose_instances(f, boxes, classes, iw, ih)
                     break

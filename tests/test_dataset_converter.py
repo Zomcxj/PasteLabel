@@ -176,9 +176,9 @@ def offline_convert(monkeypatch):
     calls = []
     monkeypatch.setattr(ST, "_slice_dataset", lambda dataset, paths: _Slice(len(paths)))
 
-    def fake_write(chunk, output_format, layout, first):
+    def fake_write(chunk, output_format, layout, first, task="det"):
         calls.append({"format": output_format, "chunk": len(chunk), "first": first,
-                      "layout": layout})
+                      "layout": layout, "task": task})
         return None
 
     monkeypatch.setattr(ST, "_write_chunk", fake_write)
@@ -1090,10 +1090,157 @@ def test_convert_dataset_raises_and_cleans_on_write_failure(tmp_path, yolo_datas
                            yolo_dataset.data_yaml)
     out = tmp_path / "out"
 
-    def boom(chunk, output_format, layout, first):
+    def boom(chunk, output_format, layout, first, task="det"):
         raise RuntimeError("simulated write failure")
 
     monkeypatch.setattr(ST, "_write_chunk", boom)
     with pytest.raises(DatasetToolError, match="写出 yolo 数据集失败"):
         convert_dataset(dataset, "yolo", str(out))
     assert not out.exists(), "写出失败后不得残留半成品目录"
+
+
+# --------------------------------------------------------------------------
+# OBB / pose / seg 类型保留（LabelMe <-> YOLO）
+# --------------------------------------------------------------------------
+
+def _labelme_dir_with_shapes(tmp_path, shapes):
+    images = tmp_path / "img"
+    images.mkdir()
+    write_png(images / "a.png", 100, 100)
+    payload = {
+        "version": "5.3.1", "flags": {}, "shapes": shapes,
+        "imagePath": "a.png", "imageData": None,
+        "imageHeight": 100, "imageWidth": 100,
+    }
+    (images / "a.json").write_text(json.dumps(payload), encoding="utf-8")
+    return str(images)
+
+
+def test_labelme_preserves_rotation_roundtrip(tmp_path):
+    src = _labelme_dir_with_shapes(tmp_path, [{
+        "label": "car", "shape_type": "rotation",
+        "points": [[10, 10], [40, 10], [40, 30], [10, 30]],
+        "group_id": None, "flags": {},
+    }])
+    out = tmp_path / "out"
+    ST.convert_paths("labelme", src, src, "labelme", str(out),
+                     overwrite=True, task="obb")
+    data = json.loads((out / "a.json").read_text(encoding="utf-8"))
+    assert data["shapes"][0]["shape_type"] == "rotation"
+    assert len(data["shapes"][0]["points"]) == 4
+
+
+def test_labelme_rotation_to_yolo_obb(tmp_path):
+    src = _labelme_dir_with_shapes(tmp_path, [{
+        "label": "car", "shape_type": "rotation",
+        "points": [[10, 10], [40, 10], [40, 30], [10, 30]],
+        "group_id": None, "flags": {},
+    }])
+    out = tmp_path / "out"
+    ST.convert_paths("labelme", src, src, "yolo", str(out),
+                     overwrite=True, task="obb")
+    txt = (out / "labels" / "a.txt").read_text(encoding="utf-8").strip()
+    parts = txt.split()
+    assert parts[0] == "0"
+    assert len(parts) == 9  # cls + 8 coords
+
+
+def test_yolo_obb_back_to_labelme_rotation(tmp_path):
+    root = tmp_path / "yolo"
+    (root / "images").mkdir(parents=True)
+    (root / "labels").mkdir(parents=True)
+    write_png(root / "images" / "a.png", 100, 100)
+    (root / "labels" / "a.txt").write_text(
+        "0 0.1 0.1 0.4 0.1 0.4 0.3 0.1 0.3\n", encoding="utf-8")
+    (root / "data.yaml").write_text("names: ['car']\n", encoding="utf-8")
+    out = tmp_path / "out"
+    ST.convert_paths("yolo", str(root / "images"), str(root / "labels"),
+                     "labelme", str(out), data_yaml_path=str(root / "data.yaml"),
+                     overwrite=True, task="obb")
+    data = json.loads((out / "a.json").read_text(encoding="utf-8"))
+    assert data["shapes"][0]["shape_type"] == "rotation"
+    assert len(data["shapes"][0]["points"]) == 4
+
+
+def test_labelme_polygon_to_yolo_seg(tmp_path):
+    src = _labelme_dir_with_shapes(tmp_path, [{
+        "label": "leaf", "shape_type": "polygon",
+        "points": [[10, 10], [40, 10], [25, 40]],
+        "group_id": None, "flags": {},
+    }])
+    out = tmp_path / "out"
+    ST.convert_paths("labelme", src, src, "yolo", str(out),
+                     overwrite=True, task="seg")
+    txt = (out / "labels" / "a.txt").read_text(encoding="utf-8").strip()
+    parts = txt.split()
+    assert parts[0] == "0"
+    assert len(parts) == 7  # cls + 3 points * 2
+
+
+def test_labelme_pose_to_yolo_pose(tmp_path):
+    src = _labelme_dir_with_shapes(tmp_path, [
+        {"label": "person", "shape_type": "rectangle",
+         "points": [[10, 10], [50, 60]], "group_id": 0, "flags": {}},
+        {"label": "person", "shape_type": "point",
+         "points": [[20, 20]], "group_id": 0, "flags": {}},
+        {"label": "person", "shape_type": "point",
+         "points": [[30, 40]], "group_id": 0, "flags": {}},
+    ])
+    out = tmp_path / "out"
+    ST.convert_paths("labelme", src, src, "yolo", str(out),
+                     overwrite=True, task="pose")
+    txt = (out / "labels" / "a.txt").read_text(encoding="utf-8").strip()
+    parts = txt.split()
+    assert parts[0] == "0"
+    # cls + cx cy w h + 2 keypoints * 3
+    assert len(parts) == 5 + 2 * 3
+
+
+def test_labelme_point_preserved_roundtrip(tmp_path):
+    src = _labelme_dir_with_shapes(tmp_path, [{
+        "label": "kp", "shape_type": "point",
+        "points": [[25, 25]], "group_id": 1, "flags": {},
+    }])
+    out = tmp_path / "out"
+    ST.convert_paths("labelme", src, src, "labelme", str(out),
+                     overwrite=True, task="pose")
+    data = json.loads((out / "a.json").read_text(encoding="utf-8"))
+    assert data["shapes"][0]["shape_type"] == "point"
+    assert data["shapes"][0]["group_id"] == 1
+
+
+def test_validate_warns_on_mixed_types_for_obb_task(tmp_path):
+    src = _labelme_dir_with_shapes(tmp_path, [
+        {"label": "car", "shape_type": "rotation",
+         "points": [[10, 10], [40, 10], [40, 30], [10, 30]], "group_id": None, "flags": {}},
+        {"label": "car", "shape_type": "rectangle",
+         "points": [[5, 5], [20, 20]], "group_id": None, "flags": {}},
+    ])
+    dataset = ST.load_dataset("labelme", src, src, task="obb")
+    report = ST.validate_dataset(dataset, task="obb")
+    assert report.ok  # 仍可转换（有 rotation）
+    assert any("跳过" in w for w in report.warnings)
+
+
+def test_validate_errors_when_task_has_no_matching_shape(tmp_path):
+    src = _labelme_dir_with_shapes(tmp_path, [
+        {"label": "car", "shape_type": "rectangle",
+         "points": [[5, 5], [20, 20]], "group_id": None, "flags": {}},
+    ])
+    dataset = ST.load_dataset("labelme", src, src, task="obb")
+    report = ST.validate_dataset(dataset, task="obb")
+    assert not report.ok
+    assert any("没有可导出" in e for e in report.errors)
+
+
+def test_validate_det_task_keeps_all_shapes(tmp_path):
+    src = _labelme_dir_with_shapes(tmp_path, [
+        {"label": "car", "shape_type": "rotation",
+         "points": [[10, 10], [40, 10], [40, 30], [10, 30]], "group_id": None, "flags": {}},
+        {"label": "car", "shape_type": "polygon",
+         "points": [[5, 5], [20, 5], [12, 20]], "group_id": None, "flags": {}},
+    ])
+    dataset = ST.load_dataset("labelme", src, src, task="det")
+    report = ST.validate_dataset(dataset, task="det")
+    assert report.ok
+    assert not any("跳过" in w for w in report.warnings)

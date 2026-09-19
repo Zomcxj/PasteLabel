@@ -1,4 +1,5 @@
 """LabelMe shape <-> internal box conversion."""
+import math
 
 
 def box_from_labelme_shape(shape):
@@ -64,6 +65,30 @@ def format_label_display(label, group_id=None):
     if group_id is not None:
         return f"{label} [{group_id}]"
     return label
+
+
+def rotation_angle_degrees(points):
+    """OBB 旋转角（度），基于 p0->p1 边相对水平线，归一化到 [0, 360)。"""
+    if not points or len(points) < 2:
+        return 0.0
+    dx = points[1][0] - points[0][0]
+    dy = points[1][1] - points[0][1]
+    angle = math.degrees(math.atan2(dy, dx))
+    if angle < 0:
+        angle += 360
+    return angle
+
+
+def box_display_label(box):
+    """标签显示文本：类别[分组] 角度（旋转框附带角度，0~360°）。"""
+    label = box.get("label", "") if isinstance(box, dict) else ""
+    text = format_label_display(label, box.get("group_id") if isinstance(box, dict) else None)
+    if isinstance(box, dict) and box.get("shape_type") == "rotation" and len(box.get("points") or []) == 4:
+        angle = rotation_angle_degrees(box['points'])
+        if angle >= 359.5:
+            angle = 0.0
+        text = f"{text} {angle:.0f}°"
+    return text
 
 
 def point_warning(point_box, all_boxes):
@@ -163,6 +188,103 @@ def yolo_pose_line(class_id, bbox, keypoints, image_width, image_height):
 def yolo_seg_line(box, class_id, image_width, image_height):
     points = box.get("points") or []
     if len(points) < 3 or not image_width or not image_height:
+        return None
+    parts = [str(class_id)]
+    for x, y in points:
+        parts.append(f"{x / image_width:.6f}")
+        parts.append(f"{y / image_height:.6f}")
+    return " ".join(parts)
+
+
+def rect_to_rotation_points(x, y, width, height):
+    """Axis-aligned rectangle -> 4 CCW corner points (LabelMe rotation order)."""
+    return [
+        [x, y],
+        [x + width, y],
+        [x + width, y + height],
+        [x, y + height],
+    ]
+
+
+def rotation_center(points):
+    """Center of a 4-point rotation shape (diagonal midpoint)."""
+    if not points or len(points) < 4:
+        return None
+    cx = (points[0][0] + points[2][0]) / 2
+    cy = (points[0][1] + points[2][1]) / 2
+    return cx, cy
+
+
+def rotate_points(points, center, angle):
+    """Rotate points around center by angle (radians), returning new point list."""
+    cx, cy = center
+    cos_a = math.cos(angle)
+    sin_a = math.sin(angle)
+    out = []
+    for px, py in points:
+        dx = px - cx
+        dy = py - cy
+        out.append([cx + dx * cos_a - dy * sin_a, cy + dx * sin_a + dy * cos_a])
+    return out
+
+
+def rotation_points_bbox(points):
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
+
+
+def move_rotation_vertex(points, index, new_pos):
+    """Drag one OBB corner while keeping a rectangle with the same orientation.
+
+    The opposite corner stays fixed; the two adjacent corners slide along the
+    original edge directions so all angles remain 90°.
+    """
+    if len(points) != 4:
+        return points
+    i = index % 4
+    opp = (i + 2) % 4
+    nx, ny = float(new_pos[0]), float(new_pos[1])
+    ux = points[(i + 1) % 4][0] - points[i][0]
+    uy = points[(i + 1) % 4][1] - points[i][1]
+    vx = points[(i + 3) % 4][0] - points[i][0]
+    vy = points[(i + 3) % 4][1] - points[i][1]
+    u_len = math.hypot(ux, uy) or 1.0
+    v_len = math.hypot(vx, vy) or 1.0
+    ux, uy = ux / u_len, uy / u_len
+    vx, vy = vx / v_len, vy / v_len
+    dx = points[opp][0] - nx
+    dy = points[opp][1] - ny
+    a = dx * ux + dy * uy
+    b = dx * vx + dy * vy
+    out = [list(p) for p in points]
+    out[i] = [nx, ny]
+    out[(i + 1) % 4] = [nx + a * ux, ny + a * uy]
+    out[(i + 3) % 4] = [nx + b * vx, ny + b * vy]
+    return out
+
+
+def rotation_handle_point(points, distance):
+    """Point offset from the midpoint of edge p0-p1 along its outward normal."""
+    if len(points) != 4:
+        return None
+    p0, p1 = points[0], points[1]
+    dx = p1[0] - p0[0]
+    dy = p1[1] - p0[1]
+    edge_len = math.hypot(dx, dy)
+    if edge_len < 1e-6:
+        return None
+    mid_x = (p0[0] + p1[0]) / 2
+    mid_y = (p0[1] + p1[1]) / 2
+    normal_x = dy / edge_len
+    normal_y = -dx / edge_len
+    return mid_x + normal_x * distance, mid_y + normal_y * distance
+
+
+def yolo_obb_line(box, class_id, image_width, image_height):
+    """`cls x0 y0 x1 y1 x2 y2 x3 y3` normalized; None if not a valid 4-point OBB."""
+    points = box.get("points") or []
+    if len(points) != 4 or not image_width or not image_height:
         return None
     parts = [str(class_id)]
     for x, y in points:

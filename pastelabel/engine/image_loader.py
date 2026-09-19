@@ -213,6 +213,50 @@ def collect_background_label_counts(image_paths, is_interrupted=None):
     return counts
 
 
+def _scan_label_tasks_in_json(json_path):
+    """Return {label: set(shape_task_type)} for one sidecar JSON, or None."""
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return None
+    shapes = data.get("shapes") if isinstance(data, dict) else None
+    if not isinstance(shapes, list):
+        return None
+    from ..core.utils import shape_task_type
+    tasks = {}
+    for shape in shapes:
+        if not isinstance(shape, dict):
+            continue
+        label = shape.get("label")
+        if not (isinstance(label, str) and label.strip()):
+            continue
+        tasks.setdefault(label.strip(), set()).add(shape_task_type(shape))
+    return tasks
+
+
+def collect_background_label_tasks(image_paths, is_interrupted=None):
+    """Collect the set of task types (det/seg/pose/obb) per label across sidecars."""
+    tasks = {}
+    pending = []
+    for image_path in image_paths:
+        if is_interrupted and is_interrupted():
+            break
+        pending.append(f"{os.path.splitext(image_path)[0]}.json")
+    if not pending:
+        return tasks
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [pool.submit(_scan_label_tasks_in_json, jp) for jp in pending]
+        for future in concurrent.futures.as_completed(futures):
+            if is_interrupted and is_interrupted():
+                break
+            result = future.result()
+            if result:
+                for lbl, ts in result.items():
+                    tasks.setdefault(lbl, set()).update(ts)
+    return tasks
+
+
 class DatasetLabelScanWorker(QThread):
     """Scan a fixed dataset snapshot outside the UI thread."""
     labels_scanned = pyqtSignal(int, tuple, object, object)

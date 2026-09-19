@@ -4,7 +4,7 @@
 import os
 import json
 from . import config as config_module
-from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG, LABEL_COLORS
+from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG, LABEL_COLORS, OBB_CONFIG
 
 
 CONFIG_PATH = os.environ.get('PASTELABEL_CONFIG_PATH') or os.path.join(
@@ -334,6 +334,8 @@ def load_all():
         'resize_handle_size': config.get('resize_handle_size', DETECTION_BOX_CONFIG['resize_handle_size']),
         'max_polygon_points': max(3, min(64, int(config.get(
             'max_polygon_points', DETECTION_BOX_CONFIG['max_polygon_points'])))),
+        "rotate_step": max(1, min(6, int(config.get(
+            "rotate_step", OBB_CONFIG['rotate_step'])))),
         'label_font_size': config.get('label_font_size', DETECTION_BOX_CONFIG['label_font_size']),
         'label_position': config.get('label_position', DETECTION_BOX_CONFIG['label_position']),
         'canvas_image_copy_enabled': bool(config.get('canvas_image_copy_enabled', False)),
@@ -368,6 +370,7 @@ def load_all():
 def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
              grid_line_width=None, grid_alpha=None, resize_handle_size=None,
              max_polygon_points=None,
+             rotate_step=None,
              label_font_size=None, label_position=None,
              canvas_image_copy_enabled=None, relative_path_display=None,
              magnifier_enabled=None,
@@ -395,6 +398,8 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['resize_handle_size'] = resize_handle_size
     if max_polygon_points is not None:
         config['max_polygon_points'] = max(3, min(64, int(max_polygon_points)))
+    if rotate_step is not None:
+        config['rotate_step'] = max(1, min(6, int(rotate_step)))
     if label_font_size is not None:
         config['label_font_size'] = label_font_size
     if label_position is not None:

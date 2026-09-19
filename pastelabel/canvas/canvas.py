@@ -45,6 +45,10 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         self.box_drag_start = QPoint()
         self.is_resizing_box = False
         self.box_resize_start = QPoint()
+        # OBB 旋转手柄拖拽
+        self.is_rotating_box = False
+        self.rotation_center = None
+        self.rotation_prev_angle = None
 
         # 绘制模式相关
         self.is_drawing_box = False

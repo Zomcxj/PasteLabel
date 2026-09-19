@@ -192,7 +192,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 continue
             if box.get("shape_type") == "point":
                 continue
-            if box.get("shape_type") == "polygon" and box.get("points"):
+            if box.get("shape_type") in ("polygon", "rotation") and box.get("points"):
                 corners = [
                     (f"v{n}", (
                         p[0] * self.background_scale + background_rect.left(),
@@ -251,6 +251,11 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
         ctrl_pressed = bool(self._current_modifiers() & Qt.ControlModifier)
 
+        # 旋转框手柄优先：选中 OBB 时其手柄可拖动旋转
+        if (self.selected_box is not None and
+                self._rotation_handle_at_pos(mouse_pos, self.selected_box)):
+            return True
+
         # 第一遍：检查所有框的手柄，选最近的那个（解决重叠时下层框手柄被遮挡的问题）
         box_idx, handle = self._collect_nearest_handle(mouse_pos)
         if box_idx is not None:
@@ -282,7 +287,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 cx = box["points"][0][0] * self.background_scale + background_rect.left()
                 cy = box["points"][0][1] * self.background_scale + background_rect.top()
                 return (mouse_pos.x() - cx) ** 2 + (mouse_pos.y() - cy) ** 2 <= eps * eps
-            if box.get("shape_type") == "polygon" and box.get("points"):
+            if box.get("shape_type") in ("polygon", "rotation") and box.get("points"):
                 canvas_pts = [
                     [
                         p[0] * self.background_scale + background_rect.left(),
@@ -473,6 +478,11 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self._drag_box()
             return
 
+        if self.is_rotating_box and self.selected_box is not None:
+            self.setCursor(Qt.ClosedHandCursor)
+            self._rotate_selected_box()
+            return
+
         if self.is_resizing_box and self.selected_box is not None:
             self.setCursor(Qt.ClosedHandCursor)
             self._resize_box()
@@ -620,7 +630,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 cy = box["points"][0][1] * self.background_scale + background_rect.top()
                 hit = ((self.mouse_pos.x() - cx) ** 2 +
                        (self.mouse_pos.y() - cy) ** 2) <= eps * eps
-            elif box.get("shape_type") == "polygon" and box.get("points"):
+            elif box.get("shape_type") in ("polygon", "rotation") and box.get("points"):
                 canvas_pts = [
                     [
                         p[0] * self.background_scale + background_rect.left(),
@@ -826,7 +836,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
     def mouseReleaseEvent(self, event):
         self._drag_out_pending = False
-        if self._can_edit_canvas() and (self.is_dragging_box or self.is_resizing_box):
+        if self._can_edit_canvas() and (self.is_dragging_box or self.is_resizing_box or self.is_rotating_box):
             if hasattr(self, '_needs_save') and self._needs_save:
                 self._save_current_detection_boxes()
         self._needs_save = False
@@ -835,6 +845,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.is_dragging_background = False
         self.is_dragging_box = False
         self.is_resizing_box = False
+        self.is_rotating_box = False
+        self.rotation_prev_angle = None
         self.resize_handle = None
         self._check_hover()
         self.update()
@@ -848,16 +860,21 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         elif self._editor.selected_item is not None:
             self._scale_selected_item(event)
         elif self.selected_box is not None:
-            locked_target = getattr(self, '_wheel_edge_target', None)
-            if locked_target and locked_target[0] == self.selected_box:
-                self._adjust_selected_box_edge(event, locked_target[1])
-            elif self._is_mouse_inside_selected_box():
+            box = self._editor.detection_boxes[self.selected_box]
+            if box.get("shape_type") == "rotation":
+                # 旋转框整体缩放，不做 bbox 单边调整（否则与 points 失同步）
                 self._scale_selected_box(event)
             else:
-                edge = self._get_selected_box_edge()
-                if edge:
-                    self._wheel_edge_target = (self.selected_box, edge)
-                    self._adjust_selected_box_edge(event, edge)
+                locked_target = getattr(self, '_wheel_edge_target', None)
+                if locked_target and locked_target[0] == self.selected_box:
+                    self._adjust_selected_box_edge(event, locked_target[1])
+                elif self._is_mouse_inside_selected_box():
+                    self._scale_selected_box(event)
+                else:
+                    edge = self._get_selected_box_edge()
+                    if edge:
+                        self._wheel_edge_target = (self.selected_box, edge)
+                        self._adjust_selected_box_edge(event, edge)
 
         self.update()
 
@@ -938,7 +955,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         scale_factor = 1.0 + step if delta > 0 else max(0.1, 1.0 - step)
 
         box = self._editor.detection_boxes[self.selected_box]
-        if box.get("shape_type") == "polygon" and box.get("points"):
+        if box.get("shape_type") in ("polygon", "rotation") and box.get("points"):
             self._scale_polygon(box, scale_factor)
             self._sync_detection_box_to_dict(self.selected_box)
             return

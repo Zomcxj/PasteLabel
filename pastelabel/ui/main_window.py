@@ -107,6 +107,10 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         DETECTION_BOX_CONFIG['max_polygon_points'] = max(
             3, min(64, int(settings.get('max_polygon_points', DETECTION_BOX_CONFIG.get('max_polygon_points', 32))))
         )
+        from ..core.config import OBB_CONFIG
+        OBB_CONFIG['rotate_step'] = max(
+            1, min(6, int(settings.get("rotate_step", OBB_CONFIG.get("rotate_step", 1))))
+        )
         self._canvas_image_copy_enabled = bool(settings.get('canvas_image_copy_enabled', False))
         self._relative_path_display = bool(settings.get('relative_path_display', False))
         self._magnifier_enabled = bool(settings.get('magnifier_enabled', False))

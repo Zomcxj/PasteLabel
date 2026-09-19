@@ -37,6 +37,15 @@ FORMAT_CHOICES = (
 DEFAULT_INPUT_FORMAT = "labelme"
 DEFAULT_OUTPUT_FORMAT = "yolo"
 
+#: 任务类型：决定 YOLO 行格式（检测框/分割/旋转框/关键点）
+TASK_CHOICES = (
+    ("检测框 (det)", "det"),
+    ("分割 (seg)", "seg"),
+    ("旋转框 (obb)", "obb"),
+    ("关键点 (pose)", "pose"),
+)
+DEFAULT_TASK = "det"
+
 
 def _format_index(key):
     """格式键 -> 下拉框索引。"""
@@ -87,6 +96,17 @@ class DatasetToolsDialog(QDialog):
         fmt_row.addStretch()
         layout.addLayout(fmt_row)
 
+        task_row = QHBoxLayout()
+        self._task_lbl = QLabel(tr("任务类型:"))
+        self._text_widgets.append((self._task_lbl, "任务类型:"))
+        task_row.addWidget(self._task_lbl)
+        self._task_combo = QComboBox()
+        for name, _key in TASK_CHOICES:
+            self._task_combo.addItem(tr(name))
+        task_row.addWidget(self._task_combo)
+        task_row.addStretch()
+        layout.addLayout(task_row)
+
         default_folder = default_folder or ""
         self._images_edit = self._add_path_row(
             layout, "图片目录:", default_folder, self._browse_images)
@@ -135,6 +155,10 @@ class DatasetToolsDialog(QDialog):
         # 依赖的控件都建好之后再设，否则信号会在半初始化状态下触发。
         self._in_combo.setCurrentIndex(_format_index(DEFAULT_INPUT_FORMAT))
         self._out_combo.setCurrentIndex(_format_index(DEFAULT_OUTPUT_FORMAT))
+        for idx, (_name, key) in enumerate(TASK_CHOICES):
+            if key == DEFAULT_TASK:
+                self._task_combo.setCurrentIndex(idx)
+                break
         self._on_input_format_changed()
         self._refresh_availability()
 
@@ -177,6 +201,10 @@ class DatasetToolsDialog(QDialog):
         for widget, key in self._text_widgets:
             widget.setText(tr(key))
         self._log_area.setPlaceholderText(tr("操作日志将显示在这里..."))
+        task_combo = getattr(self, "_task_combo", None)
+        if task_combo is not None:
+            for idx, (name, _key) in enumerate(TASK_CHOICES):
+                task_combo.setItemText(idx, tr(name))
         self._on_input_format_changed()
 
     def showEvent(self, event):
@@ -200,6 +228,9 @@ class DatasetToolsDialog(QDialog):
 
     def _output_format(self):
         return FORMAT_CHOICES[self._out_combo.currentIndex()][1]
+
+    def _task(self):
+        return TASK_CHOICES[self._task_combo.currentIndex()][1]
 
     def _on_input_format_changed(self):
         """COCO 标注是单文件，yolo 需要 data.yaml，按格式切换输入行。
@@ -288,6 +319,7 @@ class DatasetToolsDialog(QDialog):
             "images_dir": os.path.normpath(images_dir),
             "annotations_path": os.path.normpath(ann_path),
             "data_yaml_path": None,
+            "task": self._task(),
         }
         if params["input_format"] == "yolo":
             yaml_path = self._yaml_edit.text().strip()
@@ -305,6 +337,7 @@ class DatasetToolsDialog(QDialog):
         params["output_dir"] = out_dir
         params["output_format"] = self._output_format()
         params["overwrite"] = self._overwrite_cb.isChecked()
+        params["task"] = self._task()
         return params
 
     # ---------- 动作 ----------
@@ -320,8 +353,10 @@ class DatasetToolsDialog(QDialog):
             dataset = st.load_dataset(
                 params["input_format"], params["images_dir"],
                 params["annotations_path"],
-                data_yaml_path=params["data_yaml_path"])
-            return st.validate_dataset(dataset).as_dict()
+                data_yaml_path=params["data_yaml_path"],
+                task=params["task"])
+            report_task = params["task"] if self._output_format() == "yolo" else "auto"
+            return st.validate_dataset(dataset, task=report_task).as_dict()
 
         result, error = _run_with_progress(
             self, tr("格式转换"), tr("正在校验数据集..."), task)
@@ -350,7 +385,8 @@ class DatasetToolsDialog(QDialog):
                 data_yaml_path=params["data_yaml_path"],
                 overwrite=params["overwrite"],
                 on_progress=lambda cur, total: progress_fn(cur, total, None),
-                is_interrupted=is_interrupted)
+                is_interrupted=is_interrupted,
+                task=params["task"])
 
         result, error = _run_with_progress(
             self, tr("格式转换"), tr("正在转换数据集..."), task)

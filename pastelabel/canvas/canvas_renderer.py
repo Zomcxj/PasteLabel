@@ -66,6 +66,8 @@ class CanvasRendererMixin:
 
             if self.is_drawing_box:
                 self._draw_temp_box(sp)
+            if getattr(self, 'is_drawing_polygon', False):
+                self._draw_temp_polygon(sp, background_rect)
 
             sp.setOpacity(1.0)
 
@@ -290,28 +292,83 @@ class CanvasRendererMixin:
         bg_color = QColor(lr, lg, lb)
         self._draw_label_above_rect(painter, x, y, label, bg_color)
 
+    def _box_visible(self, box):
+        """框是否通过任务/分组筛选（未启用筛选则全部可见）。"""
+        from ..core.utils import box_visible
+        return box_visible(self._editor, box)
+
     def _draw_detection_boxes(self, painter, background_rect):
-        """绘制所有检测框"""
+        """绘制所有检测框（关键点最后画，保证叠在同组框之上）。
+
+        关键点分两遍：先画所有圆点，再画所有标签。否则后一个点的标签色块
+        会盖住前一个点的圆点（标签块是不透明填充）。
+        """
+        points = []
         for i, box in enumerate(self._editor.detection_boxes):
-            if box["width"] <= 0 or box["height"] <= 0:
+            if not self._box_visible(box):
                 continue
+            if box.get("shape_type") == "point" and box.get("points"):
+                points.append((i, box))
+                continue
+            self._draw_one_box(painter, background_rect, i, box)
+        for i, box in points:
+            self._draw_one_box(painter, background_rect, i, box, draw_dot=False)
+        # 圆点最后画，且选中/按下的点排在最后，保证正在编辑的点不被相邻点盖住
+        selected = set(getattr(self, 'selected_boxes', []) or [])
+        if self.selected_box is not None:
+            selected.add(self.selected_box)
+        points.sort(key=lambda item: item[0] in selected)
+        for i, box in points:
+            self._draw_one_box(painter, background_rect, i, box, draw_label=False)
 
-            box_x = box["x"] * self.background_scale + background_rect.left()
-            box_y = box["y"] * self.background_scale + background_rect.top()
-            box_width = box["width"] * self.background_scale
-            box_height = box["height"] * self.background_scale
+    def _draw_one_box(self, painter, background_rect, i, box, draw_dot=True, draw_label=True):
+        is_selected = (i == self.selected_box or i in getattr(self, 'selected_boxes', []))
+        pressed_box = getattr(self._editor, 'pressed_box_index', None)
+        is_pressed_label = (
+            (isinstance(pressed_box, int) and pressed_box == i)
+            or self._is_pressed_label(box)
+        )
 
-            is_selected = (i == self.selected_box or i in getattr(self, 'selected_boxes', []))
-            pressed_box = getattr(self._editor, 'pressed_box_index', None)
-            is_pressed_label = (
-                (isinstance(pressed_box, int) and pressed_box == i)
-                or self._is_pressed_label(box)
+        # 点/多边形用 points 定位，宽高为 0 属正常，不能套用矩形的退化判断
+        if box.get("shape_type") == "point" and box.get("points"):
+            if draw_dot:
+                self._draw_point_shape(
+                    painter, box, background_rect, is_selected, is_pressed_label,
+                    draw_label=False,
+                )
+            if draw_label:
+                self._draw_point_label(
+                    painter, box, background_rect, is_selected, is_pressed_label
+                )
+            return
+
+        if box.get("shape_type") == "polygon" and box.get("points"):
+            self._draw_polygon_shape(
+                painter, box, background_rect, is_selected, is_pressed_label
             )
+            return
 
-            self._draw_single_detection_box(
-                painter, box_x, box_y, box_width, box_height,
-                box.get("label", ""), is_selected, is_pressed_label
+        if box.get("shape_type") == "rotation" and len(box.get("points") or []) == 4:
+            self._draw_polygon_shape(
+                painter, box, background_rect, is_selected, is_pressed_label
             )
+            if is_selected:
+                self._draw_rotation_handle(painter, box, background_rect)
+            return
+
+        if box["width"] <= 0 or box["height"] <= 0:
+            return
+
+        box_x = box["x"] * self.background_scale + background_rect.left()
+        box_y = box["y"] * self.background_scale + background_rect.top()
+        box_width = box["width"] * self.background_scale
+        box_height = box["height"] * self.background_scale
+
+        self._draw_single_detection_box(
+            painter, box_x, box_y, box_width, box_height,
+            box.get("label", ""), is_selected, is_pressed_label,
+            group_id=box.get("group_id"),
+        )
 
     def _is_pressed_label(self, box):
         """检查检测框是否是当前按下的标签名（统计模式按住）。"""
@@ -320,7 +377,7 @@ class CanvasRendererMixin:
         return box.get('label') == self._editor.pressed_label
 
     def _draw_single_detection_box(self, painter, x, y, width, height, label,
-                                    is_selected, is_pressed_label):
+                                    is_selected, is_pressed_label, group_id=None):
         """绘制单个检测框"""
         label_color_hex = self._editor.get_label_color(label)
         lr = int(label_color_hex[1:3], 16)
@@ -334,16 +391,21 @@ class CanvasRendererMixin:
         else:
             border_color = QColor(lr, lg, lb)
         pen = self._get_box_border_pen(border_color, is_selected or is_pressed_label)
+        painter.save()
         painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
         rx, ry = int(x), int(y)
         rw = int(x + width) - rx
         rh = int(y + height) - ry
         painter.drawRect(rx, ry, rw, rh)
+        painter.restore()
         painter.fillRect(rx, ry, rw, rh, fill_color)
 
         if label and getattr(self._editor, 'show_label_names_checkbox', None) and self._editor.show_label_names_checkbox.isChecked():
+            from ..engine.shape_io import format_label_display
+            display = format_label_display(label, group_id)
             label_bg = QColor(lr, lg, lb)
-            self._draw_box_label(painter, x, y, label, label_bg)
+            self._draw_box_label(painter, x, y, display, label_bg)
 
         if is_selected:
             handle_stroke = QColor(255, 255, 255)
@@ -402,6 +464,148 @@ class CanvasRendererMixin:
             pen = QPen(QColor(crosshair), 2, Qt.DashLine)
             painter.setPen(pen)
             painter.drawRect(self.temp_draw_box)
+
+    def _image_to_canvas_points(self, points, background_rect):
+        scale = self.background_scale
+        left, top = background_rect.left(), background_rect.top()
+        return [
+            QPointF(p[0] * scale + left, p[1] * scale + top)
+            for p in points
+        ]
+
+    def _draw_polygon_shape(self, painter, box, background_rect, is_selected, is_pressed_label):
+        from PyQt5.QtGui import QPainterPath
+        pts = self._image_to_canvas_points(box.get("points") or [], background_rect)
+        if len(pts) < 2:
+            return
+        label = box.get("label", "")
+        label_color_hex = self._editor.get_label_color(label)
+        lr = int(label_color_hex[1:3], 16)
+        lg = int(label_color_hex[3:5], 16)
+        lb = int(label_color_hex[5:7], 16)
+        fill_alpha = 155 if is_selected or is_pressed_label else 60
+        fill_color = QColor(lr, lg, lb, fill_alpha)
+        border_color = QColor(255, 255, 255) if is_selected or is_pressed_label else QColor(lr, lg, lb)
+        painter.setPen(self._get_box_border_pen(border_color, is_selected or is_pressed_label))
+        path = QPainterPath()
+        path.moveTo(pts[0])
+        for p in pts[1:]:
+            path.lineTo(p)
+        path.closeSubpath()
+        painter.fillPath(path, fill_color)
+        painter.save()
+        painter.setBrush(Qt.NoBrush)
+        painter.drawPath(path)
+        painter.restore()
+        if label and getattr(self._editor, 'show_label_names_checkbox', None) and self._editor.show_label_names_checkbox.isChecked():
+            from ..engine.shape_io import box_display_label
+            text = box_display_label(box)
+            self._draw_box_label(painter, pts[0].x(), pts[0].y(), text, QColor(lr, lg, lb))
+        if is_selected:
+            size = DETECTION_BOX_CONFIG['resize_handle_size']
+            painter.save()
+            painter.setPen(QPen(QColor(255, 255, 255), 1))
+            painter.setBrush(QColor(lr, lg, lb))
+            for p in pts:
+                painter.drawEllipse(p, size / 2, size / 2)
+            painter.restore()
+
+    def _draw_rotation_handle(self, painter, box, background_rect):
+        """旋转手柄：从 p0-p1 边中点向外的黑圈白心圆点。"""
+        from ..engine.shape_io import rotation_handle_point
+        points = box.get("points") or []
+        if len(points) != 4:
+            return
+        handle = rotation_handle_point(points, 20 / max(self.background_scale, 1e-6))
+        if handle is None:
+            return
+        hx = handle[0] * self.background_scale + background_rect.left()
+        hy = handle[1] * self.background_scale + background_rect.top()
+        mid_x = (points[0][0] + points[1][0]) / 2 * self.background_scale + background_rect.left()
+        mid_y = (points[0][1] + points[1][1]) / 2 * self.background_scale + background_rect.top()
+        radius = 6
+        painter.save()
+        painter.setPen(QPen(QColor(0, 0, 0), 1))
+        painter.drawLine(QPointF(mid_x, mid_y), QPointF(hx, hy))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(0, 0, 0))
+        painter.drawEllipse(QPointF(hx, hy), radius, radius)
+        painter.setBrush(QColor(255, 255, 255))
+        painter.drawEllipse(QPointF(hx, hy), radius - 2, radius - 2)
+        painter.restore()
+
+    def _draw_point_shape(self, painter, box, background_rect, is_selected, is_pressed_label,
+                          draw_label=True):
+        label = box.get("label", "")
+        label_color_hex = self._editor.get_label_color(label)
+        lr = int(label_color_hex[1:3], 16)
+        lg = int(label_color_hex[3:5], 16)
+        lb = int(label_color_hex[5:7], 16)
+        p = box["points"][0]
+        cx = p[0] * self.background_scale + background_rect.left()
+        cy = p[1] * self.background_scale + background_rect.top()
+        center = QPointF(cx, cy)
+        size = DETECTION_BOX_CONFIG['resize_handle_size']
+        active = is_selected or is_pressed_label
+        from ..engine.shape_io import point_warning
+        warned = point_warning(box, getattr(self._editor, 'detection_boxes', None)) is not None
+        painter.save()
+        if warned:
+            # 异常关键点（无同组框 / 不在框内）：方形 + 白色描边，与正常圆点区分
+            painter.setPen(QPen(QColor(255, 255, 255), 2))
+            painter.setBrush(QColor(lr, lg, lb))
+            half = size / 2 + (3 if active else 2)
+            painter.drawRect(QRectF(cx - half, cy - half, half * 2, half * 2))
+        elif active:
+            # 编辑态：白色外圈 + 放大实心点，和未选中的单色小圆点明显区分
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(255, 255, 255))
+            painter.drawEllipse(center, size / 2 + 3, size / 2 + 3)
+            painter.setPen(QPen(QColor(lr, lg, lb), 2))
+            painter.setBrush(QColor(lr, lg, lb))
+            painter.drawEllipse(center, size / 2 + 1, size / 2 + 1)
+        else:
+            painter.setPen(QPen(QColor(lr, lg, lb), 1))
+            painter.setBrush(QColor(lr, lg, lb))
+            painter.drawEllipse(center, size / 2, size / 2)
+        painter.restore()
+        if draw_label:
+            self._draw_point_label(painter, box, background_rect, is_selected, is_pressed_label)
+
+    def _draw_point_label(self, painter, box, background_rect, is_selected, is_pressed_label):
+        label = box.get("label", "")
+        if not (label and getattr(self._editor, 'show_label_names_checkbox', None)
+                and self._editor.show_label_names_checkbox.isChecked()):
+            return
+        label_color_hex = self._editor.get_label_color(label)
+        lr = int(label_color_hex[1:3], 16)
+        lg = int(label_color_hex[3:5], 16)
+        lb = int(label_color_hex[5:7], 16)
+        p = box["points"][0]
+        cx = p[0] * self.background_scale + background_rect.left()
+        cy = p[1] * self.background_scale + background_rect.top()
+        from ..engine.shape_io import format_label_display
+        text = format_label_display(label, box.get("group_id"))
+        self._draw_box_label(painter, cx, cy, text, QColor(lr, lg, lb))
+
+    def _draw_temp_polygon(self, painter, background_rect):
+        if not background_rect or not getattr(self, 'temp_polygon_points', None):
+            return
+        from PyQt5.QtGui import QPainterPath
+        pts = self._image_to_canvas_points(self.temp_polygon_points, background_rect)
+        crosshair = CROSSHAIR_CONFIG.get('color', '#00FF80')
+        painter.setPen(QPen(QColor(crosshair), 2, Qt.DashLine))
+        path = QPainterPath()
+        path.moveTo(pts[0])
+        for p in pts[1:]:
+            path.lineTo(p)
+        if self.mouse_inside:
+            path.lineTo(QPointF(self.mouse_pos.x(), self.mouse_pos.y()))
+        painter.drawPath(path)
+        painter.setBrush(QColor(crosshair))
+        painter.setPen(Qt.NoPen)
+        for p in pts:
+            painter.drawEllipse(p, 3, 3)
 
 
     def _draw_crosshair(self, painter):

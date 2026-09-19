@@ -5,11 +5,14 @@ from pastelabel.ui.dialogs import ProgressDialogFactory
 
 
 def test_progress_dialog_cancel_button_uses_current_language():
+    original = i18n.get_lang()
     i18n.set_lang("en")
+    try:
+        dialog = ProgressDialogFactory.create_progress_dialog(None, "保存进度", "正在保存所有图片...", 1)
 
-    dialog = ProgressDialogFactory.create_progress_dialog(None, "保存进度", "正在保存所有图片...", 1)
-
-    assert dialog.args[1] == "Cancel"
+        assert dialog.args[1] == "Cancel"
+    finally:
+        i18n.set_lang(original)
 
 
 class Geometry:

@@ -248,6 +248,7 @@ a = Analysis(
         'pastelabel.engine.yolo_exporter', 'pastelabel.engine.splitter',
         'pastelabel.engine.dataset_classifier', 'pastelabel.ui.mixins.dataset_classifier',
         'pastelabel.engine.dataset_converter',
+        'pastelabel.engine.shape_io',
         'pastelabel.ui.dataset_tools_dialog', 'pastelabel.ui.mixins.dataset_tools',
         'numpy',
         'pastelabel.canvas', 'pastelabel.canvas.canvas', 'pastelabel.canvas.canvas_renderer',

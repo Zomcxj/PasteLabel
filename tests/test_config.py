@@ -21,7 +21,7 @@ class TestShortcutConfig:
         'undo', 'redo', 'toggle_grid',
         'toggle_labels', 'toggle_label_names',
         'auto_save_b', 'auto_save_p',
-        'toggle_paste_names', 'draw_box', 'quit_draw',
+        'toggle_paste_names', 'draw_box', 'draw_polygon', 'draw_point', 'draw_obb', 'quit_draw',
         'next_image', 'prev_image', 'delete_selected', 'fit_view',
         'zoom_in', 'zoom_out',
     ]
@@ -73,3 +73,11 @@ class TestConfigStructures:
 
     def test_undo_config_positive(self):
         assert config.UNDO_CONFIG['max_history'] > 0
+
+    def test_max_polygon_points_default(self):
+        assert config.DETECTION_BOX_CONFIG['max_polygon_points'] == 32
+
+    def test_first_palette_color_is_not_red(self):
+        """新标签按排序位置分配 colors[0]，不能是红色系（用户感知差）。"""
+        r = int(config.LABEL_COLORS[0][1:3], 16)
+        assert r < 200, config.LABEL_COLORS[0]

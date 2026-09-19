@@ -4,10 +4,11 @@
 import os
 import json
 from . import config as config_module
-from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG, LABEL_COLORS
+from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG, LABEL_COLORS, OBB_CONFIG
 
 
-CONFIG_PATH = os.path.join(os.path.expanduser("~"), '.pastelabel.json')
+CONFIG_PATH = os.environ.get('PASTELABEL_CONFIG_PATH') or os.path.join(
+    os.path.expanduser("~"), '.pastelabel.json')
 MEMORY_LIMIT = 10
 DISABLED_SHORTCUT_ACTIONS = {'save', 'save_all'}
 
@@ -45,6 +46,11 @@ def _normalize_label_colors(colors, extend=False):
     normalized = [str(color) for color in colors]
     try:
         if all(len(color) == 7 and color.startswith('#') and int(color[1:], 16) >= 0 for color in normalized):
+            # 旧版默认调色板是同一组颜色但把红色排在首位（#E53935）。若保存的
+            # 调色板集合与当前默认相同且仍是红打头，按当前默认顺序迁移，否则
+            # 新标签会继续被分到刺眼的红色。
+            if normalized[0] == '#E53935' and set(normalized) == set(LABEL_COLORS):
+                return list(LABEL_COLORS)
             if not extend:
                 return normalized
             # Keep custom colors first, then fill from defaults without duplicates.
@@ -89,17 +95,36 @@ def get_label_color(labels, label, palette=None, label_color_map=None):
     if label in color_map:
         return color_map[label]
     if len(colors) >= 30:
-        unique_labels = sorted({str(value) for value in labels if value})
-        if label in unique_labels:
-            start = unique_labels.index(label) % len(colors)
-            used_colors = set(color_map.values())
-            for offset in range(len(colors)):
-                color = colors[(start + offset) % len(colors)]
-                if color not in used_colors:
-                    return color
-            return colors[start]
+        # 把待分配标签并入有序集合，保证“未进入会话”的标签也走确定索引分配，
+        # 不再落哈希兜底（哈希会把不同标签撞到同一红色系）。
+        unique_labels = sorted({str(value) for value in labels if value} | {label})
+        start = unique_labels.index(label) % len(colors)
+        used_colors = set(color_map.values())
+        for offset in range(len(colors)):
+            color = colors[(start + offset) % len(colors)]
+            if color not in used_colors:
+                return color
+        return colors[start]
     idx = sum(ord(c) * (i + 1) for i, c in enumerate(label)) % len(colors)
     return colors[idx]
+
+
+def _repair_label_color_map(color_map, palette):
+    """修复历史脏数据：旧算法把不同标签写成同一颜色时整表按确定算法重排。
+
+    颜色撞车是旧哈希兜底的确定特征；一旦发现，就整表重排，既清掉撞色，
+    也顺带替换掉旧算法写入的其他脏色（如非调色板色、首标签红色）。
+    颜色互不重复的表原样返回，避免覆盖用户手动选色。
+    """
+    values = list(color_map.values())
+    if len(values) == len(set(values)):
+        return color_map
+    colors = _normalize_label_colors(palette, extend=palette is None)
+    labels = sorted(color_map.keys())
+    rebuilt = {}
+    for label in labels:
+        rebuilt[label] = get_label_color(labels, label, colors, rebuilt)
+    return rebuilt
 
 
 def get_config_path():
@@ -298,6 +323,7 @@ def load_all():
     if saved_sc.get('delete_selected') == 'Delete':
         saved_sc['delete_selected'] = SHORTCUT_CONFIG['delete_selected']
     merged_sc = {**SHORTCUT_CONFIG, **saved_sc}
+    normalized_palette = _normalize_label_colors(config.get('label_colors'), extend=True)
     return {
         'shortcuts': merged_sc,
         'theme': config.get('theme', 'light'),
@@ -306,6 +332,10 @@ def load_all():
         'grid_line_width': config.get('grid_line_width', None),
         'grid_alpha': config.get('grid_alpha', None),
         'resize_handle_size': config.get('resize_handle_size', DETECTION_BOX_CONFIG['resize_handle_size']),
+        'max_polygon_points': max(3, min(64, int(config.get(
+            'max_polygon_points', DETECTION_BOX_CONFIG['max_polygon_points'])))),
+        "rotate_step": max(1, min(6, int(config.get(
+            "rotate_step", OBB_CONFIG['rotate_step'])))),
         'label_font_size': config.get('label_font_size', DETECTION_BOX_CONFIG['label_font_size']),
         'label_position': config.get('label_position', DETECTION_BOX_CONFIG['label_position']),
         'canvas_image_copy_enabled': bool(config.get('canvas_image_copy_enabled', False)),
@@ -329,14 +359,18 @@ def load_all():
         'crosshair_color': str(config.get('crosshair_color', CROSSHAIR_CONFIG['color'])),
         'crosshair_alpha': int(config.get('crosshair_alpha', CROSSHAIR_CONFIG['alpha'])),
         'box_border_width': float(config.get('box_border_width', BOX_BORDER_CONFIG['width'])),
-        'label_colors': _normalize_label_colors(config.get('label_colors'), extend=True),
-        'label_color_map': _normalize_label_color_map(config.get('label_color_map')),
+        'label_colors': normalized_palette,
+        'label_color_map': _repair_label_color_map(
+            _normalize_label_color_map(config.get('label_color_map')), normalized_palette,
+        ),
         'memory': load_memory_records(),
     }
 
 
 def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
              grid_line_width=None, grid_alpha=None, resize_handle_size=None,
+             max_polygon_points=None,
+             rotate_step=None,
              label_font_size=None, label_position=None,
              canvas_image_copy_enabled=None, relative_path_display=None,
              magnifier_enabled=None,
@@ -362,6 +396,10 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['grid_alpha'] = grid_alpha
     if resize_handle_size is not None:
         config['resize_handle_size'] = resize_handle_size
+    if max_polygon_points is not None:
+        config['max_polygon_points'] = max(3, min(64, int(max_polygon_points)))
+    if rotate_step is not None:
+        config['rotate_step'] = max(1, min(6, int(rotate_step)))
     if label_font_size is not None:
         config['label_font_size'] = label_font_size
     if label_position is not None:

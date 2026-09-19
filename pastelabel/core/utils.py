@@ -241,9 +241,52 @@ def extract_label_name(label_text):
     :param label_text: 标签文本（可能包含计数）
     :return: 纯标签名称
     """
+    if "⚠" in label_text:
+        label_text = label_text.split("⚠")[0].rstrip()
     if " (" in label_text:
-        return label_text.split(" (")[0]
+        label_text = label_text.split(" (")[0]
+    if label_text.endswith('°'):
+        head, _, tail = label_text.rpartition(' ')
+        if head and tail[:-1].strip().replace('.', '', 1).isdigit():
+            label_text = head
+    if label_text.endswith(']') and ' [' in label_text:
+        label_text = label_text.rsplit(' [', 1)[0]
     return label_text
+
+
+# 标签列表“任务徽标”在 item 上存储任务类型的 role（Qt.UserRole 段，避开 0x0100 的 box 索引）
+TASK_DATA_ROLE = 0x0101
+
+
+def shape_task_type(box):
+    """检测框对应的标注任务：det / seg / pose / obb。"""
+    if not isinstance(box, dict):
+        return "det"
+    return {
+        "polygon": "seg",
+        "point": "pose",
+        "rotation": "obb",
+    }.get(box.get("shape_type") or "rectangle", "det")
+
+
+def box_matches_filter(box, task_filter=None, group_filter=None):
+    """框是否通过任务/分组筛选。filter 为空集合表示不筛选（全部）。"""
+    if task_filter:
+        if shape_task_type(box) not in task_filter:
+            return False
+    if group_filter:
+        if box.get("group_id") not in group_filter:
+            return False
+    return True
+
+
+def box_visible(editor, box):
+    """按编辑器的任务/分组筛选判断框是否可见（属性缺失视为不筛选）。"""
+    return box_matches_filter(
+        box,
+        getattr(editor, '_task_filter', None) or None,
+        getattr(editor, '_group_filter', None) or None,
+    )
 
 
 def calculate_iou(box1, box2):

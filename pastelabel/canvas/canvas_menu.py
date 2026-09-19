@@ -28,6 +28,10 @@ class CanvasMenuMixin:
             self._show_paste_context_menu(item_index, mouse_pos)
             return True
         labels_visible = self._editor.show_labels_checkbox.isChecked()
+        vertex = self._polygon_vertex_at(mouse_pos) if labels_visible else None
+        if vertex is not None and not self._editor._is_delete_view:
+            self._show_polygon_vertex_menu(vertex[0], vertex[1], mouse_pos)
+            return True
         box_index = self._find_detection_box_at(mouse_pos) if labels_visible else None
         if box_index is not None and not self._editor._is_delete_view:
             self._show_box_label_menu(box_index, mouse_pos)
@@ -45,12 +49,33 @@ class CanvasMenuMixin:
         background_rect = self.get_background_rect()
         if not background_rect:
             return None
+        from PyQt5.QtCore import QRectF
+        from ..core.config import DETECTION_BOX_CONFIG
+        from ..engine.shape_io import point_in_polygon
+        mx, my = mouse_pos.x(), mouse_pos.y()
+        eps = DETECTION_BOX_CONFIG['resize_handle_size']
         for i, box in enumerate(self._editor.detection_boxes):
+            if box.get("shape_type") == "point" and box.get("points"):
+                cx = box["points"][0][0] * self.background_scale + background_rect.left()
+                cy = box["points"][0][1] * self.background_scale + background_rect.top()
+                if (mx - cx) ** 2 + (my - cy) ** 2 <= eps * eps:
+                    return i
+                continue
+            if box.get("shape_type") in ("polygon", "rotation") and box.get("points"):
+                canvas_pts = [
+                    [
+                        p[0] * self.background_scale + background_rect.left(),
+                        p[1] * self.background_scale + background_rect.top(),
+                    ]
+                    for p in box["points"]
+                ]
+                if point_in_polygon(mx, my, canvas_pts):
+                    return i
+                continue
             box_x = box["x"] * self.background_scale + background_rect.left()
             box_y = box["y"] * self.background_scale + background_rect.top()
             box_w = box["width"] * self.background_scale
             box_h = box["height"] * self.background_scale
-            from PyQt5.QtCore import QRectF
             if QRectF(box_x, box_y, box_w, box_h).contains(mouse_pos):
                 return i
         return None
@@ -84,6 +109,29 @@ class CanvasMenuMixin:
                     labels.add(pure)
         return sorted(labels, key=lambda x: x.casefold())
 
+    def _polygon_vertex_at(self, mouse_pos):
+        finder = getattr(self, "_box_handle_at_pos", None)
+        if finder is None:
+            return None
+        for i, box in enumerate(getattr(self._editor, "detection_boxes", []) or []):
+            if box.get("shape_type") != "polygon" or not box.get("points"):
+                continue
+            handle = finder(mouse_pos, i)
+            if isinstance(handle, str) and handle.startswith("v"):
+                return i, int(handle[1:])
+        return None
+
+    def _show_polygon_vertex_menu(self, box_index, vertex_index, mouse_pos):
+        menu = QMenu(self)
+        action = QAction(tr("删除顶点"), self)
+        box = self._editor.detection_boxes[box_index]
+        action.setEnabled(len(box.get("points") or []) > 3)
+        action.triggered.connect(
+            lambda checked=False, idx=box_index, v=vertex_index: self._delete_polygon_vertex(idx, v)
+        )
+        menu.addAction(action)
+        menu.exec_(QPoint(self.mapToGlobal(mouse_pos)))
+
     def _show_box_label_menu(self, box_index, mouse_pos):
         """检测框右键修改标签菜单"""
         menu = QMenu(self)
@@ -101,6 +149,26 @@ class CanvasMenuMixin:
             lambda checked: self._editor._delete_selected_box()
         )
         menu.addAction(remove_action)
+
+        box = self._editor.detection_boxes[box_index]
+        shape_type = box.get("shape_type") or "rectangle"
+        if shape_type == "rotation":
+            reset_action = QAction(tr("重置旋转"), self)
+            reset_action.triggered.connect(
+                lambda checked, idx=box_index: self._reset_box_rotation(idx)
+            )
+            menu.addAction(reset_action)
+            to_hbb_action = QAction(tr("转为HBB"), self)
+            to_hbb_action.triggered.connect(
+                lambda checked, idx=box_index: self._rotation_to_rectangle(idx)
+            )
+            menu.addAction(to_hbb_action)
+        elif shape_type == "rectangle":
+            to_obb_action = QAction(tr("转为OBB"), self)
+            to_obb_action.triggered.connect(
+                lambda checked, idx=box_index: self._rectangle_to_rotation(idx)
+            )
+            menu.addAction(to_obb_action)
 
         menu.addSeparator()
 
@@ -132,14 +200,31 @@ class CanvasMenuMixin:
         if current_label and current_label not in labels:
             labels = [current_label] + list(labels)
         from ..ui.dialogs import LabelSelectionDialog
-        new_label = LabelSelectionDialog.select_label(
+        current_group = self._editor.detection_boxes[box_index].get("group_id")
+        result = LabelSelectionDialog.select_label(
             self, labels, title="修改标签", initial_text=current_label,
-            anchor_pos=anchor,
+            anchor_pos=anchor, show_group=True, current_group_id=current_group,
         )
+        if isinstance(result, tuple):
+            new_label, new_group = result
+        else:
+            new_label, new_group = result, None
         if not new_label or not str(new_label).strip():
             return
         new_label = str(new_label).strip()
+        box = self._editor.detection_boxes[box_index]
+        group_changed = box.get("group_id") != new_group
+        box["group_id"] = new_group
+        if self._editor.current_background_index >= 0:
+            self._editor.detection_boxes_dict[self._editor.current_background_index] = \
+                list(self._editor.detection_boxes)
         if new_label == current_label:
+            if group_changed:
+                lm = getattr(self._editor, 'label_manager', None)
+                if lm is not None and hasattr(lm, '_save_detection_json_for_index'):
+                    lm._save_detection_json_for_index(self._editor.current_background_index)
+                self._editor.update_label_list()
+                self.update()
             return
         lm = getattr(self._editor, 'label_manager', None)
         if lm is not None and hasattr(lm, 'rename_detection_label'):
@@ -157,6 +242,65 @@ class CanvasMenuMixin:
                     list(self._editor.detection_boxes)
         self._editor.update_label_list()
         self.update()
+
+    def _reset_box_rotation(self, box_index):
+        """将 OBB 旋转角度归零，恢复水平矩形。"""
+        if not (0 <= box_index < len(self._editor.detection_boxes)):
+            return
+        box = self._editor.detection_boxes[box_index]
+        if box.get("shape_type") != "rotation":
+            return
+        from ..engine.shape_io import rect_to_rotation_points
+        self._editor.save_undo_state()
+        x, y, w, h = box["x"], box["y"], box["width"], box["height"]
+        box["points"] = rect_to_rotation_points(x, y, w, h)
+        if self._editor.current_background_index >= 0:
+            self._editor.detection_boxes_dict[self._editor.current_background_index] = \
+                list(self._editor.detection_boxes)
+        self._persist_boxes()
+        self.update()
+
+    def _rotation_to_rectangle(self, box_index):
+        """将 OBB 转为普通矩形（丢弃旋转，保留外接框）。"""
+        if not (0 <= box_index < len(self._editor.detection_boxes)):
+            return
+        box = self._editor.detection_boxes[box_index]
+        if box.get("shape_type") != "rotation":
+            return
+        self._editor.save_undo_state()
+        box["shape_type"] = "rectangle"
+        box.pop("points", None)
+        if self._editor.current_background_index >= 0:
+            self._editor.detection_boxes_dict[self._editor.current_background_index] = \
+                list(self._editor.detection_boxes)
+        self._persist_boxes()
+        self._editor.update_label_list()
+        self.update()
+
+    def _rectangle_to_rotation(self, box_index):
+        """将普通矩形转为 OBB（角度 0，points 为四角）。"""
+        if not (0 <= box_index < len(self._editor.detection_boxes)):
+            return
+        box = self._editor.detection_boxes[box_index]
+        if (box.get("shape_type") or "rectangle") != "rectangle":
+            return
+        from ..engine.shape_io import rect_to_rotation_points
+        self._editor.save_undo_state()
+        box["shape_type"] = "rotation"
+        box["points"] = rect_to_rotation_points(
+            box["x"], box["y"], box["width"], box["height"]
+        )
+        if self._editor.current_background_index >= 0:
+            self._editor.detection_boxes_dict[self._editor.current_background_index] = \
+                list(self._editor.detection_boxes)
+        self._persist_boxes()
+        self._editor.update_label_list()
+        self.update()
+
+    def _persist_boxes(self):
+        lm = getattr(self._editor, 'label_manager', None)
+        if lm is not None and hasattr(lm, '_save_detection_json_for_index'):
+            lm._save_detection_json_for_index(self._editor.current_background_index)
 
     def _change_box_label(self, box_index, new_label):
         """切换单个检测框标签到数据集中已有标签。"""

@@ -4,7 +4,7 @@ from typing import List, Tuple
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QImage, QPainter
 
-from .base import BaseTransform, register_transform
+from .base import BaseTransform, register_transform, map_box_points
 
 
 @register_transform
@@ -36,16 +36,8 @@ class RandomScale(BaseTransform):
             painter.end()
         new_boxes = []
         for b in boxes:
-            bx = b["x"] * scale
-            by = b["y"] * scale
-            bw = b["width"] * scale
-            bh = b["height"] * scale
-            if scale < 1.0:
-                bx += (image_width - new_w) // 2
-                by += (image_height - new_h) // 2
-            new_boxes.append({
-                "x": bx, "y": by,
-                "width": bw, "height": bh,
-                "label": b["label"]
-            })
+            ox = (image_width - new_w) // 2 if scale < 1.0 else 0
+            oy = (image_height - new_h) // 2 if scale < 1.0 else 0
+            new_boxes.append(map_box_points(
+                b, lambda px, py: (px * scale + ox, py * scale + oy)))
         return result, new_boxes

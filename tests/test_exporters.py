@@ -197,6 +197,70 @@ def test_yolo_skips_degenerate_boxes(tmp_path):
     assert (tmp_path / "labels" / "a.txt").read_text() == ""
 
 
+def test_yolo_seg_writes_normalized_polygon_points(tmp_path):
+    exp = YoloExporter(str(tmp_path), mode="seg")
+    items = [_item("a", [{
+        "label": "cat",
+        "shape_type": "polygon",
+        "points": [[50, 25], [150, 25], [100, 75]],
+        "x": 50, "y": 25, "width": 100, "height": 50,
+    }])]
+
+    exp.run([], {}, ["cat"], input_data=items)
+
+    parts = (tmp_path / "labels" / "a.txt").read_text().split()
+    assert parts[0] == "0"
+    assert len(parts) == 7
+    assert [float(p) for p in parts[1:3]] == pytest.approx([0.25, 0.25])
+
+
+def test_yolo_obb_writes_eight_normalized_corner_coords(tmp_path):
+    exp = YoloExporter(str(tmp_path), mode="obb")
+    items = [_item("a", [{
+        "label": "car",
+        "shape_type": "rotation",
+        "group_id": 3,
+        "points": [[20, 10], [120, 10], [120, 60], [20, 60]],
+        "x": 20, "y": 10, "width": 100, "height": 50,
+    }])]
+
+    exp.run([], {}, ["car"], input_data=items)
+
+    parts = (tmp_path / "labels" / "a.txt").read_text().split()
+    assert parts[0] == "0"
+    assert len(parts) == 9, parts
+    coords = [float(p) for p in parts[1:]]
+    assert coords[0:2] == pytest.approx([0.1, 0.1])
+    assert coords[2:4] == pytest.approx([0.6, 0.1])
+    assert coords[4:6] == pytest.approx([0.6, 0.6])
+    assert coords[6:8] == pytest.approx([0.1, 0.6])
+
+
+def test_yolo_pose_groups_bbox_and_keypoints_by_group_id(tmp_path):
+    exp = YoloExporter(str(tmp_path), mode="pose")
+    items = [_item("a", [
+        {"label": "person", "shape_type": "rectangle", "group_id": 1,
+         "x": 40, "y": 20, "width": 40, "height": 80},
+        {"label": "person", "shape_type": "point", "group_id": 1,
+         "x": 60, "y": 30, "width": 0, "height": 0, "points": [[60, 30]]},
+        {"label": "person", "shape_type": "point", "group_id": 1,
+         "x": 60, "y": 90, "width": 0, "height": 0, "points": [[60, 90]]},
+        {"label": "person", "shape_type": "rectangle", "group_id": None,
+         "x": 0, "y": 0, "width": 10, "height": 10},
+    ])]
+
+    exp.run([], {}, ["person"], input_data=items)
+
+    lines = (tmp_path / "labels" / "a.txt").read_text().strip().splitlines()
+    assert len(lines) == 1, lines
+    parts = lines[0].split()
+    assert parts[0] == "0"
+    assert [float(p) for p in parts[1:5]] == pytest.approx([0.3, 0.6, 0.2, 0.8])
+    assert [float(p) for p in parts[5:7]] == pytest.approx([0.3, 0.3])
+    assert parts[7] == "2"
+    assert [float(p) for p in parts[8:10]] == pytest.approx([0.3, 0.9])
+
+
 def test_yolo_writes_classes_file_in_class_id_order(tmp_path):
     exp = YoloExporter(str(tmp_path))
     items = [_item("a", [_box("zebra", 0, 0, 10, 10)])]

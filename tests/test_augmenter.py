@@ -519,6 +519,99 @@ print("OK")
     assert "OK" in out
 
 
+# ---------- 形状感知（保留 OBB/多边形/关键点/分组）----------
+
+def test_transforms_preserve_shape_metadata():
+    out = _run_real_qt('''
+from PyQt5.QtGui import QImage, QColor
+from pastelabel.engine.augmenter.flipt import HorizontalFlip
+from pastelabel.engine.augmenter.scale import RandomScale
+from pastelabel.engine.augmenter.translate import RandomTranslate
+
+img = QImage(100, 100, QImage.Format_RGB888)
+img.fill(QColor(0, 0, 0))
+
+rot = {"label": "car", "shape_type": "rotation", "group_id": 2,
+       "x": 10, "y": 10, "width": 20, "height": 10,
+       "points": [[10, 10], [30, 10], [30, 20], [10, 20]]}
+poly = {"label": "road", "shape_type": "polygon", "group_id": None,
+        "x": 5, "y": 5, "width": 40, "height": 30,
+        "points": [[5, 5], [45, 5], [30, 35]]}
+pt = {"label": "nose", "shape_type": "point", "group_id": 1,
+      "x": 50, "y": 60, "width": 0, "height": 0, "points": [[50, 60]]}
+
+_, flipped = HorizontalFlip().apply(img, [dict(rot), dict(poly), dict(pt)], 100, 100)
+fr, fp, fpt = flipped
+assert fr["shape_type"] == "rotation" and fr["group_id"] == 2, fr
+assert fr["points"] == [[90, 10], [70, 10], [70, 20], [90, 20]], fr["points"]
+assert fr["x"] == 70 and fr["width"] == 20, fr
+assert fp["shape_type"] == "polygon" and len(fp["points"]) == 3, fp
+assert fpt["shape_type"] == "point" and fpt["points"] == [[50, 60]], fpt
+assert fpt["x"] == 50 and fpt["y"] == 60, fpt
+
+_, scaled = RandomScale(min=0.5, max=0.5).apply(
+    img, [dict(rot)], 100, 100)
+s = scaled[0]
+assert s["shape_type"] == "rotation" and s["group_id"] == 2, s
+assert s["points"] == [[30, 30], [40, 30], [40, 35], [30, 35]], s["points"]
+
+_, moved = RandomTranslate(max_dx=0, max_dy=0).apply(img, [dict(rot)], 100, 100)
+m = moved[0]
+assert m["shape_type"] == "rotation" and m["points"] == rot["points"], m
+print("OK")
+''')
+    assert "OK" in out
+
+
+def test_augmented_labelme_json_roundtrips_shape_types(tmp_path):
+    out = _run_real_qt('''
+import json, os, tempfile
+from PyQt5.QtGui import QImage, QColor
+from pastelabel.engine.augmenter import Augmenter
+from pastelabel.engine.augmenter.color import Brightness
+from pastelabel.engine.shape_io import box_from_labelme_shape
+
+src_dir = tempfile.mkdtemp()
+img = QImage(80, 60, QImage.Format_RGB888)
+img.fill(QColor(10, 20, 30))
+src = os.path.join(src_dir, "a.png")
+img.save(src)
+
+boxes = {0: [
+    {"label": "car", "shape_type": "rotation", "group_id": 2,
+     "x": 10, "y": 10, "width": 20, "height": 10,
+     "points": [[10, 10], [30, 10], [30, 20], [10, 20]]},
+    {"label": "nose", "shape_type": "point", "group_id": 1,
+     "x": 40, "y": 40, "width": 0, "height": 0, "points": [[40, 40]]},
+    {"label": "road", "shape_type": "polygon", "group_id": None,
+     "x": 5, "y": 5, "width": 30, "height": 30,
+     "points": [[5, 5], [35, 5], [20, 35]]},
+]}
+out_dir = tempfile.mkdtemp()
+Augmenter(out_dir, seed=1).run(
+    [src], boxes, [(Brightness, {"delta": (10, 40)})],
+    mode="all", image_ratio=1.0, skip_empty=False)
+
+jp = os.path.join(out_dir, "images", "a_bright.json")
+with open(jp, encoding="utf-8") as f:
+    shapes = json.load(f)["shapes"]
+by_label = {s["label"]: s for s in shapes}
+assert by_label["car"]["shape_type"] == "rotation", by_label["car"]
+assert by_label["car"]["group_id"] == 2, by_label["car"]
+assert by_label["nose"]["shape_type"] == "point", by_label["nose"]
+assert by_label["nose"]["group_id"] == 1, by_label["nose"]
+assert by_label["road"]["shape_type"] == "polygon", by_label["road"]
+assert [list(p) for p in by_label["road"]["points"]] == [[5, 5], [35, 5], [20, 35]]
+
+# 读回后 box 转换仍保留形状
+back = {b["label"]: b for b in (box_from_labelme_shape(s) for s in shapes)}
+assert back["car"]["shape_type"] == "rotation", back["car"]
+assert back["nose"]["points"] == [[40, 40]], back["nose"]
+print("OK")
+''')
+    assert "OK" in out
+
+
 # ---------- 构造函数边界（纯逻辑）----------
 
 @pytest.mark.parametrize("cls,attr,kwargs,expected", [

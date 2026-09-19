@@ -129,6 +129,18 @@ class TestSaveLoadRoundtrip:
             language=original['language'],
         )
 
+    def test_max_polygon_points_roundtrip_through_save_all(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            config_manager.save_all(max_polygon_points=16)
+            assert config_manager.load_all()['max_polygon_points'] == 16
+            config_manager.save_all(max_polygon_points=3)
+            assert config_manager.load_all()['max_polygon_points'] == 3
+            config_manager.save_all(max_polygon_points=99)
+            assert config_manager.load_all()['max_polygon_points'] == 64
+        finally:
+            config_manager.CONFIG_PATH = original
+
     def test_magnifier_enabled_roundtrip_through_save_all(self, tmp_path):
         original = _with_temp_config(tmp_path)
         try:
@@ -267,6 +279,15 @@ def test_default_label_palette_has_at_least_thirty_distinct_hex_colors():
     assert all(len(color) == 7 and color.startswith('#') for color in config.LABEL_COLORS)
 
 
+def test_label_not_in_session_still_gets_distinct_palette_color():
+    """新标签在被加入会话列表前请求颜色时，不能落入哈希兜底导致撞成红色。"""
+    palette = list(config.LABEL_COLORS)
+    # 颜色不应因“标签是否已进入会话列表”而改变（否则新标签落哈希兜底撞成红）
+    before = config_manager.get_label_color(['SCar', 'Rider', 'MCar'], 'Person', palette, {})
+    after = config_manager.get_label_color(['SCar', 'Rider', 'MCar', 'Person'], 'Person', palette, {})
+    assert before == after
+
+
 def test_label_color_map_overrides_default_allocation():
     labels = ['person', 'car']
     palette = ['#111111', '#222222']
@@ -283,12 +304,73 @@ def test_default_palette_assigns_first_thirty_labels_distinct_colors():
     assert len(set(colors)) == 30
 
 
+def test_load_all_migrates_legacy_red_first_palette_order(tmp_path):
+    """旧默认调色板红打头；同集合的旧顺序必须迁移成新默认顺序，否则首标签又变红。"""
+    original = _with_temp_config(tmp_path)
+    try:
+        legacy = list(config.LABEL_COLORS)
+        legacy.remove('#E53935')
+        legacy.insert(0, '#E53935')
+        config_manager.save_config({'label_colors': legacy})
+
+        migrated = config_manager.load_all()['label_colors']
+        assert migrated == list(config.LABEL_COLORS)
+        assert migrated[0] != '#E53935'
+    finally:
+        config_manager.CONFIG_PATH = original
+
+
+def test_load_all_keeps_custom_palette_that_is_not_default_set(tmp_path):
+    """真正的自定义调色板（集合不同）不能被迁移覆盖。"""
+    original = _with_temp_config(tmp_path)
+    try:
+        custom = ['#010203', '#040506', '#070809']
+        config_manager.save_config({'label_colors': custom})
+
+        palette = config_manager.load_all()['label_colors']
+        assert palette[:3] == custom
+    finally:
+        config_manager.CONFIG_PATH = original
+
+
 def test_saved_label_color_map_takes_precedence_when_no_explicit_map_is_given(tmp_path):
     original = _with_temp_config(tmp_path)
     try:
         config_manager.save_all(label_color_map={'person': '#abcdef'})
 
         assert config_manager.get_label_color(['person'], 'person') == '#abcdef'
+    finally:
+        config_manager.CONFIG_PATH = original
+
+
+def test_load_all_repairs_duplicate_colors_from_old_algorithm(tmp_path):
+    """旧算法写入的撞色缓存必须在加载时重排，否则新标签会永久渲染成脏色。"""
+    original = _with_temp_config(tmp_path)
+    try:
+        config_manager.save_all(label_color_map={
+            'BCar': '#E53935',      # 旧算法把新标签写成红色
+            'Rider': '#039BE5',
+            'Bucket': '#039BE5',    # 与 Rider 撞色 —— 旧哈希兜底特征
+            'Person': '#a4c6a1',    # 非调色板色
+        })
+
+        repaired = config_manager.load_all()['label_color_map']
+        palette = config_manager.load_all()['label_colors']
+        assert len(repaired) == 4
+        assert len(set(repaired.values())) == 4, repaired
+        assert all(color in palette for color in repaired.values()), repaired
+    finally:
+        config_manager.CONFIG_PATH = original
+
+
+def test_load_all_keeps_manual_color_map_without_collisions(tmp_path):
+    """颜色互不重复的表（含用户手动选色）不能被重排覆盖。"""
+    original = _with_temp_config(tmp_path)
+    try:
+        manual = {'person': '#abcdef', 'car': '#123456'}
+        config_manager.save_all(label_color_map=manual)
+
+        assert config_manager.load_all()['label_color_map'] == manual
     finally:
         config_manager.CONFIG_PATH = original
 

@@ -112,6 +112,9 @@ class Canvas(CanvasInteractionMixin):
     def _sync_detection_box_to_dict(self, index):
         self.synced_indexes.append(index)
 
+    def _can_edit_canvas(self):
+        return not getattr(self._editor, '_is_delete_view', False)
+
     def _save_current_detection_boxes(self):
         self.saved_detection_boxes += 1
 
@@ -192,6 +195,40 @@ def test_paste_click_still_selects_detection_box(monkeypatch):
 
     assert canvas.selected_box == 0
     assert canvas.selected_boxes == [0]
+
+
+def test_click_prefers_keypoint_over_enclosing_group_box(monkeypatch):
+    """关键点画在框上层，点击时应优先选中关键点而不是框。"""
+    monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
+    canvas = Canvas("annotate")
+    canvas._editor.canvas_items = []
+    canvas._editor.detection_boxes = [
+        {"label": "BCar", "x": 0, "y": 0, "width": 40, "height": 40,
+         "shape_type": "rectangle", "group_id": 1},
+        {"label": "p1", "shape_type": "point", "points": [[5, 5]],
+         "x": 5, "y": 5, "width": 0, "height": 0, "group_id": 1},
+    ]
+
+    canvas._handle_left_click(Point(5, 5))
+
+    assert canvas.selected_box == 1
+
+
+def test_click_prefers_topmost_overlapping_point(monkeypatch):
+    """两个重叠关键点：后画的在上层，点击应选中它。"""
+    monkeypatch.setattr(canvas_interaction, "QRectF", Rect)
+    canvas = Canvas("annotate")
+    canvas._editor.canvas_items = []
+    canvas._editor.detection_boxes = [
+        {"label": "p1", "shape_type": "point", "points": [[5, 5]],
+         "x": 5, "y": 5, "width": 0, "height": 0, "group_id": 1},
+        {"label": "p2", "shape_type": "point", "points": [[5, 5]],
+         "x": 5, "y": 5, "width": 0, "height": 0, "group_id": 1},
+    ]
+
+    canvas._handle_left_click(Point(5, 5))
+
+    assert canvas.selected_box == 1
 
 
 def test_mode_switch_clears_paste_and_detection_box_selection():

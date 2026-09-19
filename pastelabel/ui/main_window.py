@@ -104,6 +104,13 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
             DETECTION_BOX_CONFIG['label_font_size'] = max(5, min(15, int(settings['label_font_size'])))
         if settings.get('label_position') in ('outside', 'inside'):
             DETECTION_BOX_CONFIG['label_position'] = settings['label_position']
+        DETECTION_BOX_CONFIG['max_polygon_points'] = max(
+            3, min(64, int(settings.get('max_polygon_points', DETECTION_BOX_CONFIG.get('max_polygon_points', 32))))
+        )
+        from ..core.config import OBB_CONFIG
+        OBB_CONFIG['rotate_step'] = max(
+            1, min(6, int(settings.get("rotate_step", OBB_CONFIG.get("rotate_step", 1))))
+        )
         self._canvas_image_copy_enabled = bool(settings.get('canvas_image_copy_enabled', False))
         self._relative_path_display = bool(settings.get('relative_path_display', False))
         self._magnifier_enabled = bool(settings.get('magnifier_enabled', False))
@@ -163,6 +170,8 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         self._bg_label_list_mode = 'stats'
         self.pressed_box_index = None
         self._bg_annotation_filter = 'all'  # all | annotated | unannotated | empty
+        self._task_filter = set()  # 任务筛选（det/seg/pose/obb），空=全部
+        self._group_filter = set()  # 分组筛选（group_id），空=全部
         self._bg_filter_saved_index = 0
         self._cached_bg_label_stats = []
         self._cached_bg_label_stats_path = ""

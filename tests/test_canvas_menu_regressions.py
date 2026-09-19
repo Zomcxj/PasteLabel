@@ -36,6 +36,106 @@ class FakeCanvas(CanvasMenuMixin):
         self.calls.append("background_menu")
 
 
+def test_find_polygon_at_mouse_without_qpolygon():
+    class Editor:
+        detection_boxes = [{
+            "label": "p", "shape_type": "polygon",
+            "points": [[10, 10], [40, 10], [40, 40]],
+            "x": 10, "y": 10, "width": 30, "height": 30,
+        }]
+
+    class Canvas(CanvasMenuMixin):
+        def __init__(self):
+            self._editor = Editor()
+            self.background_scale = 1
+
+        def get_background_rect(self):
+            class R:
+                def left(self): return 0
+                def top(self): return 0
+            return R()
+
+    class Pos:
+        def x(self): return 30
+        def y(self): return 20
+
+    assert Canvas()._find_detection_box_at(Pos()) == 0
+
+
+def test_find_polygon_misses_outside():
+    class Editor:
+        detection_boxes = [{
+            "label": "p", "shape_type": "polygon",
+            "points": [[10, 10], [40, 10], [40, 40]],
+            "x": 10, "y": 10, "width": 30, "height": 30,
+        }]
+
+    class Canvas(CanvasMenuMixin):
+        def __init__(self):
+            self._editor = Editor()
+            self.background_scale = 1
+
+        def get_background_rect(self):
+            class R:
+                def left(self): return 0
+                def top(self): return 0
+            return R()
+
+    class Pos:
+        def x(self): return 11
+        def y(self): return 39
+
+    assert Canvas()._find_detection_box_at(Pos()) is None
+
+
+def test_right_click_on_polygon_vertex_deletes_instead_of_label_menu():
+    class Editor:
+        detection_boxes = [{
+            "label": "p", "shape_type": "polygon",
+            "points": [[10, 10], [40, 10], [40, 40], [10, 40]],
+            "x": 10, "y": 10, "width": 30, "height": 30,
+        }]
+        show_labels_checkbox = FakeCheckbox(True)
+        _is_delete_view = False
+        current_background = object()
+
+    class Canvas(CanvasMenuMixin):
+        def __init__(self):
+            self._editor = Editor()
+            self.background_scale = 1
+            self.calls = []
+            self.deleted = []
+
+        def find_item_at_position(self, mouse_pos):
+            return None
+
+        def get_background_rect(self):
+            class R:
+                def left(self): return 0
+                def top(self): return 0
+            return R()
+
+        def _box_handle_at_pos(self, mouse_pos, box_index):
+            return "v1"
+
+        def _show_polygon_vertex_menu(self, box_index, vertex_index, mouse_pos):
+            self.calls.append(("vertex_menu", box_index, vertex_index))
+
+        def _show_box_label_menu(self, box_index, mouse_pos):
+            self.calls.append("box_menu")
+
+        def _show_background_context_menu(self, mouse_pos):
+            self.calls.append("background_menu")
+
+    class Pos:
+        def x(self): return 40
+        def y(self): return 10
+
+    canvas = Canvas()
+    assert canvas._handle_right_click(Pos()) is True
+    assert canvas.calls == [("vertex_menu", 0, 1)]
+
+
 def test_right_click_ignores_boxes_when_labels_hidden():
     canvas = FakeCanvas()
 

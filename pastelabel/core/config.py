@@ -36,6 +36,7 @@ DETECTION_BOX_CONFIG = {
     'min_width': 3,  # 最小宽度
     'min_height': 3,  # 最小高度
     'resize_handle_size': 8,  # 调整手柄大小
+    'max_polygon_points': 32,  # 多边形最大顶点数
     'label_font_size': 9,  # 标签名字号
     'label_position': 'outside',  # 标签名位置：outside=框外侧，inside=框内侧
     'border_color_selected': (0, 255, 128),  # 选中边框颜色 (RGB)
@@ -116,9 +117,9 @@ GRID_CONFIG = {
 
 # 标签颜色配置 - 高对比度颜色
 LABEL_COLORS = [
-    '#E53935', '#D81B60', '#8E24AA', '#5E35B1',
+    '#43A047', '#D81B60', '#8E24AA', '#5E35B1',
     '#3949AB', '#1E88E5', '#039BE5', '#00ACC1',
-    '#00897B', '#43A047', '#7CB342', '#C0CA33',
+    '#00897B', '#E53935', '#7CB342', '#C0CA33',
     '#FDD835', '#FFB300', '#FB8C00', '#F4511E',
     '#6D4C41', '#757575', '#546E7A', '#C62828',
     '#AD1457', '#7B1FA2', '#4527A0', '#283593',
@@ -137,6 +138,11 @@ SHORTCUT_CONFIG = {
     'auto_save_p': 'H',
     'toggle_paste_names': 'F',
     'draw_box': 'W',
+    'draw_polygon': 'P',
+    'draw_point': 'K',
+    'draw_obb': 'O',
+    'rotate_cw': 'Z',
+    'rotate_ccw': 'X',
     'quit_draw': 'Q',
     'next_image': 'D',
     'prev_image': 'A',
@@ -185,6 +191,11 @@ CROSSHAIR_CONFIG = {
     'width': 1.0,
     'color': '#00FF80',
     'alpha': 160,
+}
+
+# OBB 旋转配置
+OBB_CONFIG = {
+    'rotate_step': 1,  # 键盘旋转单次角度（度）
 }
 
 # 出厂默认快照：这些字典在运行时会被就地修改（设置对话框、加载配置），

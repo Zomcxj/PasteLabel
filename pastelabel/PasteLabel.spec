@@ -14,6 +14,7 @@ _icon = [os.path.join(_root, 'ico_image', 'icoo.png')] if sys.platform == 'win32
 # 格式转换（自研实现，零外部依赖，仅用标准库 + numpy）
 _extra_hiddenimports = [
     'pastelabel.engine.dataset_converter',
+    'pastelabel.engine.shape_io',
     'pastelabel.ui.dataset_tools_dialog',
     'pastelabel.ui.mixins.dataset_tools',
 ]

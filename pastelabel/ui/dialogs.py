@@ -19,13 +19,15 @@ class LabelSelectionDialog(QDialog):
     """标签选择对话框（标注绘制 / 修改标签共用）。"""
 
     def __init__(self, parent=None, labels=None, anchor_rect=None,
-                 title=None, initial_text="", anchor_pos=None):
+                 title=None, initial_text="", anchor_pos=None,
+                 show_group=False, current_group_id=None):
         super().__init__(parent)
         tr = i18n.t
         self.setWindowTitle(tr(title) if title else tr("选择标签"))
         self.anchor_rect = anchor_rect
         self.anchor_pos = anchor_pos  # global QPoint; used when no anchor_rect
         self.setMinimumWidth(267)
+        self.group_input = None
 
         if labels is None:
             labels = []
@@ -59,6 +61,18 @@ class LabelSelectionDialog(QDialog):
             if pure_initial and pure_label == pure_initial:
                 current_row = self.label_list.count() - 1
         layout.addWidget(self.label_list)
+
+        if show_group:
+            from PyQt5.QtWidgets import QSpinBox
+            group_row = QHBoxLayout()
+            group_row.addWidget(QLabel(tr("分组")))
+            self.group_input = QSpinBox()
+            self.group_input.setMinimum(0)
+            self.group_input.setMaximum(9999)
+            self.group_input.setSpecialValueText(tr("留空"))
+            self.group_input.setValue(current_group_id or 0)
+            group_row.addWidget(self.group_input)
+            layout.addLayout(group_row)
 
         self.setLayout(layout)
 
@@ -116,10 +130,17 @@ class LabelSelectionDialog(QDialog):
         if selected_items:
             return selected_items[0].text()
         return ""
+
+    def get_selected_group_id(self):
+        if self.group_input is None:
+            return None
+        value = self.group_input.value()
+        return value if value > 0 else None
     
     @staticmethod
     def select_label(parent, labels, anchor_rect=None, title=None,
-                     initial_text="", anchor_pos=None):
+                     initial_text="", anchor_pos=None, show_group=False,
+                     current_group_id=None):
         """静态方法：显示标签选择对话框并返回选中的标签"""
         dialog = LabelSelectionDialog(
             parent, labels,
@@ -127,10 +148,14 @@ class LabelSelectionDialog(QDialog):
             title=title,
             initial_text=initial_text,
             anchor_pos=anchor_pos,
+            show_group=show_group,
+            current_group_id=current_group_id,
         )
         if dialog.exec_():
+            if show_group:
+                return dialog.get_selected_label(), dialog.get_selected_group_id()
             return dialog.get_selected_label()
-        return None
+        return (None, None) if show_group else None
 
 
 class ProgressDialogFactory:

@@ -13,6 +13,12 @@ from .canvas_menu import CanvasMenuMixin
 class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
     """Canvas 交互混入类 - 事件入口 + 通用操作"""
 
+    def _box_visible(self, box):
+        """框是否通过任务/分组筛选（未启用筛选则全部可见）。"""
+        from ..core.utils import box_visible
+        return box_visible(self._editor, box)
+
+
     def enterEvent(self, event):
         self.mouse_inside = True
         self.update_status_label()
@@ -46,6 +52,20 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 self._handle_drawing_press(mouse_pos)
             return
 
+        if getattr(self, 'is_drawing_polygon', False):
+            self._drag_out_pending = False
+            if event.button() == Qt.LeftButton:
+                self._handle_polygon_press(mouse_pos)
+            elif event.button() == Qt.RightButton:
+                self._prompt_finish_polygon()
+            return
+
+        if getattr(self, 'is_drawing_point', False):
+            self._drag_out_pending = False
+            if event.button() == Qt.LeftButton:
+                self._handle_point_press(mouse_pos)
+            return
+
         if event.button() == Qt.RightButton:
             self._drag_out_pending = False
             if self._handle_right_click(mouse_pos):
@@ -57,6 +77,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self._drag_out_pending = (
             getattr(self._editor, '_canvas_image_copy_enabled', False)
             and not self.is_drawing_box
+            and not getattr(self, 'is_drawing_polygon', False)
             and not self.is_dragging_background
             and not self.is_dragging_box
             and not self.is_dragging_item
@@ -69,7 +90,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self._drag_out_pending = False
 
     def _handle_left_click(self, mouse_pos):
-        if getattr(self, 'is_drawing_box', False):
+        if getattr(self, 'is_drawing_box', False) or getattr(self, 'is_drawing_polygon', False):
             return
         is_annotate = getattr(self._editor, 'edit_mode', 'paste') == 'annotate'
 
@@ -167,12 +188,26 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         best_box = best_handle = None
         min_dist = float('inf')
         for i, box in enumerate(self._editor.detection_boxes):
-            x = box["x"] * self.background_scale + background_rect.left()
-            y = box["y"] * self.background_scale + background_rect.top()
-            w = box["width"] * self.background_scale
-            h = box["height"] * self.background_scale
-            for hname, (hx, hy) in (("tl", (x, y)), ("tr", (x+w, y)),
-                                     ("bl", (x, y+h)), ("br", (x+w, y+h))):
+            if not self._box_visible(box):
+                continue
+            if box.get("shape_type") == "point":
+                continue
+            if box.get("shape_type") in ("polygon", "rotation") and box.get("points"):
+                corners = [
+                    (f"v{n}", (
+                        p[0] * self.background_scale + background_rect.left(),
+                        p[1] * self.background_scale + background_rect.top(),
+                    ))
+                    for n, p in enumerate(box["points"])
+                ]
+            else:
+                x = box["x"] * self.background_scale + background_rect.left()
+                y = box["y"] * self.background_scale + background_rect.top()
+                w = box["width"] * self.background_scale
+                h = box["height"] * self.background_scale
+                corners = (("tl", (x, y)), ("tr", (x+w, y)),
+                           ("bl", (x, y+h)), ("br", (x+w, y+h)))
+            for hname, (hx, hy) in corners:
                 hr = QRectF(hx - handle_size/2, hy - handle_size/2, handle_size, handle_size)
                 if hr.contains(mouse_pos):
                     dx = mouse_pos.x() - hx
@@ -184,8 +219,29 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                         best_handle = hname
         return best_box, best_handle
 
+    def _polygon_edge_at(self, mouse_pos):
+        """多边形边缘命中：(box_index, 插入索引, 图片坐标)，否则 None。"""
+        from ..engine.shape_io import nearest_polygon_edge
+        background_rect = self.get_background_rect()
+        if background_rect is None:
+            return None
+        eps = DETECTION_BOX_CONFIG['resize_handle_size'] / self.background_scale
+        img_pt = (
+            (mouse_pos.x() - background_rect.left()) / self.background_scale,
+            (mouse_pos.y() - background_rect.top()) / self.background_scale,
+        )
+        for i, box in enumerate(self._editor.detection_boxes):
+            if not self._box_visible(box):
+                continue
+            if box.get("shape_type") != "polygon" or not box.get("points"):
+                continue
+            idx = nearest_polygon_edge(img_pt, box["points"], eps)
+            if idx is not None:
+                return i, idx, img_pt
+        return None
+
     def _handle_detection_box_click(self, mouse_pos):
-        if self.is_drawing_box:
+        if self.is_drawing_box or getattr(self, 'is_drawing_polygon', False):
             return False
         if not self._can_edit_canvas():
             return False
@@ -194,6 +250,11 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             return False
 
         ctrl_pressed = bool(self._current_modifiers() & Qt.ControlModifier)
+
+        # 旋转框手柄优先：选中 OBB 时其手柄可拖动旋转
+        if (self.selected_box is not None and
+                self._rotation_handle_at_pos(mouse_pos, self.selected_box)):
+            return True
 
         # 第一遍：检查所有框的手柄，选最近的那个（解决重叠时下层框手柄被遮挡的问题）
         box_idx, handle = self._collect_nearest_handle(mouse_pos)
@@ -206,15 +267,56 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             if self._check_box_handle(mouse_pos, box_x, box_y, box_width, box_height, box_idx):
                 return True
 
+        # 第二遍：多边形边缘点击插入顶点
+        edge = self._polygon_edge_at(mouse_pos)
+        if edge is not None:
+            i, vidx, img_pt = edge
+            if self._insert_polygon_vertex(i, vidx, img_pt):
+                self.selected_boxes = [i]
+                self.selected_box = i
+                return True
+
         # 第二遍：按顺序检查框内命中
-        for i, box in enumerate(self._editor.detection_boxes):
+        # 命中顺序与绘制顺序相反：关键点在最上层，先于框被命中；
+        # 其余框后画的在上层，故倒序遍历。
+        from ..engine.shape_io import point_in_polygon
+        eps = DETECTION_BOX_CONFIG['resize_handle_size']
+
+        def _hit(i, box):
+            if box.get("shape_type") == "point" and box.get("points"):
+                cx = box["points"][0][0] * self.background_scale + background_rect.left()
+                cy = box["points"][0][1] * self.background_scale + background_rect.top()
+                return (mouse_pos.x() - cx) ** 2 + (mouse_pos.y() - cy) ** 2 <= eps * eps
+            if box.get("shape_type") in ("polygon", "rotation") and box.get("points"):
+                canvas_pts = [
+                    [
+                        p[0] * self.background_scale + background_rect.left(),
+                        p[1] * self.background_scale + background_rect.top(),
+                    ]
+                    for p in box["points"]
+                ]
+                return point_in_polygon(mouse_pos.x(), mouse_pos.y(), canvas_pts)
             box_x = box["x"] * self.background_scale + background_rect.left()
             box_y = box["y"] * self.background_scale + background_rect.top()
             box_width = box["width"] * self.background_scale
             box_height = box["height"] * self.background_scale
+            return QRectF(box_x, box_y, box_width, box_height).contains(mouse_pos)
 
-            box_rect = QRectF(box_x, box_y, box_width, box_height)
-            if box_rect.contains(mouse_pos):
+        indexed = [
+            (i, box) for i, box in enumerate(self._editor.detection_boxes)
+            if self._box_visible(box)
+        ]
+        points_first = [(i, b) for i, b in indexed if b.get("shape_type") == "point"]
+        rest = [(i, b) for i, b in indexed if b.get("shape_type") != "point"]
+        # 与绘制一致：已选中的点在最上层，优先命中；其余点后画的在上层。
+        selected = set(getattr(self, 'selected_boxes', []) or [])
+        if self.selected_box is not None:
+            selected.add(self.selected_box)
+        points_first.sort(key=lambda item: item[0] in selected)
+        points_first = list(reversed(points_first))
+        for i, box in points_first + list(reversed(rest)):
+            hit = _hit(i, box)
+            if hit:
                 self.hover_resize_target = None
                 self.hover_resize_handle = None
                 self._editor.selected_item = None
@@ -340,6 +442,10 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 self._do_canvas_drag_out()
                 return
 
+        if getattr(self, 'is_drawing_polygon', False):
+            self.update()
+            return
+
         if self.is_drawing_box:
             if self.draw_start_pos:
                 bg_rect = self.get_background_rect()
@@ -372,6 +478,11 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self._drag_box()
             return
 
+        if self.is_rotating_box and self.selected_box is not None:
+            self.setCursor(Qt.ClosedHandCursor)
+            self._rotate_selected_box()
+            return
+
         if self.is_resizing_box and self.selected_box is not None:
             self.setCursor(Qt.ClosedHandCursor)
             self._resize_box()
@@ -401,9 +512,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.hover_resize_target = None
         self.hover_resize_handle = None
 
-        if self.is_drawing_box:
+        if self.is_drawing_box or getattr(self, 'is_drawing_polygon', False):
             return
-
         if self._editor.current_background is None or self._editor.current_background_index < 0:
             if (old_target, old_handle) != (self.hover_resize_target, self.hover_resize_handle):
                 self.update()
@@ -458,6 +568,14 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         else:
             self.setCursor(Qt.ArrowCursor)
 
+        if (self.hover_resize_target is None
+                and not self.is_drawing_box
+                and not getattr(self, 'is_drawing_polygon', False)
+                and getattr(self._editor, 'edit_mode', 'paste') == 'annotate'
+                and self._editor.show_labels_checkbox.isChecked()
+                and self._polygon_edge_at(self.mouse_pos) is not None):
+            self.setCursor(Qt.CrossCursor)
+
         if (old_target, old_handle) != (self.hover_resize_target, self.hover_resize_handle):
             self.update()
 
@@ -502,16 +620,41 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self.setCursor(Qt.PointingHandCursor)
             return True
 
-        # 第二遍：按顺序检查框内命中
+        from ..engine.shape_io import point_in_polygon
+        eps = DETECTION_BOX_CONFIG['resize_handle_size']
         for i, box in enumerate(self._editor.detection_boxes):
-            box_rect = QRectF(
-                box["x"] * self.background_scale + background_rect.left(),
-                box["y"] * self.background_scale + background_rect.top(),
-                box["width"] * self.background_scale,
-                box["height"] * self.background_scale,
-            )
+            if not self._box_visible(box):
+                continue
+            if box.get("shape_type") == "point" and box.get("points"):
+                cx = box["points"][0][0] * self.background_scale + background_rect.left()
+                cy = box["points"][0][1] * self.background_scale + background_rect.top()
+                hit = ((self.mouse_pos.x() - cx) ** 2 +
+                       (self.mouse_pos.y() - cy) ** 2) <= eps * eps
+            elif box.get("shape_type") in ("polygon", "rotation") and box.get("points"):
+                canvas_pts = [
+                    [
+                        p[0] * self.background_scale + background_rect.left(),
+                        p[1] * self.background_scale + background_rect.top(),
+                    ]
+                    for p in box["points"]
+                ]
+                hit = point_in_polygon(self.mouse_pos.x(), self.mouse_pos.y(), canvas_pts)
+                box_rect = QRectF(
+                    box["x"] * self.background_scale + background_rect.left(),
+                    box["y"] * self.background_scale + background_rect.top(),
+                    box["width"] * self.background_scale,
+                    box["height"] * self.background_scale,
+                )
+            else:
+                box_rect = QRectF(
+                    box["x"] * self.background_scale + background_rect.left(),
+                    box["y"] * self.background_scale + background_rect.top(),
+                    box["width"] * self.background_scale,
+                    box["height"] * self.background_scale,
+                )
+                hit = box_rect.contains(self.mouse_pos)
 
-            if box_rect.contains(self.mouse_pos):
+            if hit:
                 handle = self._box_handle_at_pos(
                     self.mouse_pos, i,
                     box_rect.x(), box_rect.y(), box_rect.width(), box_rect.height()
@@ -668,9 +811,32 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self._editor.canvas_items[self._editor.selected_item] = (p, nr, label)
             self.update()
 
+    def mouseDoubleClickEvent(self, event):
+        if getattr(self, 'is_drawing_polygon', False) and event.button() == Qt.LeftButton:
+            self._prompt_finish_polygon(pop_duplicate=True)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def keyPressEvent(self, event):
+        if getattr(self, 'is_drawing_polygon', False):
+            if event.key() == Qt.Key_Backspace:
+                self._polygon_pop_last_point()
+                event.accept()
+                return
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                self._prompt_finish_polygon()
+                event.accept()
+                return
+            if event.key() == Qt.Key_Escape:
+                self._reset_drawing_state()
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
     def mouseReleaseEvent(self, event):
         self._drag_out_pending = False
-        if self._can_edit_canvas() and (self.is_dragging_box or self.is_resizing_box):
+        if self._can_edit_canvas() and (self.is_dragging_box or self.is_resizing_box or self.is_rotating_box):
             if hasattr(self, '_needs_save') and self._needs_save:
                 self._save_current_detection_boxes()
         self._needs_save = False
@@ -679,6 +845,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.is_dragging_background = False
         self.is_dragging_box = False
         self.is_resizing_box = False
+        self.is_rotating_box = False
+        self.rotation_prev_angle = None
         self.resize_handle = None
         self._check_hover()
         self.update()
@@ -692,16 +860,21 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         elif self._editor.selected_item is not None:
             self._scale_selected_item(event)
         elif self.selected_box is not None:
-            locked_target = getattr(self, '_wheel_edge_target', None)
-            if locked_target and locked_target[0] == self.selected_box:
-                self._adjust_selected_box_edge(event, locked_target[1])
-            elif self._is_mouse_inside_selected_box():
+            box = self._editor.detection_boxes[self.selected_box]
+            if box.get("shape_type") == "rotation":
+                # 旋转框整体缩放，不做 bbox 单边调整（否则与 points 失同步）
                 self._scale_selected_box(event)
             else:
-                edge = self._get_selected_box_edge()
-                if edge:
-                    self._wheel_edge_target = (self.selected_box, edge)
-                    self._adjust_selected_box_edge(event, edge)
+                locked_target = getattr(self, '_wheel_edge_target', None)
+                if locked_target and locked_target[0] == self.selected_box:
+                    self._adjust_selected_box_edge(event, locked_target[1])
+                elif self._is_mouse_inside_selected_box():
+                    self._scale_selected_box(event)
+                else:
+                    edge = self._get_selected_box_edge()
+                    if edge:
+                        self._wheel_edge_target = (self.selected_box, edge)
+                        self._adjust_selected_box_edge(event, edge)
 
         self.update()
 
@@ -782,6 +955,11 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         scale_factor = 1.0 + step if delta > 0 else max(0.1, 1.0 - step)
 
         box = self._editor.detection_boxes[self.selected_box]
+        if box.get("shape_type") in ("polygon", "rotation") and box.get("points"):
+            self._scale_polygon(box, scale_factor)
+            self._sync_detection_box_to_dict(self.selected_box)
+            return
+
         x, y, width, height = box["x"], box["y"], box["width"], box["height"]
 
         new_width = width * scale_factor
@@ -906,8 +1084,12 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             bh = bg.height() if bg else 0
             nx = max(0, min(box["x"] + dx * step, bw - box["width"]))
             ny = max(0, min(box["y"] + dy * step, bh - box["height"]))
+            applied_dx = nx - box["x"]
+            applied_dy = ny - box["y"]
             box["x"] = nx
             box["y"] = ny
+            if box.get("points"):
+                box["points"] = [[p[0] + applied_dx, p[1] + applied_dy] for p in box["points"]]
             self._sync_detection_box_to_dict(self.selected_box)
             self.update()
         elif self._editor.selected_item is not None and 0 <= self._editor.selected_item < len(self._editor.canvas_items):

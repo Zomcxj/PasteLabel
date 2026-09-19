@@ -63,15 +63,9 @@ class OptionsPopupMixin:
         self.options_btn.setFixedHeight(24)
         self.options_btn.setFixedWidth(70)
         self.options_btn.setToolTip(tr("选项设置"))
-        self.options_menu = HoverKeepMenu()
+        self.options_menu = HoverKeepMenu(first_action_momentary=False)
         self.options_menu.setObjectName("optionsMenu")
         self.options_menu.setMinimumWidth(200)
-
-        sc_w = self._get_shortcut('draw_box')
-        self._draw_box_action = self.options_menu.addAction(f"{tr('绘制BOX')}\t{sc_w}")
-        self._draw_box_action.setCheckable(True)
-        self._draw_box_action.setChecked(False)
-        self._draw_box_action.triggered.connect(self._trigger_draw_box_menu_action)
 
         items = [
             (tr("显示BOX"), "toggle_labels", self.show_labels_checkbox),
@@ -164,10 +158,6 @@ class OptionsPopupMixin:
         self.process_btn.clicked.connect(self._show_export_menu)
         layout.addWidget(self.process_btn)
 
-    def _trigger_draw_box_menu_action(self, checked=False):
-        self._draw_box_action.setChecked(False)
-        self.toggle_draw_mode()
-
     def _rebuild_options_popup(self):
         if getattr(self, 'options_menu', None) is not None:
             self.options_menu.deleteLater()
@@ -183,10 +173,6 @@ class OptionsPopupMixin:
         popup_layout.setSpacing(2)
 
         self._option_popup_rows = []
-        self._draw_box_action = QPushButton()
-        self._draw_box_action.clicked.connect(self.toggle_draw_mode)
-        popup_layout.addWidget(self._draw_box_action)
-
         items = [
             (tr("显示BOX"), "toggle_labels", self.show_labels_checkbox, lambda cb=self.show_labels_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.show_labels_checkbox: cb.isChecked()),
             (tr("显示Label"), "toggle_label_names", self.show_label_names_checkbox, lambda cb=self.show_label_names_checkbox: cb.setChecked(not cb.isChecked()), lambda cb=self.show_label_names_checkbox: cb.isChecked()),
@@ -211,9 +197,6 @@ class OptionsPopupMixin:
         self._refresh_options_popup_texts()
 
     def _refresh_options_popup_texts(self):
-        if hasattr(self, '_draw_box_action'):
-            sc = self._get_shortcut('draw_box')
-            self._draw_box_action.setText(f"{tr('绘制BOX')}    {sc}" if sc else tr('绘制BOX'))
         for button, text, shortcut_action, getter in getattr(self, '_option_popup_rows', []):
             sc = self._get_shortcut(shortcut_action) if shortcut_action else ''
             prefix = "√ " if getter() else ""

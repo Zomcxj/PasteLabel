@@ -364,6 +364,7 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         ])
         self._run_images = [os.path.join(work_dir, f) for f in img_files]
         self._run_boxes = {}
+        from ..engine.shape_io import box_from_labelme_shape
         for idx, img_path in enumerate(self._run_images):
             json_path = os.path.splitext(img_path)[0] + ".json"
             if not os.path.exists(json_path):
@@ -374,18 +375,9 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
                     data = json.load(f)
                 boxes = []
                 for sh in data.get("shapes", []):
-                    pts = sh.get("points", [])
-                    if len(pts) >= 2:
-                        x_coords = [p[0] for p in pts]
-                        y_coords = [p[1] for p in pts]
-                        x = min(x_coords)
-                        y = min(y_coords)
-                        w = max(x_coords) - x
-                        h = max(y_coords) - y
-                        boxes.append({
-                            "x": x, "y": y, "width": w, "height": h,
-                            "label": sh.get("label", "")
-                        })
+                    box = box_from_labelme_shape(sh)
+                    if box is not None:
+                        boxes.append(box)
                 self._run_boxes[idx] = boxes
             except Exception:
                 self._run_boxes[idx] = []
@@ -418,6 +410,7 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         aug_dir = os.path.normpath(aug_dir)
         aug_images = [os.path.join(aug_dir, f) for f in sorted(imgs)]
         aug_boxes = {}
+        from ..engine.shape_io import box_from_labelme_shape
         for i, img_path in enumerate(aug_images):
             base = os.path.splitext(os.path.basename(img_path))[0]
             json_path = os.path.join(aug_dir, base + ".json")
@@ -425,22 +418,11 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
                 try:
                     with open(json_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                    shapes = data.get("shapes", [])
                     box_list = []
-                    for shape in shapes:
-                        pts = shape.get("points", [])
-                        lbl = shape.get("label", "")
-                        if len(pts) >= 2 and lbl:
-                            x_coords = [p[0] for p in pts]
-                            y_coords = [p[1] for p in pts]
-                            x = min(x_coords)
-                            y = min(y_coords)
-                            w = max(x_coords) - x
-                            h = max(y_coords) - y
-                            box_list.append({
-                                "x": x, "y": y, "width": w, "height": h,
-                                "label": lbl,
-                            })
+                    for shape in data.get("shapes", []):
+                        box = box_from_labelme_shape(shape)
+                        if box is not None:
+                            box_list.append(box)
                     aug_boxes[i] = box_list
                 except Exception:
                     aug_boxes[i] = []
@@ -718,6 +700,9 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
                     output_dir,
                     on_progress=lambda c, t: progress_fn(c, t, ""),
                     is_interrupted=lambda: self._interrupted,
+                    mode=("seg" if fmt == "YOLO Seg"
+                          else "pose" if fmt == "YOLO Pose"
+                          else "obb" if fmt == "YOLO OBB" else "hbb"),
                 )
             exp.run(
                 self._run_images,

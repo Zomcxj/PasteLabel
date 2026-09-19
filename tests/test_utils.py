@@ -101,6 +101,10 @@ class TestExtractLabelName:
     def test_no_parens(self):
         assert extract_label_name("person_01") == "person_01"
 
+    def test_strips_group_brackets(self):
+        assert extract_label_name("nose [1]") == "nose"
+        assert extract_label_name("nose [1] (3)") == "nose"
+
 
 class TestPathUtils:
     """PathUtils 测试"""

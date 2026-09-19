@@ -52,6 +52,9 @@ class FakeEditor:
 
     def save_json(self, *args, **kwargs):
         self.saved.append((args, kwargs))
+    
+    def update_label_list(self):
+        pass
 
 
 def test_add_label_ignores_qaction_checked_bool():

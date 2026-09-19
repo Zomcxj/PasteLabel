@@ -104,6 +104,9 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
             DETECTION_BOX_CONFIG['label_font_size'] = max(5, min(15, int(settings['label_font_size'])))
         if settings.get('label_position') in ('outside', 'inside'):
             DETECTION_BOX_CONFIG['label_position'] = settings['label_position']
+        DETECTION_BOX_CONFIG['max_polygon_points'] = max(
+            3, min(64, int(settings.get('max_polygon_points', DETECTION_BOX_CONFIG.get('max_polygon_points', 32))))
+        )
         self._canvas_image_copy_enabled = bool(settings.get('canvas_image_copy_enabled', False))
         self._relative_path_display = bool(settings.get('relative_path_display', False))
         self._magnifier_enabled = bool(settings.get('magnifier_enabled', False))

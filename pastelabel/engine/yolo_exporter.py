@@ -6,6 +6,10 @@ from .base_exporter import BaseExporter
 
 class YoloExporter(BaseExporter):
 
+    def __init__(self, output_dir, on_progress=None, is_interrupted=None, mode="hbb"):
+        super().__init__(output_dir, on_progress, is_interrupted)
+        self.mode = mode
+
     def _ensure_dirs(self):
         super()._ensure_dirs()
 
@@ -29,6 +33,12 @@ class YoloExporter(BaseExporter):
         with open(txt_path, 'w') as f:
             for b in boxes:
                 class_id = classes.index(b["label"])
+                if self.mode == "seg" and (b.get("shape_type") or "rectangle") == "polygon":
+                    from .shape_io import yolo_seg_line
+                    line = yolo_seg_line(b, class_id, iw, ih)
+                    if line:
+                        f.write(line + "\n")
+                    continue
                 x1 = max(0, b["x"])
                 y1 = max(0, b["y"])
                 x2 = min(iw, b["x"] + b["width"])

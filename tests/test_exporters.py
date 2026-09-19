@@ -197,6 +197,23 @@ def test_yolo_skips_degenerate_boxes(tmp_path):
     assert (tmp_path / "labels" / "a.txt").read_text() == ""
 
 
+def test_yolo_seg_writes_normalized_polygon_points(tmp_path):
+    exp = YoloExporter(str(tmp_path), mode="seg")
+    items = [_item("a", [{
+        "label": "cat",
+        "shape_type": "polygon",
+        "points": [[50, 25], [150, 25], [100, 75]],
+        "x": 50, "y": 25, "width": 100, "height": 50,
+    }])]
+
+    exp.run([], {}, ["cat"], input_data=items)
+
+    parts = (tmp_path / "labels" / "a.txt").read_text().split()
+    assert parts[0] == "0"
+    assert len(parts) == 7
+    assert [float(p) for p in parts[1:3]] == pytest.approx([0.25, 0.25])
+
+
 def test_yolo_writes_classes_file_in_class_id_order(tmp_path):
     exp = YoloExporter(str(tmp_path))
     items = [_item("a", [_box("zebra", 0, 0, 10, 10)])]

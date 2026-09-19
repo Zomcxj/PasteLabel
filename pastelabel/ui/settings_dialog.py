@@ -119,6 +119,9 @@ class SettingsDialog(QDialog):
             'auto_save_b': tr("自动保存B"),
             'auto_save_p': tr("自动保存P"),
             'draw_box': tr("绘制检测框"),
+            'draw_polygon': tr("绘制多边形"),
+            'draw_point': tr("标注关键点"),
+            'draw_obb': tr("绘制旋转框"),
             'quit_draw': tr("退出绘制"),
             'next_image': tr("下一张"),
             'prev_image': tr("上一张"),
@@ -287,6 +290,16 @@ class SettingsDialog(QDialog):
         handle_size_row.addWidget(self.handle_size_spin)
         handle_size_row.addStretch()
         opt_layout.addLayout(handle_size_row)
+
+        max_poly_row = QHBoxLayout()
+        max_poly_row.addWidget(QLabel(tr("多边形最大点数") + ":"), 2)
+        self.max_polygon_points_spin = QSpinBox()
+        self.max_polygon_points_spin.setRange(3, 64)
+        self.max_polygon_points_spin.setValue(DETECTION_BOX_CONFIG.get('max_polygon_points', 32))
+        self.max_polygon_points_spin.setMinimumWidth(150)
+        max_poly_row.addWidget(self.max_polygon_points_spin)
+        max_poly_row.addStretch()
+        opt_layout.addLayout(max_poly_row)
 
         box_border_width_row = QHBoxLayout()
         box_border_width_label = QLabel(tr("框线粗细") + ":")
@@ -504,6 +517,7 @@ class SettingsDialog(QDialog):
         self.grid_width_spin.setValue(GRID_CONFIG.get('line_width', 1))
         self.grid_alpha_spin.setValue(GRID_CONFIG.get('alpha', 120))
         self.handle_size_spin.setValue(max(7, min(15, DETECTION_BOX_CONFIG.get('resize_handle_size', 8))))
+        self.max_polygon_points_spin.setValue(max(3, min(64, int(DETECTION_BOX_CONFIG.get('max_polygon_points', 32)))))
         self.box_border_width_spin.setValue(max(1, min(4, float(BOX_BORDER_CONFIG['width']))))
         self.label_font_size_spin.setValue(max(5, min(15, DETECTION_BOX_CONFIG.get('label_font_size', 9))))
         label_position = DETECTION_BOX_CONFIG.get('label_position', 'outside')
@@ -570,6 +584,8 @@ class SettingsDialog(QDialog):
         GRID_CONFIG['alpha'] = self.grid_alpha_spin.value()
         handle_size = max(7, min(15, self.handle_size_spin.value()))
         DETECTION_BOX_CONFIG['resize_handle_size'] = handle_size
+        max_polygon_points = max(3, min(64, self.max_polygon_points_spin.value()))
+        DETECTION_BOX_CONFIG['max_polygon_points'] = max_polygon_points
         PASTE_ITEM_CONFIG['handle_size'] = handle_size
         box_border_width = max(1, min(4, float(self.box_border_width_spin.value())))
         BOX_BORDER_CONFIG['width'] = box_border_width
@@ -606,6 +622,7 @@ class SettingsDialog(QDialog):
             grid_line_width=GRID_CONFIG['line_width'],
             grid_alpha=GRID_CONFIG['alpha'],
             resize_handle_size=handle_size,
+            max_polygon_points=max_polygon_points,
             label_font_size=label_font_size,
             label_position=label_position,
             magnifier_zoom=magnifier_zoom,

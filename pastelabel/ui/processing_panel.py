@@ -718,6 +718,7 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
                     output_dir,
                     on_progress=lambda c, t: progress_fn(c, t, ""),
                     is_interrupted=lambda: self._interrupted,
+                    mode="seg" if fmt == "YOLO Seg" else "hbb",
                 )
             exp.run(
                 self._run_images,

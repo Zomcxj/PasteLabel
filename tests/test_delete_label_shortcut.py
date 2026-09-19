@@ -34,17 +34,24 @@ class FakeList:
 
     def selectedItems(self):
         return self._selected
+    
+    def setCurrentRow(self, row):
+        pass
 
 
 class FakeCanvas:
     def __init__(self):
         self.selected_box = 'x'
         self.selected_boxes = ['x']
+    
+    def update(self):
+        pass
 
 
 class FakeEditor:
     def __init__(self, selected, boxes, mode='stats'):
         self.label_list = FakeList(selected)
+        self.background_list = FakeList([])
         self._bg_label_list_mode = mode
         self.detection_boxes = list(boxes)
         self.detection_boxes_dict = {0: [dict(b) for b in boxes]}
@@ -53,6 +60,15 @@ class FakeEditor:
         self.current_background_index = 0
         self.canvas = FakeCanvas()
         self.saved = []
+    
+    def update_label_list(self):
+        pass
+    
+    def switch_background_to_index(self, idx):
+        pass
+    
+    def _find_bg_list_row_for_index(self, idx):
+        return 0
 
 
 def _manager(editor):

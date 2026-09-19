@@ -242,7 +242,9 @@ def extract_label_name(label_text):
     :return: 纯标签名称
     """
     if " (" in label_text:
-        return label_text.split(" (")[0]
+        label_text = label_text.split(" (")[0]
+    if label_text.endswith(']') and ' [' in label_text:
+        label_text = label_text.rsplit(' [', 1)[0]
     return label_text
 
 

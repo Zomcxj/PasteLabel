@@ -682,6 +682,7 @@ class ImageLoaderMixin:
 
     def load_detection_boxes(self, file_path):
         """加载检测框 JSON 文件"""
+        from .shape_io import box_from_labelme_shape
         base_name = os.path.splitext(file_path)[0]
         json_path = f"{base_name}.json"
         detection_boxes = []
@@ -694,25 +695,9 @@ class ImageLoaderMixin:
                         shapes = data["shapes"]
                         if isinstance(shapes, list):
                             for shape in shapes:
-                                if isinstance(shape, dict) and all(key in shape for key in ["label", "points"]):
-                                    label = shape["label"]
-                                    points = shape["points"]
-
-                                    if len(points) >= 2:
-                                        x_coords = [point[0] for point in points]
-                                        y_coords = [point[1] for point in points]
-                                        x = min(x_coords)
-                                        y = min(y_coords)
-                                        width = max(x_coords) - x
-                                        height = max(y_coords) - y
-
-                                        detection_boxes.append({
-                                            "x": x,
-                                            "y": y,
-                                            "width": width,
-                                            "height": height,
-                                            "label": label
-                                        })
+                                box = box_from_labelme_shape(shape)
+                                if box is not None:
+                                    detection_boxes.append(box)
             except Exception as e:
                 from ..core.exception_hook import _write_log
                 _write_log(f"加载检测框文件失败：{e}")

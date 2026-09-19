@@ -195,14 +195,27 @@ class LabelManager(QObject):
             anchor = None
         labels = self._dataset_labels_for_dialog(prefer_first=old_label)
         from ..ui.dialogs import LabelSelectionDialog
-        new_label = LabelSelectionDialog.select_label(
+        current_group = None
+        if isinstance(box_index, int) and 0 <= box_index < len(self.editor.detection_boxes):
+            current_group = self.editor.detection_boxes[box_index].get("group_id")
+        result = LabelSelectionDialog.select_label(
             self.editor, labels, title="修改标签", initial_text=old_label,
-            anchor_pos=anchor,
+            anchor_pos=anchor, show_group=True, current_group_id=current_group,
         )
+        if isinstance(result, tuple):
+            new_label, new_group = result
+        else:
+            new_label, new_group = result, None
         if not new_label or not str(new_label).strip():
             return
         new_label = str(new_label).strip()
-        if new_label == old_label:
+        group_only_change = (
+            new_label == old_label
+            and isinstance(box_index, int)
+            and new_group is not None
+            and self.editor.detection_boxes[box_index].get("group_id") != new_group
+        )
+        if new_label == old_label and not group_only_change:
             return
 
         if mode == 'all' and isinstance(box_index, int):
@@ -211,6 +224,8 @@ class LabelManager(QObject):
             # Decide color BEFORE membership of new_label changes.
             target_exists = self._label_already_exists(new_label)
             self.editor.detection_boxes[box_index]["label"] = new_label
+            if new_group is not None:
+                self.editor.detection_boxes[box_index]["group_id"] = new_group
             current_index = self.editor.current_background_index
             if current_index >= 0:
                 self.editor.detection_boxes_dict[current_index] = \
@@ -241,47 +256,42 @@ class LabelManager(QObject):
         self.rename_detection_label(old_label, new_label, rewrite_disk=True)
     
     def delete_selected_label(self):
-        """快捷键删除当前图片的整个标签文件（清空所有检测框 + 删除 JSON），不弹确认框。"""
-        idx = self.editor.current_background_index
-        if idx < 0 or idx >= len(self.editor.background_images):
+        """快捷键删除选中标签（不弹确认框）。all 删单框，stats 只删当前图该标签所有框。"""
+        selected_items = self.editor.label_list.selectedItems()
+        if not selected_items:
             return
-        
-        file_path = self.editor.background_images[idx]
-        json_path = os.path.splitext(file_path)[0] + ".json"
-        has_boxes = bool(self.editor.detection_boxes)
-        has_json = os.path.isfile(json_path)
-        
-        if not has_boxes and not has_json:
-            return
-        
-        # 清空内存中的检测框
-        self.editor.detection_boxes = []
-        self.editor.detection_boxes_dict[idx] = []
+        item = selected_items[0]
+        label_to_delete = extract_label_name(item.text())
+        mode = getattr(self.editor, '_bg_label_list_mode', 'stats')
+        box_index = item.data(0x0100) if hasattr(item, 'data') else None
+        current_index = self.editor.current_background_index
+
+        if mode == 'all' and isinstance(box_index, int):
+            if not (0 <= box_index < len(self.editor.detection_boxes)):
+                return
+            del self.editor.detection_boxes[box_index]
+        else:
+            self.editor.detection_boxes = [
+                box for box in self.editor.detection_boxes
+                if box.get("label") != label_to_delete
+            ]
+
+        if current_index >= 0:
+            self.editor.detection_boxes_dict[current_index] = \
+                list(self.editor.detection_boxes)
+        still_used = any(
+            box.get("label") == label_to_delete
+            for boxes in self.editor.detection_boxes_dict.values()
+            for box in boxes
+        )
+        if not still_used and label_to_delete in self.editor.global_labels:
+            self.editor.global_labels.discard(label_to_delete)
         self.editor.canvas.selected_box = None
         self.editor.canvas.selected_boxes = []
-        
-        # 删除磁盘 JSON 文件
-        if has_json:
-            try:
-                os.remove(json_path)
-            except OSError:
-                from ..core.exception_hook import _write_log
-                _write_log(f"删除标签文件失败: {json_path}")
-        
-        # 刷新界面
-        refresh = getattr(self.editor, "_refresh_background_item_status", None)
-        if callable(refresh):
-            refresh(idx, file_path)
-        self.editor.update_label_list()
-        self.editor.canvas.update()
-        
-        # 自动跳转下一张
-        if self.editor.background_images:
-            new_idx = min(idx, len(self.editor.background_images) - 1)
-            self.editor.switch_background_to_index(new_idx)
-            row = self.editor._find_bg_list_row_for_index(new_idx)
-            if row is not None:
-                self.editor.background_list.setCurrentRow(row)
+        if current_index >= 0:
+            self._save_detection_json_for_index(current_index)
+        self.label_list_changed.emit()
+        self.data_changed.emit()
 
     def delete_label(self):
         """删除标签。
@@ -401,6 +411,7 @@ class LabelManager(QObject):
             file_path,
             background_name,
             "",
+            canvas_items=[],
             image_width=image_width,
             image_height=image_height,
             current_index=index,
@@ -881,7 +892,8 @@ class LabelManager(QObject):
                 label = box.get("label")
                 if not (isinstance(label, str) and label.strip()):
                     continue
-                item = QListWidgetItem(label)
+                from .shape_io import format_label_display
+                item = QListWidgetItem(format_label_display(label, box.get("group_id")))
                 if hasattr(item, 'setData'):
                     item.setData(0x0100, box_index)
                 self.editor.label_list.addItem(item)

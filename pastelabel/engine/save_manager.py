@@ -321,15 +321,10 @@ class SaveManager(QObject):
     @staticmethod
     def _build_labelme_shape(label, x, y, w, h):
         """构建 LabelMe 格式的 shape 字典"""
-        points = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
-        return {
-            "label": label,
-            "points": points,
-            "group_id": None,
-            "description": "",
-            "shape_type": "rectangle",
-            "flags": {}
-        }
+        from .shape_io import labelme_shape_from_box
+        return labelme_shape_from_box({
+            "label": label, "x": x, "y": y, "width": w, "height": h,
+        })
 
     @staticmethod
     def _deduplicate_rectangles(items, get_rect):
@@ -374,10 +369,17 @@ class SaveManager(QObject):
 
         boxes_to_use = []
         if index_to_use >= 0 and index_to_use in self.editor.detection_boxes_dict:
-            boxes_to_use = self._deduplicate_rectangles(
-                self.editor.detection_boxes_dict[index_to_use],
+            raw_boxes = self.editor.detection_boxes_dict[index_to_use]
+            rects = [b for b in raw_boxes if (b.get('shape_type') or 'rectangle') == 'rectangle']
+            kept_rects = self._deduplicate_rectangles(
+                rects,
                 lambda box: QRectF(box['x'], box['y'], box['width'], box['height']),
             )
+            kept_ids = {id(b) for b in kept_rects}
+            boxes_to_use = [
+                b for b in raw_boxes
+                if (b.get('shape_type') or 'rectangle') != 'rectangle' or id(b) in kept_ids
+            ]
             self.editor.detection_boxes_dict[index_to_use] = boxes_to_use
             if index_to_use == self.editor.current_background_index:
                 self.editor.detection_boxes = boxes_to_use.copy()
@@ -401,11 +403,9 @@ class SaveManager(QObject):
         
         # 添加检测框
         if index_to_use >= 0:
+            from .shape_io import labelme_shape_from_box
             for box in boxes_to_use:
-                shape = self._build_labelme_shape(
-                    box['label'], box['x'], box['y'], box['width'], box['height']
-                )
-                json_data["shapes"].append(shape)
+                json_data["shapes"].append(labelme_shape_from_box(box))
         
         os.makedirs(os.path.dirname(json_path), exist_ok=True)
         try:

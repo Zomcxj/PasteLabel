@@ -66,6 +66,8 @@ class CanvasRendererMixin:
 
             if self.is_drawing_box:
                 self._draw_temp_box(sp)
+            if getattr(self, 'is_drawing_polygon', False):
+                self._draw_temp_polygon(sp, background_rect)
 
             sp.setOpacity(1.0)
 
@@ -296,11 +298,6 @@ class CanvasRendererMixin:
             if box["width"] <= 0 or box["height"] <= 0:
                 continue
 
-            box_x = box["x"] * self.background_scale + background_rect.left()
-            box_y = box["y"] * self.background_scale + background_rect.top()
-            box_width = box["width"] * self.background_scale
-            box_height = box["height"] * self.background_scale
-
             is_selected = (i == self.selected_box or i in getattr(self, 'selected_boxes', []))
             pressed_box = getattr(self._editor, 'pressed_box_index', None)
             is_pressed_label = (
@@ -308,9 +305,21 @@ class CanvasRendererMixin:
                 or self._is_pressed_label(box)
             )
 
+            if box.get("shape_type") == "polygon" and box.get("points"):
+                self._draw_polygon_shape(
+                    painter, box, background_rect, is_selected, is_pressed_label
+                )
+                continue
+
+            box_x = box["x"] * self.background_scale + background_rect.left()
+            box_y = box["y"] * self.background_scale + background_rect.top()
+            box_width = box["width"] * self.background_scale
+            box_height = box["height"] * self.background_scale
+
             self._draw_single_detection_box(
                 painter, box_x, box_y, box_width, box_height,
-                box.get("label", ""), is_selected, is_pressed_label
+                box.get("label", ""), is_selected, is_pressed_label,
+                group_id=box.get("group_id"),
             )
 
     def _is_pressed_label(self, box):
@@ -320,7 +329,7 @@ class CanvasRendererMixin:
         return box.get('label') == self._editor.pressed_label
 
     def _draw_single_detection_box(self, painter, x, y, width, height, label,
-                                    is_selected, is_pressed_label):
+                                    is_selected, is_pressed_label, group_id=None):
         """绘制单个检测框"""
         label_color_hex = self._editor.get_label_color(label)
         lr = int(label_color_hex[1:3], 16)
@@ -342,8 +351,10 @@ class CanvasRendererMixin:
         painter.fillRect(rx, ry, rw, rh, fill_color)
 
         if label and getattr(self._editor, 'show_label_names_checkbox', None) and self._editor.show_label_names_checkbox.isChecked():
+            from ..engine.shape_io import format_label_display
+            display = format_label_display(label, group_id)
             label_bg = QColor(lr, lg, lb)
-            self._draw_box_label(painter, x, y, label, label_bg)
+            self._draw_box_label(painter, x, y, display, label_bg)
 
         if is_selected:
             handle_stroke = QColor(255, 255, 255)
@@ -402,6 +413,65 @@ class CanvasRendererMixin:
             pen = QPen(QColor(crosshair), 2, Qt.DashLine)
             painter.setPen(pen)
             painter.drawRect(self.temp_draw_box)
+
+    def _image_to_canvas_points(self, points, background_rect):
+        scale = self.background_scale
+        left, top = background_rect.left(), background_rect.top()
+        return [
+            QPointF(p[0] * scale + left, p[1] * scale + top)
+            for p in points
+        ]
+
+    def _draw_polygon_shape(self, painter, box, background_rect, is_selected, is_pressed_label):
+        from PyQt5.QtGui import QPainterPath
+        pts = self._image_to_canvas_points(box.get("points") or [], background_rect)
+        if len(pts) < 2:
+            return
+        label = box.get("label", "")
+        label_color_hex = self._editor.get_label_color(label)
+        lr = int(label_color_hex[1:3], 16)
+        lg = int(label_color_hex[3:5], 16)
+        lb = int(label_color_hex[5:7], 16)
+        fill_alpha = 155 if is_selected or is_pressed_label else 60
+        fill_color = QColor(lr, lg, lb, fill_alpha)
+        border_color = QColor(255, 255, 255) if is_selected or is_pressed_label else QColor(lr, lg, lb)
+        painter.setPen(self._get_box_border_pen(border_color, is_selected or is_pressed_label))
+        path = QPainterPath()
+        path.moveTo(pts[0])
+        for p in pts[1:]:
+            path.lineTo(p)
+        path.closeSubpath()
+        painter.fillPath(path, fill_color)
+        painter.drawPath(path)
+        if label and getattr(self._editor, 'show_label_names_checkbox', None) and self._editor.show_label_names_checkbox.isChecked():
+            from ..engine.shape_io import format_label_display
+            text = format_label_display(label, box.get("group_id"))
+            self._draw_box_label(painter, pts[0].x(), pts[0].y(), text, QColor(lr, lg, lb))
+        if is_selected:
+            size = DETECTION_BOX_CONFIG['resize_handle_size']
+            painter.setPen(QPen(QColor(255, 255, 255), 1))
+            painter.setBrush(QColor(lr, lg, lb))
+            for p in pts:
+                painter.drawEllipse(p, size / 2, size / 2)
+
+    def _draw_temp_polygon(self, painter, background_rect):
+        if not background_rect or not getattr(self, 'temp_polygon_points', None):
+            return
+        from PyQt5.QtGui import QPainterPath
+        pts = self._image_to_canvas_points(self.temp_polygon_points, background_rect)
+        crosshair = CROSSHAIR_CONFIG.get('color', '#00FF80')
+        painter.setPen(QPen(QColor(crosshair), 2, Qt.DashLine))
+        path = QPainterPath()
+        path.moveTo(pts[0])
+        for p in pts[1:]:
+            path.lineTo(p)
+        if self.mouse_inside:
+            path.lineTo(QPointF(self.mouse_pos.x(), self.mouse_pos.y()))
+        painter.drawPath(path)
+        painter.setBrush(QColor(crosshair))
+        painter.setPen(Qt.NoPen)
+        for p in pts:
+            painter.drawEllipse(p, 3, 3)
 
 
     def _draw_crosshair(self, painter):

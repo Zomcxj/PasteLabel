@@ -129,6 +129,18 @@ class TestSaveLoadRoundtrip:
             language=original['language'],
         )
 
+    def test_max_polygon_points_roundtrip_through_save_all(self, tmp_path):
+        original = _with_temp_config(tmp_path)
+        try:
+            config_manager.save_all(max_polygon_points=16)
+            assert config_manager.load_all()['max_polygon_points'] == 16
+            config_manager.save_all(max_polygon_points=3)
+            assert config_manager.load_all()['max_polygon_points'] == 3
+            config_manager.save_all(max_polygon_points=99)
+            assert config_manager.load_all()['max_polygon_points'] == 64
+        finally:
+            config_manager.CONFIG_PATH = original
+
     def test_magnifier_enabled_roundtrip_through_save_all(self, tmp_path):
         original = _with_temp_config(tmp_path)
         try:

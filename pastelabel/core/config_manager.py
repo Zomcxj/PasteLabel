@@ -306,6 +306,8 @@ def load_all():
         'grid_line_width': config.get('grid_line_width', None),
         'grid_alpha': config.get('grid_alpha', None),
         'resize_handle_size': config.get('resize_handle_size', DETECTION_BOX_CONFIG['resize_handle_size']),
+        'max_polygon_points': max(3, min(64, int(config.get(
+            'max_polygon_points', DETECTION_BOX_CONFIG['max_polygon_points'])))),
         'label_font_size': config.get('label_font_size', DETECTION_BOX_CONFIG['label_font_size']),
         'label_position': config.get('label_position', DETECTION_BOX_CONFIG['label_position']),
         'canvas_image_copy_enabled': bool(config.get('canvas_image_copy_enabled', False)),
@@ -337,6 +339,7 @@ def load_all():
 
 def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
              grid_line_width=None, grid_alpha=None, resize_handle_size=None,
+             max_polygon_points=None,
              label_font_size=None, label_position=None,
              canvas_image_copy_enabled=None, relative_path_display=None,
              magnifier_enabled=None,
@@ -362,6 +365,8 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['grid_alpha'] = grid_alpha
     if resize_handle_size is not None:
         config['resize_handle_size'] = resize_handle_size
+    if max_polygon_points is not None:
+        config['max_polygon_points'] = max(3, min(64, int(max_polygon_points)))
     if label_font_size is not None:
         config['label_font_size'] = label_font_size
     if label_position is not None:

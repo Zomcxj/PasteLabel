@@ -48,8 +48,13 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
 
         # 绘制模式相关
         self.is_drawing_box = False
+        self.is_drawing_polygon = False
+        self.is_drawing_point = False
+        self.is_drawing_obb = False
+        self.current_draw_mode = None
         self.draw_start_pos = None
         self.temp_draw_box = None
+        self.temp_polygon_points = []
 
         # 画布显示参数（亮度/对比度在本次运行内跨图常驻）
         self.shape_opacity = 1.0
@@ -176,6 +181,10 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
                 elif self.is_drawing_box and self.temp_draw_box:
                     size = (self.temp_draw_box.width() / self.background_scale,
                             self.temp_draw_box.height() / self.background_scale)
+                elif getattr(self, 'is_drawing_polygon', False) and self.temp_polygon_points:
+                    xs = [p[0] for p in self.temp_polygon_points]
+                    ys = [p[1] for p in self.temp_polygon_points]
+                    size = (max(xs) - min(xs) if xs else 0, max(ys) - min(ys) if ys else 0)
                 if size:
                     image_w = info['width'] if info else None
                     image_h = info['height'] if info else None

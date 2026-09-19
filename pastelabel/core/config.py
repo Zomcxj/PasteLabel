@@ -36,6 +36,7 @@ DETECTION_BOX_CONFIG = {
     'min_width': 3,  # 最小宽度
     'min_height': 3,  # 最小高度
     'resize_handle_size': 8,  # 调整手柄大小
+    'max_polygon_points': 32,  # 多边形最大顶点数
     'label_font_size': 9,  # 标签名字号
     'label_position': 'outside',  # 标签名位置：outside=框外侧，inside=框内侧
     'border_color_selected': (0, 255, 128),  # 选中边框颜色 (RGB)
@@ -137,6 +138,9 @@ SHORTCUT_CONFIG = {
     'auto_save_p': 'H',
     'toggle_paste_names': 'F',
     'draw_box': 'W',
+    'draw_polygon': 'P',
+    'draw_point': 'K',
+    'draw_obb': 'O',
     'quit_draw': 'Q',
     'next_image': 'D',
     'prev_image': 'A',

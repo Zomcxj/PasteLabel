@@ -214,7 +214,13 @@ class BackgroundListMixin:
                 self._delete_current_idx = saved_del
                 self._load_delete_image(saved_del)
                 self.background_list.setCurrentRow(saved_del)
-            disabled_keys = {'W', 'Q', self._get_shortcut('delete_selected')}
+            disabled_keys = {
+                'W', 'Q', 'P', 'K', 'O',
+                self._get_shortcut('delete_selected'),
+                self._get_shortcut('draw_polygon'),
+                self._get_shortcut('draw_point'),
+                self._get_shortcut('draw_obb'),
+            }
             for sc in getattr(self, '_shortcuts', []):
                 key = sc.key().toString()
                 if key in disabled_keys:
@@ -223,6 +229,8 @@ class BackgroundListMixin:
                 self.draw_box_btn.setEnabled(False)
             self.canvas._clear_selection()
             self.canvas.is_drawing_box = False
+            if hasattr(self.canvas, '_reset_drawing_state'):
+                self.canvas._reset_drawing_state()
             self.canvas.draw_start_pos = None
             self.canvas.temp_draw_box = None
         else:

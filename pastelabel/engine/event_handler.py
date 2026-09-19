@@ -79,6 +79,9 @@ class EventHandlerMixin:
             'auto_save_p': self._toggle_auto_save_p,
             'toggle_paste_names': self._toggle_paste_names,
             'draw_box': self.toggle_draw_mode,
+            'draw_polygon': self.toggle_polygon_mode,
+            'draw_point': self.toggle_point_mode,
+            'draw_obb': self.toggle_obb_mode,
             'quit_draw': self._quit_draw,
             'delete_selected': self._delete_selected_box,
             'undo': self.undo,
@@ -129,6 +132,9 @@ class EventHandlerMixin:
             (tr("上一张"), 'prev_image'),
             (tr("下一张"), 'next_image'),
             (tr("绘制BOX"), 'draw_box'),
+            (tr("绘制多边形"), 'draw_polygon'),
+            (tr("标注关键点"), 'draw_point'),
+            (tr("绘制旋转框"), 'draw_obb'),
             (tr("退出绘制"), 'quit_draw'),
             (tr("删除选中"), 'delete_selected'),
         ]
@@ -167,18 +173,32 @@ class EventHandlerMixin:
         self.canvas.update()
 
     def _quit_draw(self):
-        if self.canvas.is_drawing_box:
-            self.canvas.is_drawing_box = False
-            self.canvas.draw_start_pos = None
-            self.canvas.temp_draw_box = None
-            self.canvas.setCursor(Qt.ArrowCursor)
-            if hasattr(self, 'draw_box_btn'):
-                sc = self._get_shortcut('draw_box')
-                self.draw_box_btn.setText(f"{tr('绘制BOX')}({sc})")
-            self.canvas.update()
+        drawing = (
+            self.canvas.is_drawing_box
+            or getattr(self.canvas, 'is_drawing_polygon', False)
+            or getattr(self.canvas, 'is_drawing_point', False)
+            or getattr(self.canvas, 'is_drawing_obb', False)
+        )
+        if drawing:
+            if hasattr(self.canvas, '_reset_drawing_state'):
+                self.canvas._reset_drawing_state()
+            else:
+                self.canvas.is_drawing_box = False
+                self.canvas.draw_start_pos = None
+                self.canvas.temp_draw_box = None
+                self.canvas.setCursor(Qt.ArrowCursor)
+                self.canvas.update()
 
     def _delete_selected_box(self):
         if self._is_delete_view:
+            return
+        handle = getattr(self.canvas, 'hover_resize_handle', None) or ''
+        vertex_box = getattr(self.canvas, 'selected_box', None)
+        if (isinstance(handle, str) and handle.startswith('v')
+                and vertex_box is not None
+                and 0 <= vertex_box < len(self.detection_boxes)
+                and (self.detection_boxes[vertex_box].get('shape_type') == 'polygon')
+                and self.canvas._delete_polygon_vertex(vertex_box, int(handle[1:]))):
             return
         saved = False
         selected_boxes = sorted({
@@ -241,21 +261,36 @@ class EventHandlerMixin:
     def eventFilter(self, obj, event):
         return super().eventFilter(obj, event)
 
-    def toggle_draw_mode(self):
-        """切换绘制模式"""
+    def _begin_draw_mode(self, mode):
         if self._is_delete_view or not self.background_images or self.current_background_index < 0:
-            return
+            return False
+        if hasattr(self.canvas, '_reset_drawing_state'):
+            self.canvas._reset_drawing_state()
+        self.canvas.current_draw_mode = mode
+        self.canvas.is_drawing_box = mode == 'rectangle'
+        self.canvas.is_drawing_polygon = mode == 'polygon'
+        self.canvas.is_drawing_point = mode == 'point'
+        self.canvas.is_drawing_obb = mode == 'rotation'
+        self.canvas.setCursor(Qt.CrossCursor)
+        self.selected_item = None
+        self.canvas.selected_box = None
+        self.canvas.selected_boxes = []
+        self.canvas.setFocus()
+        self.canvas.update()
+        return True
 
-        if not self.canvas.is_drawing_box:
-            self.canvas.is_drawing_box = True
-            self.canvas.setCursor(Qt.CrossCursor)
+    def toggle_draw_mode(self):
+        """切换矩形绘制模式"""
+        self._begin_draw_mode('rectangle')
 
-            self.selected_item = None
-            self.canvas.selected_box = None
-            self.canvas.selected_boxes = []
+    def toggle_polygon_mode(self):
+        self._begin_draw_mode('polygon')
 
-            self.canvas.setFocus()
-            self.canvas.update()
+    def toggle_point_mode(self):
+        self._begin_draw_mode('point')
+
+    def toggle_obb_mode(self):
+        self._begin_draw_mode('rotation')
 
     def switch_background(self, direction):
         """切换背景图"""

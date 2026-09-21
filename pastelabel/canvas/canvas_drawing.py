@@ -339,8 +339,8 @@ class CanvasDrawingMixin:
             if isinstance(bg, set):
                 bg.add(pure)
             lm = getattr(self._editor, 'label_manager', None)
-            if lm is not None and hasattr(lm, '_seed_stats_cache_from_disk_and_memory'):
-                lm._seed_stats_cache_from_disk_and_memory()
+            if lm is not None and hasattr(lm, '_bump_cached_stats_for_box'):
+                lm._bump_cached_stats_for_box(new_box)
             elif pure and hasattr(self._editor, 'get_label_color'):
                 self._editor.get_label_color(pure)
 
@@ -460,9 +460,17 @@ class CanvasDrawingMixin:
 
             nx, ny, nw, nh = x, y, w, h
 
+            bg = self._editor.current_background
+            max_w = max(10, bg.width() - x) if bg else None
+            max_h = max(10, bg.height() - y) if bg else None
+
             if self.resize_handle == "br":
                 nw = max(10, w + dx)
                 nh = max(10, h + dy)
+                if max_w is not None:
+                    nw = min(nw, max_w)
+                if max_h is not None:
+                    nh = min(nh, max_h)
             elif self.resize_handle == "tl":
                 nx = max(0, min(x + dx, x + w - 10))
                 ny = max(0, min(y + dy, y + h - 10))
@@ -470,12 +478,16 @@ class CanvasDrawingMixin:
                 nh = h + y - ny
             elif self.resize_handle == "tr":
                 nw = max(10, w + dx)
+                if max_w is not None:
+                    nw = min(nw, max_w)
                 ny = max(0, min(y + dy, y + h - 10))
                 nh = h + y - ny
             elif self.resize_handle == "bl":
                 nx = max(0, min(x + dx, x + w - 10))
                 nw = w + x - nx
                 nh = max(10, h + dy)
+                if max_h is not None:
+                    nh = min(nh, max_h)
 
             box["x"], box["y"], box["width"], box["height"] = nx, ny, nw, nh
             self.box_resize_start = self.mouse_pos

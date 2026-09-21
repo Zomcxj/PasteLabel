@@ -655,6 +655,52 @@ class LabelManager(QObject):
     def _seed_stats_cache_from_memory(self):
         self._seed_stats_cache_from_disk_and_memory()
 
+    def _bump_cached_stats_for_box(self, box, delta=1):
+        """Incrementally fold one box into the stats cache (no full rescan).
+
+        Called when a box is added/removed on the canvas. Falls back to a full
+        seed when the cache is empty/unusable, so counts never drift silently.
+        """
+        label = box.get('label') if isinstance(box, dict) else None
+        if not (isinstance(label, str) and label.strip()):
+            return
+        label = label.strip()
+        cached = getattr(self.editor, '_cached_bg_label_stats', None)
+        if not isinstance(cached, list) or not cached:
+            self._seed_stats_cache_from_disk_and_memory()
+            return
+
+        task = shape_task_type(box)
+        entry = None
+        for item in cached:
+            if isinstance(item, dict) and item.get('label') == label:
+                entry = item
+                break
+        if entry is None:
+            if delta <= 0:
+                return
+            color_map = getattr(self.editor, 'label_color_map', None)
+            color = ''
+            if isinstance(color_map, dict) and color_map.get(label):
+                color = color_map[label]
+            elif hasattr(self.editor, 'get_label_color'):
+                color = self.editor.get_label_color(label)
+            entry = {'label': label, 'count': 0, 'color': color or '',
+                     'tasks': []}
+            cached.append(entry)
+        try:
+            entry['count'] = max(0, int(entry.get('count', 0) or 0) + int(delta))
+        except (TypeError, ValueError):
+            entry['count'] = max(0, int(delta))
+        tasks = entry.get('tasks')
+        if not isinstance(tasks, list):
+            tasks = list(tasks or [])
+        if task and task not in tasks:
+            tasks.append(task)
+        entry['tasks'] = tasks
+        cached.sort(key=lambda x: (-int(x.get('count', 0) or 0), str(x.get('label', ''))))
+        self.editor._cached_bg_label_stats = cached
+
     def _sync_cached_stats_label_rename(self, old_label, new_label, delta=None):
         """Update stats cache after rename.
 

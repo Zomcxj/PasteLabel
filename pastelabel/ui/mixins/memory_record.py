@@ -18,10 +18,33 @@ class MemoryRecordMixin:
         self._is_delete_view = False
 
     def _build_bg_label_stats_snapshot(self):
-        """Build background label stats snapshot for memory / stats restore."""
-        from ...engine.image_loader import collect_background_label_counts
+        """Build background label stats snapshot for memory / stats restore.
 
-        counts = collect_background_label_counts(list(self.background_images or []))
+        Reuses the live scan cache when it is fresh (scan finished, dataset
+        unchanged, no edits since). Only falls back to a full disk rescan when
+        the cache cannot be trusted — that rescan is O(n) JSON parsing and
+        must not run on every dataset switch.
+        """
+        cached = getattr(self, '_cached_bg_label_stats', None) or []
+        current_path = getattr(self, '_memory_background_path', '') or ''
+        cache_path = getattr(self, '_cached_bg_label_stats_path', '') or ''
+        scan_done = getattr(self, '_background_label_scan_completed', False)
+        dirty = getattr(self, '_dataset_stats_dirty', False)
+        cache_fresh = (
+            bool(cached)
+            and scan_done
+            and not dirty
+            and (not cache_path or not current_path or cache_path == current_path)
+        )
+        if cache_fresh:
+            counts = {
+                str(item.get('label', '')).strip(): int(item.get('count', 0) or 0)
+                for item in cached
+                if isinstance(item, dict) and str(item.get('label', '')).strip()
+            }
+        else:
+            from ...engine.image_loader import collect_background_label_counts
+            counts = collect_background_label_counts(list(self.background_images or []))
         for lbl in getattr(self, 'background_dataset_labels', set()) or set():
             counts.setdefault(lbl, 0)
         for lbl in getattr(self, 'global_labels', set()) or set():

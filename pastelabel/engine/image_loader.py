@@ -3,6 +3,7 @@
 """
 import os
 import json
+import time
 import concurrent.futures
 from PyQt5.QtWidgets import (
     QApplication, QFileDialog, QListWidgetItem, QMessageBox
@@ -22,6 +23,9 @@ BG_ROLE_STATUS = 0x0102
 STATUS_UNANNOTATED = "unannotated"
 STATUS_ANNOTATED = "annotated"
 STATUS_EMPTY = "empty"
+# Provisional status used while bulk-populating the list: the sidecar JSON
+# exists but has not been scanned yet. Replaced by the background scan worker.
+STATUS_PENDING = "pending"
 
 _STATUS_ICON_CACHE = {}
 
@@ -42,6 +46,21 @@ def annotation_status_for_image(image_path):
     if isinstance(shapes, list) and len(shapes) > 0:
         return STATUS_ANNOTATED
     return STATUS_EMPTY
+
+
+def annotation_status_for_image_light(image_path):
+    """Cheap provisional status: no JSON parse, only a file-existence check.
+
+    Used while bulk-populating the background list so the UI thread never
+    parses thousands of sidecar JSONs. The real status is filled in later by
+    the background scan worker.
+    """
+    if not image_path:
+        return STATUS_UNANNOTATED
+    json_path = os.path.splitext(image_path)[0] + ".json"
+    if not os.path.exists(json_path):
+        return STATUS_UNANNOTATED
+    return STATUS_PENDING
 
 
 def _status_icon(status, size=12):
@@ -72,6 +91,11 @@ def _status_icon(status, size=12):
         painter.setBrush(QColor("#e67e22"))
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(4, 4, size - 8, size - 8)
+    elif status == STATUS_PENDING:
+        # Dashed gray ring: JSON exists but has not been scanned yet.
+        painter.setBrush(Qt.transparent)
+        painter.setPen(QPen(QColor("#95a5a6"), 1.5, Qt.DashLine))
+        painter.drawEllipse(1, 1, size - 2, size - 2)
     else:
         painter.setBrush(Qt.transparent)
         painter.setPen(QPen(QColor("#95a5a6"), 1.5))
@@ -82,15 +106,21 @@ def _status_icon(status, size=12):
     return icon
 
 
-def decorate_background_list_item(item, image_path, index=None):
-    """Attach path/index/status metadata and status icon to a list item."""
+def decorate_background_list_item(item, image_path, index=None, light=False):
+    """Attach path/index/status metadata and status icon to a list item.
+
+    light=True skips parsing the sidecar JSON (only checks existence) so
+    bulk-populating a large dataset stays off the JSON parser. The accurate
+    status is applied later via apply_background_status_to_item.
+    """
     if item is None:
         return STATUS_UNANNOTATED
     if index is not None and hasattr(item, 'setData'):
         item.setData(BG_ROLE_INDEX, index)
     if image_path and hasattr(item, 'setData'):
         item.setData(BG_ROLE_PATH, image_path)
-    status = annotation_status_for_image(image_path)
+    status = (annotation_status_for_image_light(image_path) if light
+              else annotation_status_for_image(image_path))
     if hasattr(item, 'setData'):
         item.setData(BG_ROLE_STATUS, status)
     if hasattr(item, 'setIcon'):
@@ -102,10 +132,32 @@ def decorate_background_list_item(item, image_path, index=None):
         STATUS_ANNOTATED: tr("已标注"),
         STATUS_EMPTY: tr("空标签"),
         STATUS_UNANNOTATED: tr("未标注"),
+        STATUS_PENDING: tr("扫描中"),
     }
     if hasattr(item, 'setToolTip'):
         item.setToolTip(tips.get(status, ""))
     return status
+
+
+def apply_background_status_to_item(item, status):
+    """Update an existing list row with a resolved status + icon + tooltip."""
+    if item is None:
+        return
+    if hasattr(item, 'setData'):
+        item.setData(BG_ROLE_STATUS, status)
+    if hasattr(item, 'setIcon'):
+        try:
+            item.setIcon(_status_icon(status))
+        except Exception:
+            pass
+    tips = {
+        STATUS_ANNOTATED: tr("已标注"),
+        STATUS_EMPTY: tr("空标签"),
+        STATUS_UNANNOTATED: tr("未标注"),
+        STATUS_PENDING: tr("扫描中"),
+    }
+    if hasattr(item, 'setToolTip'):
+        item.setToolTip(tips.get(status, ""))
 
 
 def _scan_single_json(json_path):
@@ -150,26 +202,79 @@ def scan_dataset_labels(image_paths, is_interrupted=None):
 
 def scan_dataset_labels_with_counts(image_paths, is_interrupted=None):
     """Return (labels_set, {label: count}) across all background sidecar JSONs."""
+    labels, counts, _ = scan_dataset_full(image_paths, is_interrupted)
+    return labels, counts
+
+
+def scan_dataset_full(image_paths, is_interrupted=None, progress_cb=None):
+    """Return (labels_set, {label: count}, {image_path: status}) in one pass.
+
+    Parsing each sidecar once yields both the dataset label counts and the
+    per-image annotated/empty/unannotated status, so populating a large
+    dataset's list never needs a second full JSON scan.
+
+    progress_cb: optional callable(batch_statuses: dict) invoked every
+    PROGRESS_BATCH results so callers can stream partial results to the UI
+    instead of waiting for the whole dataset (keeps the status circles filling
+    in progressively on large datasets).
+    """
+    PROGRESS_BATCH = 200
     counts = {}
+    statuses = {}
     pending = []
     for image_path in image_paths:
         if is_interrupted and is_interrupted():
             break
-        pending.append(f"{os.path.splitext(image_path)[0]}.json")
+        pending.append(image_path)
     if not pending:
-        return set(), counts
+        return set(), counts, statuses
 
+    def _one(image_path):
+        json_path = f"{os.path.splitext(image_path)[0]}.json"
+        if not os.path.exists(json_path):
+            return image_path, STATUS_UNANNOTATED, None
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception:
+            return image_path, STATUS_EMPTY, None
+        shapes = data.get("shapes") if isinstance(data, dict) else None
+        if not isinstance(shapes, list):
+            return image_path, STATUS_EMPTY, None
+        local = {}
+        for shape in shapes:
+            label = shape.get("label") if isinstance(shape, dict) else None
+            if isinstance(label, str) and label.strip():
+                label = label.strip()
+                local[label] = local.get(label, 0) + 1
+        status = STATUS_ANNOTATED if local else STATUS_EMPTY
+        return image_path, status, local
+
+    batch = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(_count_labels_in_json, jp) for jp in pending]
+        futures = [pool.submit(_one, ip) for ip in pending]
         for future in concurrent.futures.as_completed(futures):
             if is_interrupted and is_interrupted():
                 break
-            result = future.result()
-            if result:
-                for lbl, n in result.items():
+            image_path, status, local = future.result()
+            statuses[image_path] = status
+            batch[image_path] = status
+            if local:
+                for lbl, n in local.items():
                     counts[lbl] = counts.get(lbl, 0) + int(n or 0)
+            if progress_cb is not None and len(batch) >= PROGRESS_BATCH:
+                try:
+                    progress_cb(dict(batch))
+                except Exception:
+                    pass
+                batch = {}
+    if progress_cb is not None and batch:
+        try:
+            progress_cb(dict(batch))
+        except Exception:
+            pass
     labels = {lbl for lbl, n in counts.items() if n > 0}
-    return labels, counts
+    return labels, counts, statuses
 
 
 def _count_labels_in_json(json_path):
@@ -259,7 +364,8 @@ def collect_background_label_tasks(image_paths, is_interrupted=None):
 
 class DatasetLabelScanWorker(QThread):
     """Scan a fixed dataset snapshot outside the UI thread."""
-    labels_scanned = pyqtSignal(int, tuple, object, object)
+    labels_scanned = pyqtSignal(int, tuple, object, object, object)
+    statuses_progress = pyqtSignal(int, tuple, object)
 
     def __init__(self, generation, image_paths, parent=None):
         super().__init__(parent)
@@ -267,15 +373,26 @@ class DatasetLabelScanWorker(QThread):
         self._image_paths = tuple(image_paths)
 
     def run(self):
+        def _emit_progress(batch):
+            if not self.isInterruptionRequested():
+                self.statuses_progress.emit(
+                    self._generation, self._image_paths, batch
+                )
+
         try:
-            labels, counts = scan_dataset_labels_with_counts(
-                self._image_paths, self.isInterruptionRequested
+            labels, counts, statuses = scan_dataset_full(
+                self._image_paths, self.isInterruptionRequested,
+                progress_cb=_emit_progress,
             )
             if not self.isInterruptionRequested():
-                self.labels_scanned.emit(self._generation, self._image_paths, labels, counts)
+                self.labels_scanned.emit(
+                    self._generation, self._image_paths, labels, counts, statuses
+                )
         except Exception:
             if not self.isInterruptionRequested():
-                self.labels_scanned.emit(self._generation, self._image_paths, set(), {})
+                self.labels_scanned.emit(
+                    self._generation, self._image_paths, set(), {}, {}
+                )
 
 
 class ImageLoaderMixin:
@@ -302,6 +419,7 @@ class ImageLoaderMixin:
         self._scanned_background_labels = set()
         self._cached_bg_label_stats = []
         self._cached_bg_label_stats_path = ""
+        self._bg_item_index_cache = None
         if hasattr(self, '_dataset_stats_dirty'):
             self._dataset_stats_dirty = False
         self._background_label_scan_pending = True
@@ -377,7 +495,7 @@ class ImageLoaderMixin:
                     self.background_images.append(file)
                     display_path = self._display_path_for(file)
                     item = QListWidgetItem(display_path)
-                    decorate_background_list_item(item, file, new_index)
+                    decorate_background_list_item(item, file, new_index, light=True)
                     self.background_list.addItem(item)
 
                     self.canvas_items_dict[new_index] = []
@@ -449,7 +567,7 @@ class ImageLoaderMixin:
         self.background_images.append(first_path)
         display_path = self._display_path_for(first_path)
         item = QListWidgetItem(display_path)
-        decorate_background_list_item(item, first_path, 0)
+        decorate_background_list_item(item, first_path, 0, light=True)
         self.background_list.addItem(item)
         self.canvas_items_dict[0] = []
         self.detection_boxes_dict[0] = []
@@ -472,7 +590,7 @@ class ImageLoaderMixin:
             if not hasattr(self, '_background_load_timer') or not self._background_load_timer:
                 self._background_load_timer = QTimer(self)
                 self._background_load_timer.timeout.connect(self._load_next_background_batch)
-            self._background_load_timer.setInterval(30)
+            self._background_load_timer.setInterval(0)
             self._background_load_timer.start()
         else:
             self._start_dataset_label_scan()
@@ -507,34 +625,49 @@ class ImageLoaderMixin:
         self.update_file_count()
 
     def _load_next_background_batch(self):
-        """Load next batch of background images into the list."""
-        BATCH_SIZE = 50
-        for _ in range(BATCH_SIZE):
-            if self._pending_image_index >= len(self._pending_image_files):
-                self._background_load_timer.stop()
-                self._pending_image_files = None
-                self._start_dataset_label_scan()
-                self.update_file_count()
-                apply_filter = getattr(self, '_apply_bg_annotation_filter', None)
-                if callable(apply_filter):
-                    apply_filter(navigate=False)
-                self.background_list.viewport().update()
-                self._finalize_dataset_load()
-                return
-            file_path = self._pending_image_files[self._pending_image_index]
-            idx = self._pending_image_index
-            self.background_images.append(file_path)
-            display_path = self._display_path_for(file_path)
-            item = QListWidgetItem(display_path)
-            decorate_background_list_item(item, file_path, idx)
-            mode = getattr(self, '_bg_annotation_filter', 'all')
-            status = item.data(BG_ROLE_STATUS)
-            if mode != 'all' and status != mode:
-                item.setHidden(True)
-            self.background_list.addItem(item)
-            self.canvas_items_dict[idx] = []
-            self.detection_boxes_dict[idx] = []
-            self._pending_image_index += 1
+        """Load next batch of background images into the list.
+
+        Decoration is now cheap (no JSON parse), so instead of a fixed small
+        batch we fill rows for a short time budget per tick. This keeps the UI
+        responsive while populating tens of thousands of rows in a few ticks
+        rather than sleeping 30ms per 50 items (which dominated load time).
+        """
+        TIME_BUDGET = 0.012  # seconds of work per tick
+        deadline = time.perf_counter() + TIME_BUDGET
+        bg_list = self.background_list
+        bg_list.setUpdatesEnabled(False)
+        try:
+            while self._pending_image_index < len(self._pending_image_files):
+                file_path = self._pending_image_files[self._pending_image_index]
+                idx = self._pending_image_index
+                self.background_images.append(file_path)
+                display_path = self._display_path_for(file_path)
+                item = QListWidgetItem(display_path)
+                decorate_background_list_item(item, file_path, idx, light=True)
+                mode = getattr(self, '_bg_annotation_filter', 'all')
+                status = item.data(BG_ROLE_STATUS)
+                if mode != 'all' and status != mode:
+                    item.setHidden(True)
+                bg_list.addItem(item)
+                self.canvas_items_dict[idx] = []
+                self.detection_boxes_dict[idx] = []
+                self._pending_image_index += 1
+                if time.perf_counter() >= deadline:
+                    break
+        finally:
+            bg_list.setUpdatesEnabled(True)
+
+        if self._pending_image_index >= len(self._pending_image_files):
+            self._background_load_timer.stop()
+            self._pending_image_files = None
+            self._start_dataset_label_scan()
+            self.update_file_count()
+            apply_filter = getattr(self, '_apply_bg_annotation_filter', None)
+            if callable(apply_filter):
+                apply_filter(navigate=False)
+            bg_list.viewport().update()
+            self._finalize_dataset_load()
+            return
         QApplication.processEvents()
 
     def upload_small_images(self):
@@ -826,6 +959,7 @@ class ImageLoaderMixin:
             self._background_label_scan_generation, image_paths, self
         )
         worker.labels_scanned.connect(self._apply_dataset_labels)
+        worker.statuses_progress.connect(self._apply_statuses_progress)
         worker.finished.connect(lambda worker=worker: self._on_dataset_label_scan_finished(worker))
         worker.finished.connect(worker.deleteLater)
         if not hasattr(self, '_background_label_scan_workers'):
@@ -852,7 +986,8 @@ class ImageLoaderMixin:
                     and self._processing_panel.isVisible()):
                 self._update_processing_panel_labels()
 
-    def _apply_dataset_labels(self, generation, image_paths, labels, counts=None):
+    def _apply_dataset_labels(self, generation, image_paths, labels, counts=None,
+                              statuses=None):
         """Apply only the latest worker result for the unchanged dataset."""
         if (generation != self._background_label_scan_generation
                 or tuple(self.background_images) != tuple(image_paths)):
@@ -888,10 +1023,60 @@ class ImageLoaderMixin:
             if hasattr(self, '_dataset_stats_dirty'):
                 self._dataset_stats_dirty = False
         self._background_label_scan_completed = True
+        if isinstance(statuses, dict) and statuses:
+            self._apply_background_statuses(statuses)
         self.update_label_list()
         if (hasattr(self, '_processing_panel') and self._processing_panel
                 and self._processing_panel.isVisible()):
             self._update_processing_panel_labels()
+
+    def _apply_statuses_progress(self, generation, image_paths, batch):
+        """Stream partial scan results into the list as they arrive."""
+        if (generation != self._background_label_scan_generation
+                or tuple(self.background_images) != tuple(image_paths)):
+            return
+        if isinstance(batch, dict) and batch:
+            self._apply_background_statuses(batch)
+
+    def _bg_item_index_map(self):
+        """Cached {image_path: QListWidgetItem} for the current background list."""
+        bg_list = getattr(self, 'background_list', None)
+        if bg_list is None:
+            return {}
+        count = bg_list.count()
+        cached = getattr(self, '_bg_item_index_cache', None)
+        if cached is not None and cached[0] == count:
+            return cached[1]
+        mapping = {}
+        for row in range(count):
+            item = bg_list.item(row)
+            if item is None:
+                continue
+            path = item.data(BG_ROLE_PATH)
+            if path:
+                mapping[path] = item
+        self._bg_item_index_cache = (count, mapping)
+        return mapping
+
+    def _apply_background_statuses(self, statuses):
+        """Fill resolved per-image statuses into already-built list rows."""
+        bg_list = getattr(self, 'background_list', None)
+        if bg_list is None:
+            return
+        mode = getattr(self, '_bg_annotation_filter', 'all')
+        mapping = self._bg_item_index_map()
+        for image_path, status in statuses.items():
+            if status is None:
+                continue
+            item = mapping.get(image_path)
+            if item is None:
+                continue
+            apply_background_status_to_item(item, status)
+            if mode != 'all':
+                item.setHidden(status != mode)
+        viewport = getattr(bg_list, 'viewport', None)
+        if callable(viewport):
+            viewport().update()
 
     def _cleanup_background_label_scan_worker(self):
         """Request a bounded shutdown before the window releases its worker."""

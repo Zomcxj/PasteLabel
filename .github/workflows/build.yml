@@ -109,11 +109,12 @@ jobs:
         shell: bash
         run: |
           printf '%s\n' \
-            "PasteLabel $TAG — 标注流畅度与绘制边界优化" \
+            "PasteLabel $TAG — 大数据集加载提速" \
             "" \
             "🔧 改进" \
-            "• 绘制检测框更流畅：大规模数据集下新建标注不再出现卡顿" \
-            "• 拖动检测框的角点缩放手柄时会自动限制在图像范围内，不再超出画面" \
+            "• 打开超大数据集（数千张）时列表填充明显加快，加载过程界面保持响应" \
+            "• 标注状态图标逐行点亮，打开列表后即可看到进度" \
+            "• 切换数据集更迅速" \
             > release-notes.md
 
           gh release delete "$TAG" --repo "${{ github.repository }}" --yes 2>/dev/null || true

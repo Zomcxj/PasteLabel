@@ -132,6 +132,8 @@ class _MockQListWidget(_MockQWidget):
     def setResizeMode(self, *a): pass
     def setVerticalScrollMode(self, *a): pass
     def setHorizontalScrollMode(self, *a): pass
+    def setUniformItemSizes(self, *a): pass
+    def setUpdatesEnabled(self, *a): pass
     def scrollToTop(self): pass
     def mapToGlobal(self, p): return p
 

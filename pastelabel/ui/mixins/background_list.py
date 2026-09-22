@@ -240,9 +240,10 @@ class BackgroundListMixin:
                     idx = item.data(BG_ROLE_INDEX)
                     if isinstance(idx, int) and 0 <= idx < len(self.background_images):
                         path = self.background_images[idx]
-                from ...engine.image_loader import annotation_status_for_image, decorate_background_list_item
+                from ...engine.image_loader import decorate_background_list_item
                 if path:
-                    status = decorate_background_list_item(item, path, item.data(BG_ROLE_INDEX))
+                    status = decorate_background_list_item(
+                        item, path, item.data(BG_ROLE_INDEX), light=True)
                 else:
                     status = 'unannotated'
             visible = (mode == 'all') or (status == mode)
@@ -448,6 +449,7 @@ class BackgroundListMixin:
     def _show_work_view(self):
         """显示工作路径列表"""
         self.background_list.clear()
+        self._bg_item_index_cache = None
         from ...core.config import SUPPORTED_IMAGE_EXTENSIONS
         from ...engine.image_loader import decorate_background_list_item
         for i, path in enumerate(self.background_images):
@@ -455,7 +457,7 @@ class BackgroundListMixin:
             if ext in SUPPORTED_IMAGE_EXTENSIONS:
                 from PyQt5.QtWidgets import QListWidgetItem
                 item = QListWidgetItem(self._display_path_for(path))
-                decorate_background_list_item(item, path, i)
+                decorate_background_list_item(item, path, i, light=True)
                 self.background_list.addItem(item)
         self._refresh_bg_filter_button()
         self._apply_bg_annotation_filter(navigate=False)
@@ -481,6 +483,7 @@ class BackgroundListMixin:
     def _show_delete_view(self):
         """显示移除路径列表"""
         self.background_list.clear()
+        self._bg_item_index_cache = None
         from ...core.config import SUPPORTED_IMAGE_EXTENSIONS
         self._delete_files = []
         if self.background_images:

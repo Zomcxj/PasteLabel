@@ -16,6 +16,10 @@ BACKGROUND_LIST_SRC = ROOT / "pastelabel" / "ui" / "mixins" / "background_list.p
 LISTS_SRC = ROOT / "pastelabel" / "ui" / "mixins" / "lists.py"
 TRANSLATION_SRC = ROOT / "pastelabel" / "ui" / "mixins" / "translation.py"
 
+# 相对路径显示依赖当前操作系统的路径语义（Windows 反斜杠/盘符，POSIX 正斜杠），
+# 因此断言必须随平台取不同的输入与期望值，否则在 Linux CI 上必然失败。
+IS_WINDOWS = sys.platform == "win32"
+
 
 @pytest.fixture
 def temp_config(tmp_path, monkeypatch):
@@ -26,14 +30,19 @@ def temp_config(tmp_path, monkeypatch):
 
 # ---------- 路径转换纯函数 ----------
 
-def test_relative_path_uses_the_parent_of_the_loaded_folder():
-    assert PathUtils.to_relative_display_path(r"D:\data\images\1.png", r"D:\data") == r"images\1.png"
+def test_relative_path_uses_the_parent_of_the_loaded_folder(tmp_path):
+    base = str(tmp_path)
+    path = os.path.join(base, "images", "1.png")
+    assert PathUtils.to_relative_display_path(path, base) == os.path.join("images", "1.png")
 
 
-def test_relative_path_handles_nested_folders():
-    assert PathUtils.to_relative_display_path(r"D:\data\images\sub\a.png", r"D:\data") == r"images\sub\a.png"
+def test_relative_path_handles_nested_folders(tmp_path):
+    base = str(tmp_path)
+    path = os.path.join(base, "images", "sub", "a.png")
+    assert PathUtils.to_relative_display_path(path, base) == os.path.join("images", "sub", "a.png")
 
 
+@pytest.mark.skipif(not IS_WINDOWS, reason="跨盘符 relpath 仅在 Windows 抛 ValueError")
 def test_relative_path_falls_back_to_absolute_on_a_different_drive():
     """Windows 下跨盘符 relpath 会抛 ValueError，必须回退而不是崩溃。"""
     result = PathUtils.to_relative_display_path(r"E:\other\1.png", r"D:\data")
@@ -54,9 +63,11 @@ def test_relative_path_returns_input_for_empty_path():
     assert PathUtils.to_relative_display_path("", r"D:\data") == ""
 
 
-def test_relative_path_output_has_no_dot_dot_for_a_child_folder():
+def test_relative_path_output_has_no_dot_dot_for_a_child_folder(tmp_path):
     """基准是父目录，图片在其子目录里，所以结果不应出现 .."""
-    result = PathUtils.to_relative_display_path(r"D:\data\images\1.png", r"D:\data")
+    base = str(tmp_path)
+    result = PathUtils.to_relative_display_path(
+        os.path.join(base, "images", "1.png"), base)
     assert ".." not in result
 
 

@@ -271,9 +271,9 @@ def test_upload_background_starts_dataset_label_scan_after_loading_first_image(m
     editor.scan_starts = 0
     editor._start_dataset_label_scan = lambda: setattr(editor, "scan_starts", editor.scan_starts + 1)
     monkeypatch.setattr(image_loader.QFileDialog, "getOpenFileNames", lambda *args: (["first.png", "second.png"], ""))
-    monkeypatch.setattr(image_loader, "QPixmap", Pixmap)
-    monkeypatch.setattr(image_loader, "QListWidgetItem", Item)
-    monkeypatch.setattr(image_loader, "Qt", type("Qt", (), {"UserRole": 32})())
+    monkeypatch.setattr(image_loader.mixin, "QPixmap", Pixmap)
+    monkeypatch.setattr(image_loader.mixin, "QListWidgetItem", Item)
+    monkeypatch.setattr(image_loader.mixin, "Qt", type("Qt", (), {"UserRole": 32})())
 
     editor.upload_background()
 
@@ -309,7 +309,7 @@ def test_upload_background_finishes_replacement_when_no_selected_image_is_valid(
     editor.canvas_items = []
     editor.update_file_count = lambda: None
     monkeypatch.setattr(image_loader.QFileDialog, "getOpenFileNames", lambda *args: (["invalid.png"], ""))
-    monkeypatch.setattr(image_loader, "QPixmap", Pixmap)
+    monkeypatch.setattr(image_loader.mixin, "QPixmap", Pixmap)
 
     editor.upload_background()
 

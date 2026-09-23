@@ -11,7 +11,7 @@ from pastelabel.ui import i18n
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLBAR_SRC = ROOT / "pastelabel" / "ui" / "mixins" / "toolbar.py"
-LOADER_SRC = ROOT / "pastelabel" / "engine" / "image_loader.py"
+LOADER_SRC = ROOT / "pastelabel" / "engine" / "image_loader" / "mixin.py"
 ICONS_SRC = ROOT / "pastelabel" / "ui" / "icons.py"
 
 

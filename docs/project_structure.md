@@ -45,7 +45,11 @@ PasteLabel/
 │   │   ├── dataset_classifier.py
 │   │   ├── dataset_converter.py # 数据集格式转换（LabelMe/YOLO/COCO/VOC + 任务类型）
 │   │   ├── event_handler.py
-│   │   ├── image_loader.py
+│   │   ├── image_loader/
+│   │   │   ├── __init__.py
+│   │   │   ├── mixin.py
+│   │   │   ├── scan.py
+│   │   │   └── status.py
 │   │   ├── label_manager.py
 │   │   ├── paste_engine.py
 │   │   ├── save_manager.py

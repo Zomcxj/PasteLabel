@@ -149,7 +149,7 @@ def test_translation_refreshes_the_new_menu_item():
 # ---------- 列表项文本统一走 helper ----------
 
 def test_all_list_item_texts_go_through_the_helper():
-    loader = (ROOT / "pastelabel" / "engine" / "image_loader.py").read_text(encoding="utf-8")
+    loader = (ROOT / "pastelabel" / "engine" / "image_loader" / "mixin.py").read_text(encoding="utf-8")
     main = (ROOT / "pastelabel" / "ui" / "main_window.py").read_text(encoding="utf-8")
     bg_list = BACKGROUND_LIST_SRC.read_text(encoding="utf-8")
 
@@ -164,13 +164,13 @@ def test_all_list_item_texts_go_through_the_helper():
 
 def test_helper_lives_on_the_image_loader_mixin():
     """两个 mixin 都用到它，放在 ImageLoaderMixin 上才能被共享。"""
-    source = (ROOT / "pastelabel" / "engine" / "image_loader.py").read_text(encoding="utf-8")
+    source = (ROOT / "pastelabel" / "engine" / "image_loader" / "mixin.py").read_text(encoding="utf-8")
     assert "def _display_path_for(self, path):" in source
     assert "def _relative_path_base(self):" in source
 
 
 def test_base_is_the_parent_of_the_loaded_folder():
-    source = (ROOT / "pastelabel" / "engine" / "image_loader.py").read_text(encoding="utf-8")
+    source = (ROOT / "pastelabel" / "engine" / "image_loader" / "mixin.py").read_text(encoding="utf-8")
     block = source[source.index("def _relative_path_base"):source.index("def _display_path_for")]
     assert "os.path.dirname(folder)" in block
 

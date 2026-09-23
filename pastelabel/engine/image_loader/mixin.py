@@ -1,398 +1,25 @@
-"""
-图片加载混入 - 负责背景图、贴图、检测框的加载和管理
-"""
+"""ImageLoaderMixin：背景图/贴图/标签文件加载与选图切换。"""
 import os
 import json
 import time
-import concurrent.futures
+
 from PyQt5.QtWidgets import (
     QApplication, QFileDialog, QListWidgetItem, QMessageBox
 )
 from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtCore import Qt, QSize, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QSize, QTimer
 
-from ..core.config import SUPPORTED_IMAGE_EXTENSIONS
-from ..core.utils import PathUtils, natural_sort_key, create_thumbnail
-from ..ui.i18n import t as tr
+from ...core.config import SUPPORTED_IMAGE_EXTENSIONS
+from ...core.utils import PathUtils, natural_sort_key, create_thumbnail
+from ...ui.i18n import t as tr
 
-# background list item UserRole keys (Qt.ItemDataRole.UserRole == 0x0100)
-BG_ROLE_INDEX = 0x0100
-BG_ROLE_PATH = 0x0101
-BG_ROLE_STATUS = 0x0102
+from .status import (
+    BG_ROLE_INDEX, BG_ROLE_PATH, BG_ROLE_STATUS,
+    decorate_background_list_item, apply_background_status_to_item,
+)
+from .scan import DatasetLabelScanWorker
 
-STATUS_UNANNOTATED = "unannotated"
-STATUS_ANNOTATED = "annotated"
-STATUS_EMPTY = "empty"
-# Provisional status used while bulk-populating the list: the sidecar JSON
-# exists but has not been scanned yet. Replaced by the background scan worker.
-STATUS_PENDING = "pending"
-
-_STATUS_ICON_CACHE = {}
-
-
-def annotation_status_for_image(image_path):
-    """Classify sidecar LabelMe JSON: unannotated / annotated / empty."""
-    if not image_path:
-        return STATUS_UNANNOTATED
-    json_path = os.path.splitext(image_path)[0] + ".json"
-    if not os.path.exists(json_path):
-        return STATUS_UNANNOTATED
-    try:
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        return STATUS_EMPTY
-    shapes = data.get("shapes") if isinstance(data, dict) else None
-    if isinstance(shapes, list) and len(shapes) > 0:
-        return STATUS_ANNOTATED
-    return STATUS_EMPTY
-
-
-def annotation_status_for_image_light(image_path):
-    """Cheap provisional status: no JSON parse, only a file-existence check.
-
-    Used while bulk-populating the background list so the UI thread never
-    parses thousands of sidecar JSONs. The real status is filled in later by
-    the background scan worker.
-    """
-    if not image_path:
-        return STATUS_UNANNOTATED
-    json_path = os.path.splitext(image_path)[0] + ".json"
-    if not os.path.exists(json_path):
-        return STATUS_UNANNOTATED
-    return STATUS_PENDING
-
-
-def _status_icon(status, size=12):
-    """Small circular status icon for background list rows / filter button."""
-    cache_key = (status, size)
-    if cache_key in _STATUS_ICON_CACHE:
-        return _STATUS_ICON_CACHE[cache_key]
-    from PyQt5.QtGui import QColor, QPainter, QPen
-    pm = QPixmap(size, size)
-    pm.fill(Qt.transparent)
-    painter = QPainter(pm)
-    painter.setRenderHint(QPainter.Antialiasing)
-    if status == "all":
-        # three mini dots: green / gray / orange
-        for i, color in enumerate(("#2ecc71", "#95a5a6", "#e67e22")):
-            painter.setBrush(QColor(color))
-            painter.setPen(Qt.NoPen)
-            x = 1 + i * max(3, size // 3)
-            painter.drawEllipse(x, size // 2 - 2, 4, 4)
-    elif status == STATUS_ANNOTATED:
-        painter.setBrush(QColor("#2ecc71"))
-        painter.setPen(QPen(QColor("#1e8449"), 1))
-        painter.drawEllipse(1, 1, size - 2, size - 2)
-    elif status == STATUS_EMPTY:
-        painter.setBrush(Qt.transparent)
-        painter.setPen(QPen(QColor("#e67e22"), 1.5))
-        painter.drawEllipse(1, 1, size - 2, size - 2)
-        painter.setBrush(QColor("#e67e22"))
-        painter.setPen(Qt.NoPen)
-        painter.drawEllipse(4, 4, size - 8, size - 8)
-    elif status == STATUS_PENDING:
-        # Dashed gray ring: JSON exists but has not been scanned yet.
-        painter.setBrush(Qt.transparent)
-        painter.setPen(QPen(QColor("#95a5a6"), 1.5, Qt.DashLine))
-        painter.drawEllipse(1, 1, size - 2, size - 2)
-    else:
-        painter.setBrush(Qt.transparent)
-        painter.setPen(QPen(QColor("#95a5a6"), 1.5))
-        painter.drawEllipse(1, 1, size - 2, size - 2)
-    painter.end()
-    icon = QIcon(pm)
-    _STATUS_ICON_CACHE[cache_key] = icon
-    return icon
-
-
-def decorate_background_list_item(item, image_path, index=None, light=False):
-    """Attach path/index/status metadata and status icon to a list item.
-
-    light=True skips parsing the sidecar JSON (only checks existence) so
-    bulk-populating a large dataset stays off the JSON parser. The accurate
-    status is applied later via apply_background_status_to_item.
-    """
-    if item is None:
-        return STATUS_UNANNOTATED
-    if index is not None and hasattr(item, 'setData'):
-        item.setData(BG_ROLE_INDEX, index)
-    if image_path and hasattr(item, 'setData'):
-        item.setData(BG_ROLE_PATH, image_path)
-    status = (annotation_status_for_image_light(image_path) if light
-              else annotation_status_for_image(image_path))
-    if hasattr(item, 'setData'):
-        item.setData(BG_ROLE_STATUS, status)
-    if hasattr(item, 'setIcon'):
-        try:
-            item.setIcon(_status_icon(status))
-        except Exception:
-            pass
-    tips = {
-        STATUS_ANNOTATED: tr("已标注"),
-        STATUS_EMPTY: tr("空标签"),
-        STATUS_UNANNOTATED: tr("未标注"),
-        STATUS_PENDING: tr("扫描中"),
-    }
-    if hasattr(item, 'setToolTip'):
-        item.setToolTip(tips.get(status, ""))
-    return status
-
-
-def apply_background_status_to_item(item, status):
-    """Update an existing list row with a resolved status + icon + tooltip."""
-    if item is None:
-        return
-    if hasattr(item, 'setData'):
-        item.setData(BG_ROLE_STATUS, status)
-    if hasattr(item, 'setIcon'):
-        try:
-            item.setIcon(_status_icon(status))
-        except Exception:
-            pass
-    tips = {
-        STATUS_ANNOTATED: tr("已标注"),
-        STATUS_EMPTY: tr("空标签"),
-        STATUS_UNANNOTATED: tr("未标注"),
-        STATUS_PENDING: tr("扫描中"),
-    }
-    if hasattr(item, 'setToolTip'):
-        item.setToolTip(tips.get(status, ""))
-
-
-def _scan_single_json(json_path):
-    """Parse a single LabelMe JSON and return its labels, or None on error."""
-    try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    except Exception:
-        return None
-    shapes = data.get("shapes") if isinstance(data, dict) else None
-    if not isinstance(shapes, list):
-        return None
-    labels = set()
-    for shape in shapes:
-        label = shape.get("label") if isinstance(shape, dict) else None
-        if isinstance(label, str) and label.strip():
-            labels.add(label)
-    return labels
-
-
-def scan_dataset_labels(image_paths, is_interrupted=None):
-    """Return valid LabelMe labels from the JSON files beside image paths."""
-    labels = set()
-    pending = []
-    for image_path in image_paths:
-        if is_interrupted and is_interrupted():
-            break
-        pending.append(f"{os.path.splitext(image_path)[0]}.json")
-    if not pending:
-        return labels
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(_scan_single_json, jp) for jp in pending]
-        for future in concurrent.futures.as_completed(futures):
-            if is_interrupted and is_interrupted():
-                break
-            result = future.result()
-            if result:
-                labels.update(result)
-    return labels
-
-
-def scan_dataset_labels_with_counts(image_paths, is_interrupted=None):
-    """Return (labels_set, {label: count}) across all background sidecar JSONs."""
-    labels, counts, _ = scan_dataset_full(image_paths, is_interrupted)
-    return labels, counts
-
-
-def scan_dataset_full(image_paths, is_interrupted=None, progress_cb=None):
-    """Return (labels_set, {label: count}, {image_path: status}) in one pass.
-
-    Parsing each sidecar once yields both the dataset label counts and the
-    per-image annotated/empty/unannotated status, so populating a large
-    dataset's list never needs a second full JSON scan.
-
-    progress_cb: optional callable(batch_statuses: dict) invoked every
-    PROGRESS_BATCH results so callers can stream partial results to the UI
-    instead of waiting for the whole dataset (keeps the status circles filling
-    in progressively on large datasets).
-    """
-    PROGRESS_BATCH = 200
-    counts = {}
-    statuses = {}
-    pending = []
-    for image_path in image_paths:
-        if is_interrupted and is_interrupted():
-            break
-        pending.append(image_path)
-    if not pending:
-        return set(), counts, statuses
-
-    def _one(image_path):
-        json_path = f"{os.path.splitext(image_path)[0]}.json"
-        if not os.path.exists(json_path):
-            return image_path, STATUS_UNANNOTATED, None
-        try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception:
-            return image_path, STATUS_EMPTY, None
-        shapes = data.get("shapes") if isinstance(data, dict) else None
-        if not isinstance(shapes, list):
-            return image_path, STATUS_EMPTY, None
-        local = {}
-        for shape in shapes:
-            label = shape.get("label") if isinstance(shape, dict) else None
-            if isinstance(label, str) and label.strip():
-                label = label.strip()
-                local[label] = local.get(label, 0) + 1
-        status = STATUS_ANNOTATED if local else STATUS_EMPTY
-        return image_path, status, local
-
-    batch = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(_one, ip) for ip in pending]
-        for future in concurrent.futures.as_completed(futures):
-            if is_interrupted and is_interrupted():
-                break
-            image_path, status, local = future.result()
-            statuses[image_path] = status
-            batch[image_path] = status
-            if local:
-                for lbl, n in local.items():
-                    counts[lbl] = counts.get(lbl, 0) + int(n or 0)
-            if progress_cb is not None and len(batch) >= PROGRESS_BATCH:
-                try:
-                    progress_cb(dict(batch))
-                except Exception:
-                    pass
-                batch = {}
-    if progress_cb is not None and batch:
-        try:
-            progress_cb(dict(batch))
-        except Exception:
-            pass
-    labels = {lbl for lbl, n in counts.items() if n > 0}
-    return labels, counts, statuses
-
-
-def _count_labels_in_json(json_path):
-    """Parse a LabelMe JSON and return {label: shape_count}, or None on error."""
-    try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    except Exception:
-        return None
-    shapes = data.get("shapes") if isinstance(data, dict) else None
-    if not isinstance(shapes, list):
-        return None
-    counts = {}
-    for shape in shapes:
-        label = shape.get("label") if isinstance(shape, dict) else None
-        if isinstance(label, str) and label.strip():
-            label = label.strip()
-            counts[label] = counts.get(label, 0) + 1
-    return counts
-
-
-def collect_background_label_counts(image_paths, is_interrupted=None):
-    """Count every shape occurrence across background sidecar JSONs."""
-    counts = {}
-    pending = []
-    for image_path in image_paths:
-        if is_interrupted and is_interrupted():
-            break
-        pending.append(f"{os.path.splitext(image_path)[0]}.json")
-    if not pending:
-        return counts
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(_count_labels_in_json, jp) for jp in pending]
-        for future in concurrent.futures.as_completed(futures):
-            if is_interrupted and is_interrupted():
-                break
-            result = future.result()
-            if result:
-                for lbl, n in result.items():
-                    counts[lbl] = counts.get(lbl, 0) + int(n or 0)
-    return counts
-
-
-def _scan_label_tasks_in_json(json_path):
-    """Return {label: set(shape_task_type)} for one sidecar JSON, or None."""
-    try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    except Exception:
-        return None
-    shapes = data.get("shapes") if isinstance(data, dict) else None
-    if not isinstance(shapes, list):
-        return None
-    from ..core.utils import shape_task_type
-    tasks = {}
-    for shape in shapes:
-        if not isinstance(shape, dict):
-            continue
-        label = shape.get("label")
-        if not (isinstance(label, str) and label.strip()):
-            continue
-        tasks.setdefault(label.strip(), set()).add(shape_task_type(shape))
-    return tasks
-
-
-def collect_background_label_tasks(image_paths, is_interrupted=None):
-    """Collect the set of task types (det/seg/pose/obb) per label across sidecars."""
-    tasks = {}
-    pending = []
-    for image_path in image_paths:
-        if is_interrupted and is_interrupted():
-            break
-        pending.append(f"{os.path.splitext(image_path)[0]}.json")
-    if not pending:
-        return tasks
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(_scan_label_tasks_in_json, jp) for jp in pending]
-        for future in concurrent.futures.as_completed(futures):
-            if is_interrupted and is_interrupted():
-                break
-            result = future.result()
-            if result:
-                for lbl, ts in result.items():
-                    tasks.setdefault(lbl, set()).update(ts)
-    return tasks
-
-
-class DatasetLabelScanWorker(QThread):
-    """Scan a fixed dataset snapshot outside the UI thread."""
-    labels_scanned = pyqtSignal(int, tuple, object, object, object)
-    statuses_progress = pyqtSignal(int, tuple, object)
-
-    def __init__(self, generation, image_paths, parent=None):
-        super().__init__(parent)
-        self._generation = generation
-        self._image_paths = tuple(image_paths)
-
-    def run(self):
-        def _emit_progress(batch):
-            if not self.isInterruptionRequested():
-                self.statuses_progress.emit(
-                    self._generation, self._image_paths, batch
-                )
-
-        try:
-            labels, counts, statuses = scan_dataset_full(
-                self._image_paths, self.isInterruptionRequested,
-                progress_cb=_emit_progress,
-            )
-            if not self.isInterruptionRequested():
-                self.labels_scanned.emit(
-                    self._generation, self._image_paths, labels, counts, statuses
-                )
-        except Exception:
-            if not self.isInterruptionRequested():
-                self.labels_scanned.emit(
-                    self._generation, self._image_paths, set(), {}, {}
-                )
+__all__ = ["ImageLoaderMixin"]
 
 
 class ImageLoaderMixin:
@@ -859,7 +486,7 @@ class ImageLoaderMixin:
 
     def load_detection_boxes(self, file_path):
         """加载检测框 JSON 文件"""
-        from .shape_io import box_from_labelme_shape
+        from ..shape_io import box_from_labelme_shape
         base_name = os.path.splitext(file_path)[0]
         json_path = f"{base_name}.json"
         detection_boxes = []
@@ -876,7 +503,7 @@ class ImageLoaderMixin:
                                 if box is not None:
                                     detection_boxes.append(box)
             except Exception as e:
-                from ..core.exception_hook import _write_log
+                from ...core.exception_hook import _write_log
                 _write_log(f"加载检测框文件失败：{e}")
 
         return detection_boxes
@@ -893,7 +520,7 @@ class ImageLoaderMixin:
                 self.update_label_list()
                 self.canvas.update()
             else:
-                from ..core.exception_hook import _write_log
+                from ...core.exception_hook import _write_log
                 _write_log(f"警告: 图片加载失败或为空: {file_path}")
 
     def select_background(self, item):
@@ -1122,7 +749,7 @@ class ImageLoaderMixin:
     def _log_error(self, message):
         """记录错误信息"""
         try:
-            from ..core.exception_hook import _write_log
+            from ...core.exception_hook import _write_log
             _write_log(message)
         except Exception:
             pass

@@ -590,8 +590,8 @@ class LabelManager(QObject):
                 # Subtract prior disk contribution for this file, then add memory.
                 json_path = f"{os.path.splitext(images[index])[0]}.json"
                 try:
-                    from .image_loader import _count_labels_in_json
-                    disk_part = _count_labels_in_json(json_path) or {}
+                    from .image_loader import count_labels_in_json
+                    disk_part = count_labels_in_json(json_path) or {}
                 except Exception:
                     disk_part = {}
                 for lbl, n in disk_part.items():

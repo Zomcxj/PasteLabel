@@ -1211,3 +1211,74 @@ def test_i18n_advance_status():
     from pastelabel.ui.i18n import _strings
     assert "已跳到下一张问题图" in _strings["zh"]
     assert "已跳到下一张问题图" in _strings["en"]
+
+
+# --------------------------------------------------------------------------
+# 设置对话框：质检忽略规则管理
+# --------------------------------------------------------------------------
+def test_settings_dialog_manages_lint_ignored_rules():
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] /
+           "pastelabel" / "ui" / "settings_dialog.py").read_text(encoding="utf-8")
+    assert "self.lint_rules_list = QListWidget()" in src
+    assert "self.lint_remove_btn.clicked.connect(self._remove_selected_lint_rules)" in src
+    assert "self.lint_clear_btn.clicked.connect(self._clear_lint_rules)" in src
+    assert "lint_ignored_rules=self._lint_ignored_rules" in src
+    # 保存后主窗口缓存同步，质检弹窗立即用新规则
+    assert "self._editor._lint_ignored_rules" in src
+
+
+def test_i18n_lint_ignore_settings_terms():
+    from pastelabel.ui.i18n import _strings
+    for key in ("质检忽略", "质检忽略规则", "移除选中", "清空全部", "整类"):
+        assert key in _strings["zh"], key
+        assert key in _strings["en"], key
+
+
+def test_settings_dialog_lint_ignored_rules_end_to_end(tmp_path):
+    """真实 Qt（offscreen）：查看 / 移除 / 清空 / 保存忽略规则。"""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    config_path = tmp_path / "config.json"
+    script = '''
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication
+from pastelabel.core import config_manager
+from pastelabel.ui.settings_dialog import SettingsDialog
+
+app = QApplication.instance() or QApplication([])
+config_manager.save_all(lint_ignored_rules={"tiny_box": ["*"], "out_of_bounds": ["(1,2)"]})
+
+dialog = SettingsDialog(None)
+assert dialog.lint_rules_list.count() == 2, dialog.lint_rules_list.count()
+data = [dialog.lint_rules_list.item(i).data(Qt.UserRole)
+        for i in range(dialog.lint_rules_list.count())]
+assert ("tiny_box", "*") in data, data
+assert ("out_of_bounds", "(1,2)") in data, data
+
+dialog.lint_rules_list.item(0).setSelected(True)
+dialog._remove_selected_lint_rules()
+assert dialog.lint_rules_list.count() == 1, dialog.lint_rules_list.count()
+
+dialog._clear_lint_rules()
+assert dialog.lint_rules_list.count() == 0
+
+dialog._save_shortcuts()
+rules = config_manager.load_all().get("lint_ignored_rules")
+assert rules == {}, rules
+print("OK")
+'''
+    env = os.environ | {
+        "QT_QPA_PLATFORM": "offscreen",
+        "PYTHONPATH": str(root),
+        "PASTELABEL_CONFIG_PATH": str(config_path),
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=root, env=env,
+        text=True, capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr

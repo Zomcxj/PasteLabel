@@ -6,7 +6,7 @@ import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QGroupBox, QScrollArea, QWidget, QSpinBox, QStackedWidget,
-    QComboBox, QDoubleSpinBox
+    QComboBox, QDoubleSpinBox, QListWidget, QListWidgetItem, QAbstractItemView
 )
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QEvent
@@ -34,6 +34,7 @@ class SettingsDialog(QDialog):
         self.setObjectName("settingsDialog")
 
         self.shortcut_inputs = {}
+        self._lint_ignored_rules = {}
         self._init_ui()
         self._load_shortcuts()
         self._load_options()
@@ -94,6 +95,13 @@ class SettingsDialog(QDialog):
         self.options_page_btn.setMinimumHeight(38)
         self.options_page_btn.clicked.connect(lambda: self._switch_page(1))
         nav_layout.addWidget(self.options_page_btn)
+
+        self.lint_page_btn = QPushButton(tr("质检忽略"))
+        self.lint_page_btn.setCheckable(True)
+        self.lint_page_btn.setFixedWidth(108)
+        self.lint_page_btn.setMinimumHeight(38)
+        self.lint_page_btn.clicked.connect(lambda: self._switch_page(2))
+        nav_layout.addWidget(self.lint_page_btn)
         nav_layout.addStretch()
 
         self.stack = QStackedWidget()
@@ -406,6 +414,33 @@ class SettingsDialog(QDialog):
         opt_layout.addStretch()
         self.stack.addWidget(opt_group)
 
+        lint_group = QGroupBox(tr("质检忽略规则"))
+        lint_layout = QVBoxLayout(lint_group)
+        lint_layout.setContentsMargins(19, 14, 9, 9)
+
+        lint_hint = QLabel(tr("被忽略的问题不再出现在质检结果中；移除后将重新报告。"))
+        lint_hint.setWordWrap(True)
+        lint_layout.addWidget(lint_hint)
+
+        self.lint_rules_list = QListWidget()
+        self.lint_rules_list.setObjectName("lintRulesList")
+        self.lint_rules_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.lint_rules_list.setMinimumWidth(150)
+        lint_layout.addWidget(self.lint_rules_list, 1)
+
+        lint_btn_row = QHBoxLayout()
+        self.lint_remove_btn = QPushButton(tr("移除选中"))
+        self.lint_remove_btn.clicked.connect(self._remove_selected_lint_rules)
+        lint_btn_row.addWidget(self.lint_remove_btn)
+        self.lint_clear_btn = QPushButton(tr("清空全部"))
+        self.lint_clear_btn.setObjectName("dangerBtn")
+        self.lint_clear_btn.clicked.connect(self._clear_lint_rules)
+        lint_btn_row.addWidget(self.lint_clear_btn)
+        lint_btn_row.addStretch()
+        lint_layout.addLayout(lint_btn_row)
+
+        self.stack.addWidget(lint_group)
+
         content_layout.addLayout(nav_layout, 0)
         content_layout.addWidget(self.stack, 1)
 
@@ -457,6 +492,7 @@ class SettingsDialog(QDialog):
         self.stack.setCurrentIndex(index)
         self.shortcut_page_btn.setChecked(index == 0)
         self.options_page_btn.setChecked(index == 1)
+        self.lint_page_btn.setChecked(index == 2)
 
     def eventFilter(self, obj, event):
         """拦截快捷键输入框的按键事件（含Ctrl+组合键）"""
@@ -549,6 +585,49 @@ class SettingsDialog(QDialog):
         self._crosshair_color = color if len(color) == 7 and color.startswith('#') else '#00FF80'
         self.crosshair_alpha_spin.setValue(max(0, min(255, int(CROSSHAIR_CONFIG.get('alpha', 160)))))
         self._update_crosshair_color_button()
+        self._load_lint_ignored_rules()
+
+    def _load_lint_ignored_rules(self):
+        """从配置加载质检忽略规则并刷新列表。"""
+        rules = config_manager.load_all().get('lint_ignored_rules') or {}
+        self._lint_ignored_rules = {k: list(v) for k, v in rules.items()}
+        self._refresh_lint_rules_list()
+
+    def _refresh_lint_rules_list(self):
+        """按类型顺序重建忽略规则列表；历史遗留类型也保留可移除。"""
+        from ..engine.quality_lint import KIND_LABELS
+        tr = i18n.t
+        self.lint_rules_list.clear()
+        kinds = [k for k in KIND_LABELS if k in self._lint_ignored_rules]
+        kinds += [k for k in sorted(self._lint_ignored_rules) if k not in KIND_LABELS]
+        for kind in kinds:
+            label = tr(KIND_LABELS.get(kind, kind))
+            for key in self._lint_ignored_rules.get(kind) or []:
+                text = f"{label} · {tr('整类')}" if key == '*' else f"{label} · {key}"
+                item = QListWidgetItem(text)
+                item.setData(Qt.UserRole, (kind, key))
+                self.lint_rules_list.addItem(item)
+
+    def _remove_selected_lint_rules(self):
+        """移除选中的忽略规则（点「保存」后生效）。"""
+        items = self.lint_rules_list.selectedItems()
+        if not items:
+            return
+        for item in items:
+            kind, key = item.data(Qt.UserRole)
+            keys = self._lint_ignored_rules.get(kind)
+            if not keys:
+                continue
+            if key in keys:
+                keys.remove(key)
+            if not keys:
+                self._lint_ignored_rules.pop(kind, None)
+        self._refresh_lint_rules_list()
+
+    def _clear_lint_rules(self):
+        """清空全部忽略规则（点「保存」后生效）。"""
+        self._lint_ignored_rules = {}
+        self._refresh_lint_rules_list()
 
     def _update_crosshair_color_button(self):
         self.crosshair_color_btn.setText(self._crosshair_color)
@@ -655,9 +734,12 @@ class SettingsDialog(QDialog):
             crosshair_color=self._crosshair_color,
             crosshair_alpha=crosshair_alpha,
             box_border_width=box_border_width,
+            lint_ignored_rules=self._lint_ignored_rules,
         )
         if self._editor:
             self._editor._max_labels = max_labels
+            self._editor._lint_ignored_rules = {
+                k: list(v) for k, v in self._lint_ignored_rules.items()}
             if hasattr(self._editor, 'canvas'):
                 self._editor.canvas.update()
         self.accept()

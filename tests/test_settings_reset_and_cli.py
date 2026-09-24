@@ -130,11 +130,11 @@ def test_reset_button_is_placed_at_the_bottom_left_of_the_dialog():
     assert block.index("btn_layout.addWidget(self.reset_all_btn)") < block.index("btn_layout.addStretch()")
 
 
-def test_both_settings_pages_align_their_first_row():
-    """快捷键页与参数页的第一行必须处在同一高度。"""
+def test_settings_pages_align_their_first_row():
+    """快捷键页、参数页、质检忽略页的第一行必须处在同一高度。"""
     source = SETTINGS_SRC.read_text(encoding="utf-8")
-    # 两页 group 的边距都要显式设为同一组值
-    assert source.count("setContentsMargins(19, 14, 9, 9)") == 2
+    # 三个页 group 的边距都要显式设为同一组值
+    assert source.count("setContentsMargins(19, 14, 9, 9)") == 3
     # 快捷键页里 scroll 内容不能再叠加一层边距，否则首行会下移
     assert "scroll_layout.setContentsMargins(0, 0, 0, 0)" in source
 

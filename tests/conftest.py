@@ -467,6 +467,54 @@ qtwidgets.QProgressDialog = _MockQProgressDialog
 qtwidgets.QProgressBar = type('QProgressBar', (_MockQWidget,), {
     'setObjectName': lambda self, *a: None,
     'setStyleSheet': lambda self, *a: None,
+    'setMaximum': lambda self, *a: None,
+    'setValue': lambda self, *a: None,
+    'maximum': lambda self: 100,
+    'value': lambda self: 0,
+    'setTextVisible': lambda self, *a: None,
+})
+qtwidgets.QTableWidget = type('QTableWidget', (_MockQWidget,), {
+    '__init__': lambda self, *a, **kw: None,
+    'setHorizontalHeaderLabels': lambda self, *a: None,
+    'setRowCount': lambda self, *a: None,
+    'setColumnCount': lambda self, *a: None,
+    'rowCount': lambda self: 0,
+    'columnCount': lambda self: 0,
+    'setItem': lambda self, *a: None,
+    'item': lambda self, *a: None,
+    'setCellWidget': lambda self, *a: None,
+    'horizontalHeader': lambda self: type('Header', (), {
+        'setSectionResizeMode': lambda s, *a: None,
+        'setStretchLastSection': lambda s, *a: None,
+    })(),
+    'verticalHeader': lambda self: type('Header', (), {
+        'setVisible': lambda s, *a: None,
+    })(),
+    'setEditTriggers': lambda self, *a: None,
+    'setSelectionBehavior': lambda self, *a: None,
+    'setSelectionMode': lambda self, *a: None,
+    'blockSignals': lambda self, *a: None,
+    'clearContents': lambda self: None,
+    'setStyleSheet': lambda self, *a: None,
+})
+qtwidgets.QTableWidgetItem = type('QTableWidgetItem', (), {
+    '__init__': lambda self, *a, **kw: None,
+    'setFlags': lambda self, *a: None,
+    'flags': lambda self: 0,
+    'setData': lambda self, *a: None,
+    'data': lambda self, *a: None,
+    'text': lambda self: '',
+    'setText': lambda self, *a: None,
+})
+qtwidgets.QHeaderView = type('QHeaderView', (), {
+    'Stretch': 1, 'ResizeToContents': 2, 'Interactive': 0,
+    'setSectionResizeMode': lambda self, *a: None,
+    'setStretchLastSection': lambda self, *a: None,
+    'setVisible': lambda self, *a: None,
+})
+qtwidgets.QAbstractItemView = type('QAbstractItemView', (), {
+    'NoEditTriggers': 0, 'DoubleClicked': 1, 'EditKeyPressed': 2,
+    'SelectedClicked': 4, 'SelectRows': 1, 'SingleSelection': 1,
 })
 qtwidgets.QInputDialog = _MockQInputDialog
 qtwidgets.QMessageBox = _MockQMessageBox
@@ -535,10 +583,17 @@ qtwidgets.QTextEdit = type('QTextEdit', (_MockQWidget,), {
 })
 qtwidgets.QComboBox = type('QComboBox', (_MockQWidget,), {
     'addItems': lambda self, *a: None,
+    'addItem': lambda self, *a: None,
     'setCurrentIndex': lambda self, *a: None,
     'currentIndex': lambda self: 0,
+    'currentData': lambda self: None,
+    'currentText': lambda self: '',
+    'count': lambda self: 0,
+    'clear': lambda self: None,
+    'blockSignals': lambda self, *a: None,
     'setMaximumWidth': lambda self, *a: None,
     'setFixedWidth': lambda self, *a: None,
+    'currentIndexChanged': type('Signal', (), {'connect': lambda self, f: None})(),
 })
 qtwidgets.QToolButton = type('QToolButton', (_MockQWidget,), {
     'setIcon': lambda self, *a: None,

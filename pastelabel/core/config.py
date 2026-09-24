@@ -211,6 +211,16 @@ OBB_CONFIG = {
     'rotate_step': 1,  # 键盘旋转单次角度（度）
 }
 
+# 标注质检 lint 配置
+QUALITY_LINT_CONFIG = {
+    'bounds_tolerance': 1.0,    # 越界容忍像素
+    'min_box_side': 8.0,        # 最小边长（宽或高小于此值报 tiny_box）
+    'dup_iou': 0.85,            # 同类框重复判定 IoU 阈值
+    'cross_iou': 0.85,          # 异类框重叠判定 IoU 阈值
+    'name_edit_distance': 0,    # 近似名编辑距离阈值（0=仅大小写/空白差异，避免业务命名误报）
+    'max_boxes_pairwise': 500,  # 超过此框数跳过两两比对
+}
+
 # 出厂默认快照：这些字典在运行时会被就地修改（设置对话框、加载配置），
 # 「恢复默认设置」需要一份未被污染的副本来还原。
 _DEFAULT_SNAPSHOT = {

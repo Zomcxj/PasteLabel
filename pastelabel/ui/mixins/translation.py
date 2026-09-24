@@ -43,6 +43,9 @@ class TranslationMixin:
         if hasattr(self, 'view_stats_btn'):
             self.view_stats_btn.setText(tr("统计"))
             self.view_stats_btn.setToolTip(tr("标签统计"))
+        if hasattr(self, 'lint_btn'):
+            self.lint_btn.setText(tr("质检"))
+            self.lint_btn.setToolTip(tr("标注质检"))
         if hasattr(self, '_refresh_bg_label_mode_button'):
             self._refresh_bg_label_mode_button()
         if hasattr(self, 'view_toggle_btn'):

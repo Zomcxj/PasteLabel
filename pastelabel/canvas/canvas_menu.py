@@ -685,6 +685,9 @@ class CanvasMenuMixin:
             refresh(idx, file_path)
         self._editor.update_label_list()
         self.update()
+        notify = getattr(self._editor, '_notify_lint_boxes_changed', None)
+        if callable(notify):
+            notify(idx)
 
         # 删除后自动跳转到下一张
         if self._editor.background_images:

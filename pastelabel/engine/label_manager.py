@@ -298,6 +298,9 @@ class LabelManager(QObject):
             self._save_detection_json_for_index(current_index)
         self.label_list_changed.emit()
         self.data_changed.emit()
+        notify = getattr(self.editor, '_notify_lint_boxes_changed', None)
+        if callable(notify):
+            notify(current_index)
 
     def delete_label(self):
         """删除标签。
@@ -892,6 +895,9 @@ class LabelManager(QObject):
 
         self.label_list_changed.emit()
         self.data_changed.emit()
+        notify = getattr(self.editor, '_notify_lint_boxes_changed', None)
+        if callable(notify):
+            notify(current_index)
         return True
 
     def rename_paste_label(self, old_label, new_label):

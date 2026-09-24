@@ -33,6 +33,24 @@ def _normalize_label_cache_slots(slots):
     return normalized
 
 
+def _normalize_lint_ignored_rules(rules):
+    """质检忽略规则：{kind: [key,...]}。key 为 detail 或 '*'（整类忽略）。"""
+    if not isinstance(rules, dict):
+        return {}
+    normalized = {}
+    for kind, keys in rules.items():
+        if not isinstance(kind, str) or not kind:
+            continue
+        if isinstance(keys, str):
+            keys = [keys]
+        if not isinstance(keys, list):
+            continue
+        cleaned = sorted({str(k) for k in keys if str(k or '').strip()})
+        if cleaned:
+            normalized[kind] = cleaned
+    return normalized
+
+
 def _filter_shortcuts(shortcuts):
     """过滤已禁用的快捷键动作，避免旧配置继续生效。"""
     if not isinstance(shortcuts, dict):
@@ -346,6 +364,7 @@ def load_all():
         'magnifier_size': int(config.get('magnifier_size', MAGNIFIER_CONFIG['size'])),
         'label_cache_slots': _normalize_label_cache_slots(config.get('label_cache_slots')),
         'nudge_step': int(config.get('nudge_step', NUDGE_CONFIG['step'])),
+        'lint_ignored_rules': _normalize_lint_ignored_rules(config.get('lint_ignored_rules')),
         'detection_box_scale_step': float(config.get(
             'detection_box_scale_step',
             legacy_wheel_scale_step if legacy_wheel_scale_step is not None else DETECTION_BOX_WHEEL_CONFIG['detection_box_scale_step'],
@@ -379,7 +398,8 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
                detection_box_scale_step=None, paste_item_scale_step=None,
                detection_box_wheel_edge_step=None,
               crosshair_width=None, crosshair_color=None, crosshair_alpha=None,
-               box_border_width=None, label_colors=None, label_color_map=None):
+               box_border_width=None, label_colors=None, label_color_map=None,
+               lint_ignored_rules=None):
     """保存所有配置"""
     config = load_config()
     if shortcuts is not None:
@@ -420,6 +440,8 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['label_cache_slots'] = _normalize_label_cache_slots(label_cache_slots)
     if nudge_step is not None:
         config['nudge_step'] = max(1, min(5, int(nudge_step)))
+    if lint_ignored_rules is not None:
+        config['lint_ignored_rules'] = _normalize_lint_ignored_rules(lint_ignored_rules)
     if detection_box_scale_step is not None:
         config['detection_box_scale_step'] = max(0.01, min(0.30, float(detection_box_scale_step)))
     if paste_item_scale_step is not None:

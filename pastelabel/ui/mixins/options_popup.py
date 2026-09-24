@@ -140,6 +140,16 @@ class OptionsPopupMixin:
 
         layout.addSpacing(4)
 
+        self.lint_btn = QPushButton(tr("质检"))
+        self.lint_btn.setObjectName("optionsBtn")
+        self.lint_btn.setFixedHeight(24)
+        self.lint_btn.setFixedWidth(70)
+        self.lint_btn.setToolTip(tr("标注质检"))
+        self.lint_btn.clicked.connect(self._open_quality_lint)
+        layout.addWidget(self.lint_btn)
+
+        layout.addSpacing(4)
+
         self.format_btn = QPushButton(tr("格式"))
         self.format_btn.setObjectName("optionsBtn")
         self.format_btn.setFixedWidth(70)

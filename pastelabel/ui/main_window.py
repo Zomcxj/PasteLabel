@@ -22,6 +22,7 @@ from .processing_panel import ProcessingPanel
 from .mixins.label_cache_slot import LabelCacheSlotMixin
 from .mixins.memory_record import MemoryRecordMixin
 from .mixins.stats import StatsMixin
+from .mixins.quality_lint import QualityLintMixin
 from .mixins.background_list import BackgroundListMixin
 from .mixins.theme import ThemeMixin
 from .mixins.translation import TranslationMixin
@@ -34,7 +35,7 @@ from .mixins.lists import ListsMixin
 from .mixins.panels import PanelsMixin
 
 
-class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin, MemoryRecordMixin, LabelCacheSlotMixin,
+class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin, QualityLintMixin, MemoryRecordMixin, LabelCacheSlotMixin,
                    ToolbarMixin, OptionsPopupMixin, CacheMenuMixin, ListsMixin, PanelsMixin, ImageLoaderMixin, PasteEngineMixin,
                    DatasetClassifierMixin, DatasetToolsMixin, EventHandlerMixin, QMainWindow):
     """贴图标注工具主窗口"""
@@ -230,6 +231,10 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
             image_path, image_name, label_prefix,
             canvas_items, image_width, image_height, current_index
         )
+        if hasattr(self, '_notify_lint_boxes_changed'):
+            index = (current_index if current_index is not None
+                     else self.current_background_index)
+            self._notify_lint_boxes_changed(index)
 
     def auto_save_background(self):
         self.save_manager.auto_save_background()
@@ -381,6 +386,8 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         )
         self.canvas.update()
         self.update_label_list()
+        if hasattr(self, '_notify_lint_boxes_changed'):
+            self._notify_lint_boxes_changed()
 
     def redo(self):
         """重做"""
@@ -391,6 +398,8 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         )
         self.canvas.update()
         self.update_label_list()
+        if hasattr(self, '_notify_lint_boxes_changed'):
+            self._notify_lint_boxes_changed()
 
     def toggle_grid(self):
         """切换网格显示"""
@@ -502,6 +511,9 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
             event.ignore()
             return
         if not self._cleanup_background_label_scan_worker():
+            event.ignore()
+            return
+        if hasattr(self, '_cleanup_delete_worker') and not self._cleanup_delete_worker():
             event.ignore()
             return
         if hasattr(self, '_processing_panel') and self._processing_panel:

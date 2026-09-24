@@ -1,0 +1,598 @@
+"""标注质检 lint：纯逻辑，无 Qt 控件依赖。
+
+检查项：越界框 / 超小框 / 重复框（同类高 IoU）/ 异类重叠（高 IoU）/
+近似名 / group 不一致。缺 sidecar / 空标注由背景图列表状态图标负责，
+质检不再上报。
+"""
+import json
+import os
+import concurrent.futures
+
+from PyQt5.QtCore import QThread, pyqtSignal
+
+from ..core.config import QUALITY_LINT_CONFIG
+from ..core.utils import calculate_iou
+
+
+KIND_LABELS = {
+    'out_of_bounds': '越界框',
+    'tiny_box': '超小框',
+    'duplicate': '重复框',
+    'cross_label_overlap': '异类重叠',
+    'similar_name': '近似名',
+    'group_mismatch': 'group 不一致',
+    'skipped_pairwise': '跳过两两比对',
+}
+
+
+def _bbox(box):
+    """(x1, y1, x2, y2)；优先用 x/y/width/height，缺失时回退 points。"""
+    x = box.get("x")
+    y = box.get("y")
+    w = box.get("width")
+    h = box.get("height")
+    if None in (x, y, w, h):
+        points = box.get("points") or []
+        if not points:
+            return None
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        return (min(xs), min(ys), max(xs), max(ys))
+    return (x, y, x + w, y + h)
+
+
+def lint_shapes(shapes, image_width, image_height, label_index=None):
+    """返回问题列表：每项 {kind, label, box_index, detail}。"""
+    issues = []
+    shapes = [s for s in (shapes or []) if isinstance(s, dict)]
+    tol = QUALITY_LINT_CONFIG['bounds_tolerance']
+    min_side = QUALITY_LINT_CONFIG['min_box_side']
+
+    if image_width and image_height:
+        for i, box in enumerate(shapes):
+            rect = _bbox(box)
+            if rect is None:
+                continue
+            x1, y1, x2, y2 = rect
+            if (x1 < -tol or y1 < -tol or
+                    x2 > image_width + tol or y2 > image_height + tol):
+                issues.append({
+                    'kind': 'out_of_bounds', 'label': box.get('label', ''),
+                    'box_index': i,
+                    'detail': f"({x1:.0f},{y1:.0f},{x2:.0f},{y2:.0f}) "
+                              f"vs {image_width}x{image_height}",
+                })
+
+    for i, box in enumerate(shapes):
+        if (box.get('shape_type') or 'rectangle') == 'point':
+            continue
+        rect = _bbox(box)
+        if rect is None:
+            continue
+        w = rect[2] - rect[0]
+        h = rect[3] - rect[1]
+        if min(w, h) < min_side:
+            issues.append({
+                'kind': 'tiny_box', 'label': box.get('label', ''),
+                'box_index': i, 'detail': f"W:{w:.0f} H:{h:.0f}",
+            })
+
+    if len(shapes) <= QUALITY_LINT_CONFIG['max_boxes_pairwise']:
+        issues.extend(_pairwise_issues(shapes))
+    issues.extend(_similar_name_issues(shapes))
+    issues.extend(_group_issues(shapes))
+    return issues
+
+
+def _pairwise_issues(shapes):
+    issues = []
+    rects = [_bbox(b) for b in shapes]
+    dup_iou = QUALITY_LINT_CONFIG['dup_iou']
+    cross_iou = QUALITY_LINT_CONFIG['cross_iou']
+    for i in range(len(shapes)):
+        if rects[i] is None:
+            continue
+        for j in range(i + 1, len(shapes)):
+            if rects[j] is None:
+                continue
+            iou = calculate_iou(rects[i], rects[j])
+            if iou < min(dup_iou, cross_iou):
+                continue
+            label_i = shapes[i].get('label', '')
+            label_j = shapes[j].get('label', '')
+            if label_i == label_j:
+                if iou >= dup_iou:
+                    issues.append({
+                        'kind': 'duplicate', 'label': label_i,
+                        'box_index': j, 'detail': f"IoU:{iou:.2f} #{i}",
+                    })
+            elif iou >= cross_iou:
+                issues.append({
+                    'kind': 'cross_label_overlap', 'label': label_i,
+                    'box_index': i,
+                    'label_a': label_i, 'box_index_a': i,
+                    'label_b': label_j, 'box_index_b': j,
+                    'detail': f"IoU:{iou:.2f} #{i}({label_i}) vs ({label_j})",
+                })
+    return issues
+
+
+def _edit_distance_at_most_one(a, b):
+    """a、b 编辑距离是否 <= 1（等价于相差一个增删改）。"""
+    if a == b:
+        return True
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(1 for ca, cb in zip(a, b) if ca != cb) == 1
+    if len(a) > len(b):
+        a, b = b, a
+    i = j = 0
+    skipped = False
+    while i < len(a) and j < len(b):
+        if a[i] != b[j]:
+            if skipped:
+                return False
+            skipped = True
+            j += 1
+            continue
+        i += 1
+        j += 1
+    return True
+
+
+def _normalized(name):
+    return " ".join(str(name or "").split()).lower()
+
+
+def _similar_name_issues(shapes):
+    """标签名疑似：忽略大小写/多余空白后相同，或编辑距离 <= 阈值。"""
+    issues = []
+    threshold = QUALITY_LINT_CONFIG['name_edit_distance']
+    labels = []
+    for box in shapes:
+        label = str(box.get('label', '') or '')
+        if label and label not in labels:
+            labels.append(label)
+    for i in range(len(labels)):
+        for j in range(i + 1, len(labels)):
+            a, b = labels[i], labels[j]
+            norm_a, norm_b = _normalized(a), _normalized(b)
+            if norm_a == norm_b or (
+                    threshold >= 1 and _edit_distance_at_most_one(norm_a, norm_b)):
+                issues.append({
+                    'kind': 'similar_name', 'label': a, 'box_index': None,
+                    'detail': f"{a} / {b}",
+                })
+    return issues
+
+
+def _group_issues(shapes):
+    """关键点 group 校验（复用 point_warning 语义）+ 有组框无关键点。"""
+    from .shape_io import point_warning
+    issues = []
+    non_points = [
+        (i, b) for i, b in enumerate(shapes)
+        if (b.get('shape_type') or 'rectangle') != 'point'
+    ]
+    for i, box in enumerate(shapes):
+        if (box.get('shape_type') or 'rectangle') == 'point':
+            warning = point_warning(box, shapes)
+            if warning:
+                issues.append({
+                    'kind': 'group_mismatch', 'label': box.get('label', ''),
+                    'box_index': i, 'detail': warning,
+                })
+    group_ids = {
+        b.get('group_id') for _, b in non_points
+        if b.get('group_id') is not None
+    }
+    for gid in group_ids:
+        has_point = any(
+            (b.get('shape_type') or 'rectangle') == 'point'
+            and b.get('group_id') == gid
+            for b in shapes
+        )
+        if not has_point:
+            idx = next(i for i, b in non_points if b.get('group_id') == gid)
+            issues.append({
+                'kind': 'group_mismatch',
+                'label': shapes[idx].get('label', ''),
+                'box_index': idx, 'detail': f"组 {gid} 无关键点",
+            })
+    return issues
+
+
+def filter_ignored_issues(issues, ignored_rules):
+    """按忽略规则过滤问题：{kind: [detail 或 '*']}。
+
+    detail 匹配为精确相等；'*' 表示整类忽略。
+    """
+    if not ignored_rules or not isinstance(ignored_rules, dict):
+        return list(issues or [])
+    filtered = []
+    for issue in issues or []:
+        keys = ignored_rules.get(issue.get('kind'))
+        if not keys:
+            filtered.append(issue)
+            continue
+        if '*' in keys or str(issue.get('detail', '')) in keys:
+            continue
+        filtered.append(issue)
+    return filtered
+
+
+def summarize_issues(issues):
+    """统计各类型问题数量。"""
+    summary = {}
+    for issue in issues or []:
+        kind = issue.get('kind')
+        if kind:
+            summary[kind] = summary.get(kind, 0) + 1
+    return summary
+
+
+def _read_json_shapes(json_path):
+    """返回 (shapes, image_w, image_h)；文件缺失/损坏返回 None。"""
+    if not os.path.exists(json_path):
+        return None
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return [], 0, 0
+    if not isinstance(data, dict):
+        return [], 0, 0
+    shapes = data.get('shapes')
+    if not isinstance(shapes, list):
+        shapes = []
+    return shapes, int(data.get('imageWidth') or 0), int(data.get('imageHeight') or 0)
+
+
+def lint_image_shapes(image_path, shapes, image_width, image_height):
+    """单图问题列表（含跳过两两比对提示），不含 image_index。
+
+    shapes 为 None 表示 sidecar 缺失；[] 表示空标注。两种情况都不再
+    上报（背景图列表状态图标已覆盖），直接返回空列表。
+    """
+    if not shapes:
+        return []
+    issues = []
+    if len(shapes) > QUALITY_LINT_CONFIG['max_boxes_pairwise']:
+        issues.append({
+            'kind': 'skipped_pairwise', 'label': '', 'box_index': None,
+            'detail': f"{len(shapes)} 框",
+        })
+    issues.extend(lint_shapes(shapes, image_width, image_height))
+    return issues
+
+
+def image_shapes_for_lint(index, path, memory_boxes=None):
+    """(shapes_or_None, image_w, image_h)：已加载图以内存为准（含空列表）。
+
+    内存中已加载的图（即使框为空）不再回读磁盘 shapes，避免磁盘滞后
+    导致已修好的问题仍被报出；sidecar 是否存在仍以磁盘为准。
+    """
+    json_path = f"{os.path.splitext(path)[0]}.json"
+    loaded = index in (memory_boxes or {})
+    info = _read_json_shapes(json_path)
+    if loaded:
+        boxes = list((memory_boxes or {}).get(index) or [])
+        if info is None and not boxes:
+            return None, 0, 0
+        return boxes, (info[1] if info else 0), (info[2] if info else 0)
+    if info is None:
+        return None, 0, 0
+    return info[0], info[1], info[2]
+
+
+def lint_single_image(index, path, memory_boxes=None):
+    """单图实时质检：返回带 image_index/image_path 的问题列表。"""
+    shapes, img_w, img_h = image_shapes_for_lint(index, path, memory_boxes)
+    issues = lint_image_shapes(path, shapes, img_w, img_h)
+    for issue in issues:
+        issue['image_index'] = index
+        issue['image_path'] = path
+    return issues
+
+
+def lint_dataset(image_paths, memory_boxes=None, progress_cb=None,
+                 is_interrupted=None):
+    """扫描数据集，返回 {'issues': [...], 'summary': {...}}。
+
+    memory_boxes: {index: [box,...]}，已加载图以内存为准。
+    """
+    image_paths = list(image_paths or [])
+    memory_boxes = memory_boxes or {}
+    issues = []
+    summary = {
+        'scanned_images': 0,
+        'out_of_bounds': 0, 'tiny_box': 0, 'duplicate': 0,
+        'cross_label_overlap': 0, 'similar_name': 0, 'group_mismatch': 0,
+        'skipped_pairwise': 0,
+    }
+    total = len(image_paths)
+    done = 0
+
+    def _one(index, path):
+        shapes, img_w, img_h = image_shapes_for_lint(index, path, memory_boxes)
+        return index, path, shapes, img_w, img_h
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [pool.submit(_one, i, p) for i, p in enumerate(image_paths)]
+        for future in concurrent.futures.as_completed(futures):
+            if is_interrupted and is_interrupted():
+                break
+            index, path, shapes, img_w, img_h = future.result()
+            done += 1
+            for issue in lint_image_shapes(path, shapes, img_w, img_h):
+                issue['image_index'] = index
+                issue['image_path'] = path
+                issues.append(issue)
+                summary[issue['kind']] = summary.get(issue['kind'], 0) + 1
+            if shapes is not None:
+                summary['scanned_images'] += 1
+            if progress_cb is not None and (done % 50 == 0 or done == total):
+                try:
+                    progress_cb(done, total)
+                except Exception:
+                    pass
+    return {'issues': issues, 'summary': summary}
+
+
+class QualityLintWorker(QThread):
+    """后台质检扫描：进度 + 结果信号。"""
+    lint_progress = pyqtSignal(int, int)
+    lint_finished = pyqtSignal(object)
+
+    def __init__(self, image_paths, memory_boxes=None, parent=None):
+        super().__init__(parent)
+        self._image_paths = tuple(image_paths)
+        self._memory_boxes = dict(memory_boxes or {})
+
+    def run(self):
+        try:
+            def _progress(done, total):
+                if not self.isInterruptionRequested():
+                    self.lint_progress.emit(done, total)
+
+            result = lint_dataset(
+                self._image_paths, memory_boxes=self._memory_boxes,
+                progress_cb=_progress,
+                is_interrupted=self.isInterruptionRequested,
+            )
+        except Exception:
+            result = {'issues': [], 'summary': {}}
+        if not self.isInterruptionRequested():
+            self.lint_finished.emit(result)
+
+
+def box_signature(box):
+    """内容签名（类别 + 量化 bbox），用于跨线程同步内存框。"""
+    if not isinstance(box, dict):
+        return None
+    rect = _bbox(box)
+    if rect is None:
+        return None
+    try:
+        return (str(box.get('label', '') or ''),) + tuple(
+            round(float(v), 3) for v in rect)
+    except (TypeError, ValueError):
+        return None
+
+
+def _write_json(json_path, data):
+    try:
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        return False
+    return True
+
+
+def _remove_shapes_at_indices(json_path, indices):
+    """按 shapes 索引删除并写回，保留其它字段。
+
+    返回 (removed, ok)：ok=False 表示读取/写入失败。
+    """
+    index_set = set(indices or [])
+    if not index_set:
+        return 0, True
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return 0, False
+    if not isinstance(data, dict) or not isinstance(data.get('shapes'), list):
+        return 0, False
+    shapes = data['shapes']
+    kept = [s for i, s in enumerate(shapes) if i not in index_set]
+    removed = len(shapes) - len(kept)
+    if removed <= 0:
+        return 0, False
+    data['shapes'] = kept
+    if not _write_json(json_path, data):
+        return 0, False
+    return removed, True
+
+
+def _remove_shapes_matching(json_path, boxes):
+    """内存框与磁盘 JSON 对齐删除：按内容签名匹配，避免索引错位。
+
+    返回 (removed, ok)：ok=False 仅表示已存在文件读取/写入失败；
+    文件不存在（内存独有）视为成功，由内存同步兜底。
+    """
+    pending = {}
+    for box in boxes or []:
+        sig = box_signature(box)
+        if sig is not None:
+            pending[sig] = pending.get(sig, 0) + 1
+    if not pending or not os.path.exists(json_path):
+        return 0, True
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return 0, False
+    if not isinstance(data, dict) or not isinstance(data.get('shapes'), list):
+        return 0, False
+    kept = []
+    removed = 0
+    for shape in data['shapes']:
+        sig = box_signature(shape)
+        if sig is not None and pending.get(sig, 0) > 0:
+            pending[sig] -= 1
+            removed += 1
+            continue
+        kept.append(shape)
+    if removed <= 0:
+        return 0, True
+    data['shapes'] = kept
+    if not _write_json(json_path, data):
+        return 0, False
+    return removed, True
+
+
+def _selected_removal_indices(shapes, selected, target_label):
+    """按选中项匹配目标类框的 shapes 索引。
+
+    每个 issue 携带两侧结构（label_a/box_index_a、label_b/box_index_b），
+    取与 target_label 一致的一侧；索引与类别必须同时匹配，防止索引漂移误删。
+    返回 (indices, boxes)。
+    """
+    boxes = [s for s in (shapes or []) if isinstance(s, dict)]
+    target = str(target_label or '')
+    indices = []
+    if not target:
+        return [], []
+    for issue in selected or []:
+        for index, label in (
+                (issue.get('box_index_a'), issue.get('label_a')),
+                (issue.get('box_index_b'), issue.get('label_b'))):
+            if index is None or not (0 <= index < len(boxes)) or index in indices:
+                continue
+            if str(label or '') != target:
+                continue
+            if str(boxes[index].get('label', '') or '') != target:
+                continue
+            indices.append(index)
+    indices.sort()
+    return indices, [boxes[i] for i in indices]
+
+
+def remove_selected_cross_overlaps(selected_issues, target_label, image_paths,
+                                   memory_boxes=None, progress_cb=None,
+                                   is_interrupted=None):
+    """删除选中问题里 target_label 类的重叠框（外科式改 JSON）。
+
+    未加载图按 shapes 索引删；已加载图按内容签名匹配删（避免索引错位）。
+    返回 {'removed', 'images_changed', 'removed_boxes', 'refreshed_issues',
+    'failed', 'interrupted'}。
+    """
+    image_paths = list(image_paths or [])
+    memory_boxes = memory_boxes or {}
+    result = {'removed': 0, 'images_changed': 0, 'removed_boxes': {},
+              'refreshed_issues': {}, 'failed': [], 'interrupted': False}
+    target = str(target_label or '')
+    if not target or not image_paths:
+        return result
+
+    per_image = {}
+    for issue in selected_issues or []:
+        if issue.get('kind') != 'cross_label_overlap':
+            continue
+        index = issue.get('image_index')
+        if index is None or not (0 <= index < len(image_paths)):
+            continue
+        per_image.setdefault(index, []).append(issue)
+    if not per_image:
+        return result
+
+    total = len(per_image)
+    done = 0
+    for index in sorted(per_image):
+        if is_interrupted and is_interrupted():
+            result['interrupted'] = True
+            break
+        path = image_paths[index]
+        json_path = f"{os.path.splitext(path)[0]}.json"
+        loaded = index in memory_boxes
+        if loaded:
+            shapes = list(memory_boxes.get(index) or [])
+            img_w = img_h = 0
+            info = _read_json_shapes(json_path)
+            if info:
+                img_w, img_h = info[1], info[2]
+        else:
+            info = _read_json_shapes(json_path)
+            if info is None:
+                result['failed'].append(path)
+                done += 1
+                continue
+            shapes, img_w, img_h = info[0], info[1], info[2]
+        indices, boxes = _selected_removal_indices(
+            shapes, per_image[index], target)
+        if not indices:
+            done += 1
+            continue
+        if loaded:
+            _, ok = _remove_shapes_matching(json_path, boxes)
+            if not ok:
+                result['failed'].append(path)
+                done += 1
+                continue
+        else:
+            disk_removed, ok = _remove_shapes_at_indices(json_path, indices)
+            if not ok or disk_removed <= 0:
+                result['failed'].append(path)
+                done += 1
+                continue
+        removed = [b for b in boxes if isinstance(b, dict)]
+        result['removed_boxes'][index] = removed
+        result['removed'] += len(removed)
+        result['images_changed'] += 1
+        index_set = set(indices)
+        kept = [b for i, b in enumerate(shapes) if i not in index_set]
+        refreshed = lint_image_shapes(path, kept, img_w, img_h)
+        for issue in refreshed:
+            issue['image_index'] = index
+            issue['image_path'] = path
+        result['refreshed_issues'][index] = refreshed
+        done += 1
+        if progress_cb is not None:
+            try:
+                progress_cb(done, total)
+            except Exception:
+                pass
+    return result
+
+
+class CrossLabelDeleteWorker(QThread):
+    """后台删除选中的异类重叠框：进度 + 结果信号（中断也回报部分结果）。"""
+    delete_progress = pyqtSignal(int, int)
+    delete_finished = pyqtSignal(object)
+
+    def __init__(self, selected_issues, target_label, image_paths,
+                 memory_boxes=None, parent=None):
+        super().__init__(parent)
+        self._selected_issues = tuple(selected_issues or ())
+        self._target_label = str(target_label or '')
+        self._image_paths = tuple(image_paths)
+        self._memory_boxes = dict(memory_boxes or {})
+
+    def run(self):
+        try:
+            def _progress(done, total):
+                if not self.isInterruptionRequested():
+                    self.delete_progress.emit(done, total)
+
+            result = remove_selected_cross_overlaps(
+                self._selected_issues, self._target_label, self._image_paths,
+                memory_boxes=self._memory_boxes,
+                progress_cb=_progress,
+                is_interrupted=self.isInterruptionRequested,
+            )
+        except Exception as e:
+            result = {'removed': 0, 'images_changed': 0, 'removed_boxes': {},
+                      'failed': [], 'interrupted': False, 'error': str(e)}
+        self.delete_finished.emit(result)

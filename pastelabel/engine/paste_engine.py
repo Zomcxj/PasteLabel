@@ -136,6 +136,70 @@ class PasteEngineMixin:
         self.selected_item = None
         self.canvas.update()
 
+    def _sample_center_in_regions(self, regions, new_width, new_height, bg_w, bg_h, rng):
+        """在语义区域并集内采样一个贴图中心点，保证贴图完整落在区域内。
+
+        矩形区域：解析求中心区间 [区域左+半宽, 区域右-半宽]（∩ 背景范围）。
+        多边形区域：在 bbox 内拒绝采样，要求中心与贴图四角都在多边形内。
+        全部失败时返回 None（调用方跳过该次贴图）。
+        """
+        from ..core.config import REGION_CONFIG
+        order = list(range(len(regions)))
+        rng.shuffle(order)
+        max_retries = REGION_CONFIG.get('polygon_max_retries', 200)
+
+        for idx in order:
+            region = regions[idx]
+            if (region.get('shape_type') or 'rectangle') == 'polygon' and region.get('points'):
+                sample = self._sample_in_polygon_region(
+                    region, new_width, new_height, bg_w, bg_h, rng, max_retries
+                )
+                if sample is not None:
+                    return sample
+                continue
+
+            half_w = new_width / 2
+            half_h = new_height / 2
+            rx1 = max(region['x'] + half_w, half_w)
+            rx2 = min(region['x'] + region['width'] - half_w, bg_w - half_w)
+            ry1 = max(region['y'] + half_h, half_h)
+            ry2 = min(region['y'] + region['height'] - half_h, bg_h - half_h)
+            if rx1 > rx2 or ry1 > ry2:
+                continue
+            return rng.uniform(rx1, rx2), rng.uniform(ry1, ry2)
+
+        return None
+
+    def _sample_in_polygon_region(self, region, new_width, new_height, bg_w, bg_h,
+                                  rng, max_retries):
+        """多边形区域内拒绝采样：中心与贴图四角都必须在多边形内。"""
+        from .shape_io import point_in_polygon
+        points = region['points']
+        half_w = new_width / 2
+        half_h = new_height / 2
+
+        px1 = max(region['x'] + half_w, half_w)
+        px2 = min(region['x'] + region['width'] - half_w, bg_w - half_w)
+        py1 = max(region['y'] + half_h, half_h)
+        py2 = min(region['y'] + region['height'] - half_h, bg_h - half_h)
+        if px1 > px2 or py1 > py2:
+            return None
+
+        for _ in range(max_retries):
+            cx = rng.uniform(px1, px2)
+            cy = rng.uniform(py1, py2)
+            corners = (
+                (cx - half_w, cy - half_h),
+                (cx + half_w, cy - half_h),
+                (cx - half_w, cy + half_h),
+                (cx + half_w, cy + half_h),
+            )
+            if not point_in_polygon(cx, cy, points):
+                continue
+            if all(point_in_polygon(x, y, points) for x, y in corners):
+                return cx, cy
+        return None
+
     def random_paste_images(self, background=None, detection_boxes=None, seed=None):
         """随机贴图 - 中心点避让算法
 
@@ -167,6 +231,11 @@ class PasteEngineMixin:
 
         num_paste = self.paste_count_spin.value()
         selected_indices = rng.choices(range(len(self.small_images)), k=num_paste)
+
+        regions = [
+            r for r in (getattr(self, 'region_boxes', None) or [])
+            if r.get('width', 0) > 0 and r.get('height', 0) > 0
+        ]
 
         pasted_boxes = []
 
@@ -202,12 +271,21 @@ class PasteEngineMixin:
             place_w = bg_w - new_width - mr
             place_h = bg_h - new_height
 
-            if place_w <= ml or place_h <= mt:
+            if not regions and (place_w <= ml or place_h <= mt):
                 continue
 
             for _ in range(RANDOM_POSITION_CONFIG['max_retries']):
-                cx = rng.uniform(ml + new_width / 2, place_w + new_width / 2)
-                cy = rng.uniform(mt + new_height / 2, place_h + new_height / 2)
+                if regions:
+                    sample = self._sample_center_in_regions(
+                        regions, new_width, new_height, bg_w, bg_h, rng
+                    )
+                    if sample is None:
+                        # 所有区域都装不下该贴图（尺寸固定，重试无意义）
+                        break
+                    cx, cy = sample
+                else:
+                    cx = rng.uniform(ml + new_width / 2, place_w + new_width / 2)
+                    cy = rng.uniform(mt + new_height / 2, place_h + new_height / 2)
 
                 tx = cx - new_width / 2
                 ty = cy - new_height / 2

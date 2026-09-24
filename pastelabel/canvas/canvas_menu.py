@@ -3,7 +3,7 @@ Canvas 右键菜单 - 贴图标签管理
 """
 import os
 from PyQt5.QtWidgets import QMenu, QAction
-from PyQt5.QtCore import QPoint
+from PyQt5.QtCore import Qt, QPoint
 
 from ..core.utils import extract_label_name
 from ..ui import dialog_helpers
@@ -27,6 +27,14 @@ class CanvasMenuMixin:
         if item_index is not None:
             self._show_paste_context_menu(item_index, mouse_pos)
             return True
+        if self._is_paste_mode():
+            vertex = self._region_vertex_at(mouse_pos)
+            if vertex is not None:
+                self._show_region_vertex_menu(vertex[0], vertex[1], mouse_pos)
+                return True
+            if self._region_at(mouse_pos) is not None:
+                self._show_region_context_menu(mouse_pos)
+                return True
         labels_visible = self._editor.show_labels_checkbox.isChecked()
         vertex = self._polygon_vertex_at(mouse_pos) if labels_visible else None
         if vertex is not None and not self._editor._is_delete_view:
@@ -43,6 +51,243 @@ class CanvasMenuMixin:
                 self._show_background_context_menu(mouse_pos)
             return True
         return False
+
+    # ---------- 语义区域（仅运行时，贴图模式） ----------
+
+    def _is_paste_mode(self):
+        return (getattr(self._editor, 'edit_mode', 'paste') == 'paste'
+                and not getattr(self._editor, '_is_delete_view', False))
+
+    def _region_at(self, mouse_pos):
+        """返回鼠标位置下的区域索引（画布坐标转图像坐标判断）。"""
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions:
+            return None
+        background_rect = self.get_background_rect()
+        if background_rect is None or self.background_scale <= 0:
+            return None
+        ix = (mouse_pos.x() - background_rect.left()) / self.background_scale
+        iy = (mouse_pos.y() - background_rect.top()) / self.background_scale
+        from ..engine.shape_io import point_in_polygon
+        for i in range(len(regions) - 1, -1, -1):
+            r = regions[i]
+            if (r.get('shape_type') or 'rectangle') == 'polygon' and r.get('points'):
+                if point_in_polygon(ix, iy, r['points']):
+                    return i
+                continue
+            if (r['x'] <= ix <= r['x'] + r['width'] and
+                    r['y'] <= iy <= r['y'] + r['height']):
+                return i
+        return None
+
+    def _region_vertex_at(self, mouse_pos):
+        """返回鼠标位置下的区域多边形顶点 (index, vertex_index)。"""
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions:
+            return None
+        background_rect = self.get_background_rect()
+        if background_rect is None:
+            return None
+        from ..core.config import REGION_CONFIG
+        size = REGION_CONFIG['handle_size']
+        half = size / 2
+        for i in range(len(regions) - 1, -1, -1):
+            r = regions[i]
+            if (r.get('shape_type') or 'rectangle') != 'polygon' or not r.get('points'):
+                continue
+            for v, p in enumerate(r['points']):
+                hx = p[0] * self.background_scale + background_rect.left()
+                hy = p[1] * self.background_scale + background_rect.top()
+                if hx - half <= mouse_pos.x() <= hx + half and hy - half <= mouse_pos.y() <= hy + half:
+                    return i, v
+        return None
+
+    def _show_region_vertex_menu(self, region_index, vertex_index, mouse_pos):
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions or not (0 <= region_index < len(regions)):
+            return
+        region = regions[region_index]
+        points = region.get('points') or []
+        fixed = getattr(self._editor, 'region_fixed', False)
+
+        menu = QMenu(self)
+        delete_action = QAction(tr("删除顶点"), self)
+        delete_action.setEnabled(not fixed and len(points) > 3)
+        delete_action.triggered.connect(
+            lambda checked=False, r=region_index, v=vertex_index: self._delete_region_vertex(r, v)
+        )
+        menu.addAction(delete_action)
+        menu.exec_(QPoint(self.mapToGlobal(mouse_pos)))
+
+    def _delete_region_vertex(self, region_index, vertex_index):
+        if getattr(self._editor, 'region_fixed', False):
+            return False
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions or not (0 <= region_index < len(regions)):
+            return False
+        region = regions[region_index]
+        points = region.get('points') or []
+        if len(points) <= 3 or not (0 <= vertex_index < len(points)):
+            return False
+        del points[vertex_index]
+        region['points'] = points
+        self._sync_region_bbox(region)
+        self.selected_region = region_index
+        self.update()
+        return True
+
+    @staticmethod
+    def _sync_region_bbox(region):
+        """多边形区域的外接框与 points 同步。"""
+        points = region.get('points') or []
+        if not points:
+            return
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        region['x'] = float(min(xs))
+        region['y'] = float(min(ys))
+        region['width'] = float(max(xs) - region['x'])
+        region['height'] = float(max(ys) - region['y'])
+
+    def _region_handle_at(self, mouse_pos, index):
+        """返回区域四角缩放手柄名称。"""
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions or not (0 <= index < len(regions)):
+            return None
+        background_rect = self.get_background_rect()
+        if background_rect is None:
+            return None
+        from ..core.config import REGION_CONFIG
+        r = regions[index]
+        x = r['x'] * self.background_scale + background_rect.left()
+        y = r['y'] * self.background_scale + background_rect.top()
+        w = r['width'] * self.background_scale
+        h = r['height'] * self.background_scale
+        size = REGION_CONFIG['handle_size']
+        half = size / 2
+        handles = {
+            "tl": (x, y),
+            "tr": (x + w, y),
+            "bl": (x, y + h),
+            "br": (x + w, y + h),
+        }
+        for name, (hx, hy) in handles.items():
+            if hx - half <= mouse_pos.x() <= hx + half and hy - half <= mouse_pos.y() <= hy + half:
+                return name
+        return None
+
+    def _show_region_context_menu(self, mouse_pos):
+        index = self._region_at(mouse_pos)
+        if index is None:
+            return
+        fixed = getattr(self._editor, 'region_fixed', False)
+        menu = QMenu(self)
+
+        delete_action = QAction(tr("删除区域"), self)
+        delete_action.setEnabled(not fixed)
+        delete_action.triggered.connect(
+            lambda checked, i=index: self._delete_region(i)
+        )
+        menu.addAction(delete_action)
+
+        menu.addSeparator()
+        self._add_region_actions(menu, fixed)
+
+        menu.exec_(QPoint(self.mapToGlobal(mouse_pos)))
+
+    def _add_region_actions(self, menu, fixed):
+        """追加 添加矩形/多边形区域、固定、清空 菜单项。"""
+        add_rect_action = QAction(tr("添加区域（矩形）"), self)
+        add_rect_action.setEnabled(not fixed)
+        add_rect_action.triggered.connect(self._start_add_region)
+        menu.addAction(add_rect_action)
+
+        add_poly_action = QAction(tr("添加区域（多边形）"), self)
+        add_poly_action.setEnabled(not fixed)
+        add_poly_action.triggered.connect(self._start_add_region_polygon)
+        menu.addAction(add_poly_action)
+
+        fix_action = QAction(tr("固定区域"), self)
+        fix_action.setCheckable(True)
+        fix_action.setChecked(bool(fixed))
+        fix_action.triggered.connect(self._toggle_fix_regions)
+        menu.addAction(fix_action)
+
+        clear_action = QAction(tr("清空区域"), self)
+        clear_action.setEnabled(not fixed and bool(getattr(self._editor, 'region_boxes', None)))
+        clear_action.triggered.connect(self._clear_regions)
+        menu.addAction(clear_action)
+
+    def _start_add_region(self):
+        if getattr(self._editor, 'region_fixed', False):
+            return
+        self.is_drawing_region = True
+        self.is_drawing_region_polygon = False
+        self.temp_region_points = []
+        self.selected_region = None
+        self.draw_start_pos = None
+        self.temp_draw_box = None
+        self.setCursor(Qt.CrossCursor)
+        status = getattr(self._editor, 'status_label', None)
+        if status is not None:
+            status.setText(tr("添加区域（矩形）"))
+        self.update()
+
+    def _start_add_region_polygon(self):
+        if getattr(self._editor, 'region_fixed', False):
+            return
+        self.is_drawing_region = False
+        self.is_drawing_region_polygon = True
+        self.temp_region_points = []
+        self.selected_region = None
+        self.draw_start_pos = None
+        self.temp_draw_box = None
+        self.setCursor(Qt.CrossCursor)
+        status = getattr(self._editor, 'status_label', None)
+        if status is not None:
+            status.setText(tr("添加区域（多边形）"))
+        self.update()
+
+    def _toggle_fix_regions(self):
+        self._editor.region_fixed = not getattr(self._editor, 'region_fixed', False)
+        if self._editor.region_fixed:
+            self.is_drawing_region = False
+            self.is_drawing_region_polygon = False
+            self.temp_region_points = []
+            self.selected_region = None
+            self.setCursor(Qt.ArrowCursor)
+        self.update()
+
+    def _clear_regions(self):
+        if getattr(self._editor, 'region_fixed', False):
+            return
+        if not getattr(self._editor, 'region_boxes', None):
+            return
+        reply = dialog_helpers.question(
+            self._editor,
+            tr("确认删除"),
+            tr("确定要清空所有区域吗？"),
+            dialog_helpers.QMessageBox.Yes | dialog_helpers.QMessageBox.No,
+            dialog_helpers.QMessageBox.No,
+        )
+        if reply != dialog_helpers.QMessageBox.Yes:
+            return
+        self._editor.region_boxes = []
+        self.selected_region = None
+        self.is_drawing_region = False
+        self.is_drawing_region_polygon = False
+        self.temp_region_points = []
+        self.update()
+
+    def _delete_region(self, index):
+        if getattr(self._editor, 'region_fixed', False):
+            return
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions or not (0 <= index < len(regions)):
+            return
+        regions.pop(index)
+        self.selected_region = None
+        self.update()
 
     def _find_detection_box_at(self, mouse_pos):
         """查找鼠标位置下的检测框"""
@@ -393,6 +638,10 @@ class CanvasMenuMixin:
         remove_action = QAction(tr("移除图片"), self)
         remove_action.triggered.connect(self._remove_current_background)
         menu.addAction(remove_action)
+
+        if self._is_paste_mode():
+            menu.addSeparator()
+            self._add_region_actions(menu, getattr(self._editor, 'region_fixed', False))
 
         menu.exec_(QPoint(self.mapToGlobal(mouse_pos)))
 

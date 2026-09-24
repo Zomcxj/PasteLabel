@@ -160,6 +160,10 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         self.detection_boxes = []
         self._last_paste_slot = None
         self._last_paste_start = -1
+
+        # 语义区域（仅运行时存在，不持久化/不导出，全局共享一套）
+        self.region_boxes = []
+        self.region_fixed = False
         self._last_paste_count = 0
         self.global_labels = set()
         self.background_dataset_labels = set()
@@ -315,6 +319,12 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
             self.canvas.selected_boxes = []
             self.canvas.hover_resize_target = None
             self.canvas.hover_resize_handle = None
+            self.canvas.selected_region = None
+            self.canvas.is_dragging_region = False
+            self.canvas.is_resizing_region = False
+            self.canvas.region_resize_handle = None
+            if getattr(self.canvas, 'is_drawing_region', False):
+                self.canvas._reset_region_drawing_state()
             self.canvas.update()
         self._apply_mode_visibility_defaults()
         self._update_mode_seg_style(animated=animated)

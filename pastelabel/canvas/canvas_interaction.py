@@ -45,6 +45,24 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                 self._handle_background_click(mouse_pos)
             return
 
+        if getattr(self, 'is_drawing_region', False):
+            # 区域绘制模式：左键画矩形，右键取消
+            self._drag_out_pending = False
+            if event.button() == Qt.LeftButton:
+                self._handle_region_press(mouse_pos)
+            elif event.button() == Qt.RightButton:
+                self._cancel_region_drawing()
+            return
+
+        if getattr(self, 'is_drawing_region_polygon', False):
+            # 多边形区域绘制：左键逐点添加，右键完成
+            self._drag_out_pending = False
+            if event.button() == Qt.LeftButton:
+                self._handle_region_polygon_press(mouse_pos)
+            elif event.button() == Qt.RightButton:
+                self._prompt_finish_region_polygon()
+            return
+
         if self.is_drawing_box:
             # 绘制模式下只响应左键画框，禁止贴图/检测框进入编辑态
             if event.button() == Qt.LeftButton:
@@ -78,19 +96,26 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             getattr(self._editor, '_canvas_image_copy_enabled', False)
             and not self.is_drawing_box
             and not getattr(self, 'is_drawing_polygon', False)
+            and not getattr(self, 'is_drawing_region', False)
+            and not getattr(self, 'is_drawing_region_polygon', False)
             and not self.is_dragging_background
             and not self.is_dragging_box
             and not self.is_dragging_item
             and not self.is_manual_scale
             and self.background_scale <= 1.0
             and self.find_item_at_position(mouse_pos) is None
+            and self._region_at(mouse_pos) is None
         )
         self._handle_left_click(mouse_pos)
-        if self.is_dragging_box or self.is_resizing_box:
+        if (self.is_dragging_box or self.is_resizing_box or self.is_dragging_region
+                or self.is_resizing_region or self.is_dragging_region_vertex):
             self._drag_out_pending = False
 
     def _handle_left_click(self, mouse_pos):
-        if getattr(self, 'is_drawing_box', False) or getattr(self, 'is_drawing_polygon', False):
+        if (getattr(self, 'is_drawing_box', False)
+                or getattr(self, 'is_drawing_polygon', False)
+                or getattr(self, 'is_drawing_region', False)
+                or getattr(self, 'is_drawing_region_polygon', False)):
             return
         is_annotate = getattr(self._editor, 'edit_mode', 'paste') == 'annotate'
 
@@ -110,12 +135,261 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             if self._editor.show_labels_checkbox.isChecked() and self._editor.current_background:
                 if self._handle_detection_box_click(mouse_pos):
                     return
+            if self._handle_region_click(mouse_pos):
+                return
 
         if self._editor.current_background:
             if self._handle_background_click(mouse_pos):
                 return
 
         self._clear_selection()
+
+    def _handle_region_click(self, mouse_pos):
+        """贴图模式下区域编辑入口：顶点/手柄→缩放，边上→插点，内部→拖动。"""
+        if not self._is_paste_mode():
+            return False
+        if getattr(self._editor, 'region_fixed', False):
+            return False
+
+        # 多边形顶点优先
+        vertex = self._region_vertex_at(mouse_pos)
+        if vertex is not None:
+            self.selected_region = vertex[0]
+            self.selected_region_vertex = vertex[1]
+            self.region_vertex_drag_index = vertex[1]
+            self.is_dragging_region_vertex = True
+            self._editor.selected_item = None
+            self.selected_item_size = None
+            self.selected_box = None
+            self.selected_boxes = []
+            self.update()
+            return True
+
+        # 多边形边上点击 → 插入顶点
+        edge = self._region_polygon_edge_at(mouse_pos)
+        if edge is not None:
+            r_idx, v_idx, img_pt = edge
+            if self._insert_region_vertex(r_idx, v_idx, img_pt):
+                self.selected_region = r_idx
+                self.update()
+                return True
+
+        index = self._region_at(mouse_pos)
+        if index is None:
+            self.selected_region = None
+            self.selected_region_vertex = None
+            return False
+        self.selected_region = index
+        self.selected_region_vertex = None
+        self._editor.selected_item = None
+        self.selected_item_size = None
+        self.selected_box = None
+        self.selected_boxes = []
+        handle = self._region_handle_at(mouse_pos, index)
+        if handle:
+            self.region_resize_handle = handle
+            self.is_resizing_region = True
+            self.region_resize_start = mouse_pos
+        else:
+            self.is_dragging_region = True
+            self.region_drag_start = mouse_pos
+        self.update()
+        return True
+
+    def _region_polygon_edge_at(self, mouse_pos):
+        """返回鼠标附近的区域多边形边 (region_index, vertex_index, image_point)。"""
+        from ..engine.shape_io import point_line_distance
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions:
+            return None
+        background_rect = self.get_background_rect()
+        if background_rect is None:
+            return None
+        from ..core.config import REGION_CONFIG
+        threshold = REGION_CONFIG['handle_size'] * 1.5
+        for i in range(len(regions) - 1, -1, -1):
+            region = regions[i]
+            if (region.get('shape_type') or 'rectangle') != 'polygon':
+                continue
+            points = region.get('points') or []
+            if len(points) < 3:
+                continue
+            n = len(points)
+            for v in range(n):
+                p1 = points[v]
+                p2 = points[(v + 1) % n]
+                c1 = (p1[0] * self.background_scale + background_rect.left(),
+                      p1[1] * self.background_scale + background_rect.top())
+                c2 = (p2[0] * self.background_scale + background_rect.left(),
+                      p2[1] * self.background_scale + background_rect.top())
+                if point_line_distance((mouse_pos.x(), mouse_pos.y()), (c1, c2)) <= threshold:
+                    mid_x = (p1[0] + p2[0]) / 2
+                    mid_y = (p1[1] + p2[1]) / 2
+                    return i, v + 1, [mid_x, mid_y]
+        return None
+
+    def _insert_region_vertex(self, region_index, vertex_index, point):
+        if getattr(self._editor, 'region_fixed', False):
+            return False
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions or not (0 <= region_index < len(regions)):
+            return False
+        region = regions[region_index]
+        if (region.get('shape_type') or 'rectangle') != 'polygon':
+            return False
+        points = region.get('points') or []
+        if not (0 <= vertex_index <= len(points)):
+            return False
+        from ..core.config import REGION_CONFIG
+        if len(points) >= REGION_CONFIG['polygon_max_points']:
+            return False
+        points.insert(vertex_index, [float(point[0]), float(point[1])])
+        region['points'] = points
+        self._sync_region_bbox(region)
+        return True
+
+    def _drag_region_vertex(self):
+        if getattr(self._editor, 'region_fixed', False):
+            return
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions or self.selected_region is None:
+            return
+        if not (0 <= self.selected_region < len(regions)):
+            return
+        region = regions[self.selected_region]
+        points = region.get('points') or []
+        v = self.region_vertex_drag_index
+        if v is None or not (0 <= v < len(points)):
+            return
+        delta = self.mouse_pos - self.region_drag_start
+        dx = delta.x() / self.background_scale
+        dy = delta.y() / self.background_scale
+        px = points[v][0] + dx
+        py = points[v][1] + dy
+        bg = self._editor.current_background
+        if bg is not None:
+            px = max(0, min(px, bg.width()))
+            py = max(0, min(py, bg.height()))
+        points[v] = [px, py]
+        region['points'] = points
+        self._sync_region_bbox(region)
+        self.region_drag_start = self.mouse_pos
+        self.update()
+
+    def _drag_region(self):
+        if getattr(self._editor, 'region_fixed', False):
+            return
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions or self.selected_region is None:
+            return
+        if not (0 <= self.selected_region < len(regions)):
+            return
+        delta = self.mouse_pos - self.region_drag_start
+        region = regions[self.selected_region]
+        dx = delta.x() / self.background_scale
+        dy = delta.y() / self.background_scale
+        bg = self._editor.current_background
+
+        if (region.get('shape_type') or 'rectangle') == 'polygon' and region.get('points'):
+            # 整体平移：按允许的位移夹紧
+            region_w = region['width']
+            region_h = region['height']
+            nx = region['x'] + dx
+            ny = region['y'] + dy
+            if bg is not None:
+                nx = max(0, min(nx, bg.width() - region_w))
+                ny = max(0, min(ny, bg.height() - region_h))
+            applied_dx = nx - region['x']
+            applied_dy = ny - region['y']
+            region['points'] = [
+                [p[0] + applied_dx, p[1] + applied_dy] for p in region['points']
+            ]
+            region['x'] = nx
+            region['y'] = ny
+        else:
+            nx = region['x'] + dx
+            ny = region['y'] + dy
+            if bg is not None:
+                nx = max(0, min(nx, bg.width() - region['width']))
+                ny = max(0, min(ny, bg.height() - region['height']))
+            region['x'] = nx
+            region['y'] = ny
+        self.region_drag_start = self.mouse_pos
+        self.update()
+
+    def _resize_region(self):
+        from ..core.config import REGION_CONFIG
+        if getattr(self._editor, 'region_fixed', False):
+            return
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions or self.selected_region is None:
+            return
+        if not (0 <= self.selected_region < len(regions)):
+            return
+        delta = self.mouse_pos - self.region_resize_start
+        dx = delta.x() / self.background_scale
+        dy = delta.y() / self.background_scale
+        region = regions[self.selected_region]
+
+        # 多边形区域：bbox 缩放同步到所有顶点
+        if (region.get('shape_type') or 'rectangle') == 'polygon' and region.get('points'):
+            x, y, w, h = region['x'], region['y'], region['width'], region['height']
+            nx, ny, nw, nh = self._compute_region_resize_box(
+                x, y, w, h, dx, dy, REGION_CONFIG['min_size']
+            )
+            if w > 0 and h > 0 and (nw != w or nh != h or nx != x or ny != y):
+                sx = nw / w
+                sy = nh / h
+                region['points'] = [
+                    [nx + (p[0] - x) * sx, ny + (p[1] - y) * sy]
+                    for p in region['points']
+                ]
+                region['x'], region['y'] = nx, ny
+                region['width'], region['height'] = nw, nh
+            self.region_resize_start = self.mouse_pos
+            self.update()
+            return
+
+        x, y, w, h = region['x'], region['y'], region['width'], region['height']
+        nx, ny, nw, nh = self._compute_region_resize_box(
+            x, y, w, h, dx, dy, REGION_CONFIG['min_size']
+        )
+        region['x'], region['y'], region['width'], region['height'] = nx, ny, nw, nh
+        self.region_resize_start = self.mouse_pos
+        self.update()
+
+    def _compute_region_resize_box(self, x, y, w, h, dx, dy, min_size):
+        """按当前拖拽手柄计算新的 bbox（夹紧背景与最小尺寸）。"""
+        bg = self._editor.current_background
+        max_w = max(min_size, bg.width() - x) if bg else None
+        max_h = max(min_size, bg.height() - y) if bg else None
+
+        nx, ny, nw, nh = x, y, w, h
+        if self.region_resize_handle == "br":
+            nw = max(min_size, w + dx)
+            nh = max(min_size, h + dy)
+            if max_w is not None:
+                nw = min(nw, max_w)
+            if max_h is not None:
+                nh = min(nh, max_h)
+        elif self.region_resize_handle == "tl":
+            nx = max(0, min(x + dx, x + w - min_size))
+            ny = max(0, min(y + dy, y + h - min_size))
+            nw = w + x - nx
+            nh = h + y - ny
+        elif self.region_resize_handle == "tr":
+            nw = max(min_size, w + dx)
+            if max_w is not None:
+                nw = min(nw, max_w)
+            ny = max(0, min(y + dy, y + h - min_size))
+            nh = h + y - ny
+        elif self.region_resize_handle == "bl":
+            nx = max(0, min(x + dx, x + w - min_size))
+            nw = w + x - nx
+            nh = max(min_size, h + dy)
+            if max_h is not None:
+                nh = min(nh, max_h)
+        return nx, ny, nw, nh
 
     def _handle_item_click(self, item_index, mouse_pos):
         if self.is_drawing_box:
@@ -367,6 +641,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.selected_item_size = None
         self.selected_box = None
         self.selected_boxes = []
+        self.selected_region = None
         self.hover_resize_target = None
         self.hover_resize_handle = None
         self.resize_handle = None
@@ -446,6 +721,29 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self.update()
             return
 
+        if getattr(self, 'is_drawing_region_polygon', False):
+            self.update()
+            return
+
+        if getattr(self, 'is_drawing_region', False):
+            if self.draw_start_pos is not None:
+                bg_rect = self.get_background_rect()
+                if bg_rect:
+                    c = self._constrain_to_background(self.mouse_pos, bg_rect)
+                    x1 = min(self.draw_start_pos.x(), c.x())
+                    y1 = min(self.draw_start_pos.y(), c.y())
+                    x2 = max(self.draw_start_pos.x(), c.x())
+                    y2 = max(self.draw_start_pos.y(), c.y())
+                    self.temp_draw_box = QRectF(x1, y1, x2 - x1, y2 - y1)
+                else:
+                    x1 = min(self.draw_start_pos.x(), self.mouse_pos.x())
+                    y1 = min(self.draw_start_pos.y(), self.mouse_pos.y())
+                    x2 = max(self.draw_start_pos.x(), self.mouse_pos.x())
+                    y2 = max(self.draw_start_pos.y(), self.mouse_pos.y())
+                    self.temp_draw_box = QRectF(x1, y1, x2 - x1, y2 - y1)
+            self.update()
+            return
+
         if self.is_drawing_box:
             if self.draw_start_pos:
                 bg_rect = self.get_background_rect()
@@ -471,6 +769,21 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self.background_offset += delta
             self.drag_start = self.mouse_pos
             self.update()
+            return
+
+        if self.is_dragging_region:
+            self.setCursor(Qt.ClosedHandCursor)
+            self._drag_region()
+            return
+
+        if self.is_resizing_region:
+            self.setCursor(Qt.ClosedHandCursor)
+            self._resize_region()
+            return
+
+        if self.is_dragging_region_vertex:
+            self.setCursor(Qt.ClosedHandCursor)
+            self._drag_region_vertex()
             return
 
         if self.is_dragging_box and self.selected_box is not None:
@@ -571,6 +884,13 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         if (self.hover_resize_target is None
                 and not self.is_drawing_box
                 and not getattr(self, 'is_drawing_polygon', False)
+                and not getattr(self, 'is_drawing_region', False)
+                and self.find_item_at_position(self.mouse_pos) is None):
+            self._check_region_hover()
+
+        if (self.hover_resize_target is None
+                and not self.is_drawing_box
+                and not getattr(self, 'is_drawing_polygon', False)
                 and getattr(self._editor, 'edit_mode', 'paste') == 'annotate'
                 and self._editor.show_labels_checkbox.isChecked()
                 and self._polygon_edge_at(self.mouse_pos) is not None):
@@ -578,6 +898,30 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
         if (old_target, old_handle) != (self.hover_resize_target, self.hover_resize_handle):
             self.update()
+
+    def _check_region_hover(self):
+        """贴图模式下区域悬停光标提示（固定时跳过）。"""
+        if not self._is_paste_mode() or getattr(self._editor, 'region_fixed', False):
+            return False
+        if self._region_vertex_at(self.mouse_pos) is not None:
+            self.setCursor(Qt.PointingHandCursor)
+            return True
+        index = self._region_at(self.mouse_pos)
+        if index is None:
+            return False
+        region = (getattr(self._editor, 'region_boxes', None) or [])[index]
+        if (region.get('shape_type') or 'rectangle') == 'polygon':
+            if self._region_polygon_edge_at(self.mouse_pos) is not None:
+                self.setCursor(Qt.CrossCursor)
+                return True
+            self.setCursor(Qt.OpenHandCursor)
+            return True
+        handle = self._region_handle_at(self.mouse_pos, index)
+        if handle:
+            self.setCursor(Qt.PointingHandCursor)
+        else:
+            self.setCursor(Qt.OpenHandCursor)
+        return True
 
     def _select_hovered_detection_box(self, background_rect):
         """鼠标移入检测框即进入该框编辑状态。"""
@@ -816,9 +1160,30 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self._prompt_finish_polygon(pop_duplicate=True)
             event.accept()
             return
+        if getattr(self, 'is_drawing_region_polygon', False) and event.button() == Qt.LeftButton:
+            self._prompt_finish_region_polygon(pop_duplicate=True)
+            event.accept()
+            return
         super().mouseDoubleClickEvent(event)
 
     def keyPressEvent(self, event):
+        if getattr(self, 'is_drawing_region', False) and event.key() == Qt.Key_Escape:
+            self._cancel_region_drawing()
+            event.accept()
+            return
+        if getattr(self, 'is_drawing_region_polygon', False):
+            if event.key() == Qt.Key_Backspace:
+                self._region_polygon_pop_last_point()
+                event.accept()
+                return
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                self._prompt_finish_region_polygon()
+                event.accept()
+                return
+            if event.key() == Qt.Key_Escape:
+                self._cancel_region_drawing()
+                event.accept()
+                return
         if getattr(self, 'is_drawing_polygon', False):
             if event.key() == Qt.Key_Backspace:
                 self._polygon_pop_last_point()
@@ -836,6 +1201,13 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
     def mouseReleaseEvent(self, event):
         self._drag_out_pending = False
+
+        if getattr(self, 'is_drawing_region', False) and self.draw_start_pos is not None:
+            self._complete_region_drawing(event.pos())
+            self._check_hover()
+            self.update()
+            return
+
         if self._can_edit_canvas() and (self.is_dragging_box or self.is_resizing_box or self.is_rotating_box):
             if hasattr(self, '_needs_save') and self._needs_save:
                 self._save_current_detection_boxes()
@@ -845,7 +1217,12 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         self.is_dragging_background = False
         self.is_dragging_box = False
         self.is_resizing_box = False
+        self.is_dragging_region_vertex = False
+        self.region_vertex_drag_index = None
         self.is_rotating_box = False
+        self.is_dragging_region = False
+        self.is_resizing_region = False
+        self.region_resize_handle = None
         self.rotation_prev_angle = None
         self.resize_handle = None
         self._check_hover()
@@ -857,6 +1234,9 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
         if event.modifiers() & Qt.ControlModifier:
             self._scale_background(event)
+        elif (self._region_at(self.mouse_pos) is not None and
+              self.find_item_at_position(self.mouse_pos) is None):
+            self._scale_hovered_region(event)
         elif self._editor.selected_item is not None:
             self._scale_selected_item(event)
         elif self.selected_box is not None:
@@ -876,6 +1256,57 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                         self._wheel_edge_target = (self.selected_box, edge)
                         self._adjust_selected_box_edge(event, edge)
 
+        self.update()
+
+    def _scale_hovered_region(self, event):
+        """鼠标悬停在区域上时滚轮缩放该区域（绕中心，夹紧背景边界）。"""
+        if getattr(self._editor, 'region_fixed', False):
+            return
+        index = self._region_at(self.mouse_pos)
+        if index is None:
+            return
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions or not (0 <= index < len(regions)):
+            return
+
+        from ..core.config import REGION_CONFIG, DETECTION_BOX_WHEEL_CONFIG
+        delta = event.angleDelta().y()
+        step = max(0.01, min(0.30, float(
+            DETECTION_BOX_WHEEL_CONFIG.get('region_scale_step', 0.05))))
+        scale_factor = 1.0 + step if delta > 0 else max(0.1, 1.0 - step)
+
+        region = regions[index]
+        x, y, w, h = region['x'], region['y'], region['width'], region['height']
+        cx = x + w / 2
+        cy = y + h / 2
+        min_size = REGION_CONFIG['min_size']
+
+        new_w = max(min_size, w * scale_factor)
+        new_h = max(min_size, h * scale_factor)
+
+        bg = self._editor.current_background
+        if bg is not None:
+            max_w = min(bg.width(), bg.width() * 0.9)
+            max_h = min(bg.height(), bg.height() * 0.9)
+            new_w = min(new_w, max_w)
+            new_h = min(new_h, max_h)
+
+        nx = cx - new_w / 2
+        ny = cy - new_h / 2
+        if bg is not None:
+            nx = max(0, min(nx, bg.width() - new_w))
+            ny = max(0, min(ny, bg.height() - new_h))
+
+        region['x'], region['y'] = nx, ny
+        region['width'], region['height'] = new_w, new_h
+        if (region.get('shape_type') or 'rectangle') == 'polygon' and region.get('points'):
+            sx = new_w / w if w > 0 else 1.0
+            sy = new_h / h if h > 0 else 1.0
+            region['points'] = [
+                [nx + (p[0] - x) * sx, ny + (p[1] - y) * sy]
+                for p in region['points']
+            ]
+        self.selected_region = index
         self.update()
 
     def _is_mouse_inside_selected_box(self):

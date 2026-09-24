@@ -29,6 +29,7 @@ exports/
 images/
 x-anylabeling-matting/
 images_paste_output/
+*_paste_output/
 
 # Logs
 crash_log.txt

@@ -60,6 +60,20 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         self.temp_draw_box = None
         self.temp_polygon_points = []
 
+        # 语义区域相关（仅运行时，贴图模式右键菜单操作）
+        self.is_drawing_region = False
+        self.is_drawing_region_polygon = False
+        self.temp_region_points = []
+        self.selected_region = None
+        self.selected_region_vertex = None
+        self.is_dragging_region = False
+        self.is_resizing_region = False
+        self.is_dragging_region_vertex = False
+        self.region_vertex_drag_index = None
+        self.region_resize_handle = None
+        self.region_drag_start = QPoint()
+        self.region_resize_start = QPoint()
+
         # 画布显示参数（亮度/对比度在本次运行内跨图常驻）
         self.shape_opacity = 1.0
         self._brightness = 50

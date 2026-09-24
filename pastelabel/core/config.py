@@ -44,6 +44,18 @@ DETECTION_BOX_CONFIG = {
     'fill_color_selected': (0, 255, 128, 50),  # 选中填充颜色 (RGBA)
 }
 
+# 语义区域配置（仅运行时存在，不持久化）
+REGION_CONFIG = {
+    'min_size': 10,            # 区域最小边长（图像像素）
+    'border_color': '#00D4FF',  # 区域边框颜色（青色）
+    'border_width': 2,         # 边框宽度
+    'dash_pattern': (6, 4),    # 虚线样式
+    'handle_size': 8,          # 缩放手柄大小
+    'fill_alpha': 30,          # 选中时填充透明度
+    'polygon_max_points': 64,  # 多边形区域最大顶点数
+    'polygon_max_retries': 200,  # 多边形区域内采样贴图中心的最大重试次数
+}
+
 # 贴图配置
 PASTE_ITEM_CONFIG = {
     'border_color': (135, 206, 250),  # 天蓝色边框 (RGB)
@@ -183,6 +195,7 @@ BOX_BORDER_CONFIG = {'width': 1.0}
 DETECTION_BOX_WHEEL_CONFIG = {
     'detection_box_scale_step': 0.05,  # 检测框内滚轮整体缩放步长
     'paste_item_scale_step': 0.15,  # 贴图内滚轮整体缩放步长
+    'region_scale_step': 0.05,  # 区域悬停滚轮缩放步长
     'edge_step': 5,      # 框外滚轮单边位移像素
 }
 

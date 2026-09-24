@@ -13,6 +13,161 @@ class CanvasDrawingMixin:
     def _can_edit_canvas(self):
         return not getattr(self._editor, '_is_delete_view', False)
 
+    def _handle_region_press(self, mouse_pos):
+        """语义区域绘制：左键按下定起点，拖动预览，松开完成。"""
+        if not self._can_edit_canvas():
+            return True
+        if getattr(self._editor, 'region_fixed', False):
+            return True
+        if (not self._editor.background_images or
+            self._editor.current_background_index < 0):
+            return True
+
+        background_rect = self.get_background_rect()
+        if not background_rect or not background_rect.contains(mouse_pos):
+            return True
+
+        if self.draw_start_pos is None:
+            self.draw_start_pos = mouse_pos
+            self.temp_draw_box = QRectF(mouse_pos, QSizeF())
+            self.selected_box = None
+            self.selected_boxes = []
+            self.selected_region = None
+            self._editor.selected_item = None
+            self.update_status_label()
+            self.update()
+
+        return True
+
+    def _complete_region_drawing(self, mouse_pos):
+        if self.draw_start_pos is None:
+            return
+        background_rect = self.get_background_rect()
+        if background_rect is None:
+            self._reset_region_drawing_state()
+            return
+
+        from ..core.config import REGION_CONFIG
+        constrained_pos = self._constrain_to_background(mouse_pos, background_rect)
+
+        x1 = min(self.draw_start_pos.x(), constrained_pos.x())
+        y1 = min(self.draw_start_pos.y(), constrained_pos.y())
+        x2 = max(self.draw_start_pos.x(), constrained_pos.x())
+        y2 = max(self.draw_start_pos.y(), constrained_pos.y())
+
+        x = (x1 - background_rect.left()) / self.background_scale
+        y = (y1 - background_rect.top()) / self.background_scale
+        width = (x2 - x1) / self.background_scale
+        height = (y2 - y1) / self.background_scale
+
+        if width <= REGION_CONFIG['min_size'] or height <= REGION_CONFIG['min_size']:
+            self._reset_region_drawing_state()
+            return
+
+        if not isinstance(getattr(self._editor, 'region_boxes', None), list):
+            self._editor.region_boxes = []
+        self._editor.region_boxes.append({
+            'shape_type': 'rectangle',
+            'x': float(x), 'y': float(y),
+            'width': float(width), 'height': float(height),
+        })
+        self._reset_region_drawing_state()
+
+    def _reset_region_drawing_state(self):
+        self.is_drawing_region = False
+        self.is_drawing_region_polygon = False
+        self.temp_region_points = []
+        self.draw_start_pos = None
+        self.temp_draw_box = None
+        self.setCursor(Qt.ArrowCursor)
+        self.update()
+
+    def _cancel_region_drawing(self):
+        if self.is_drawing_region or self.is_drawing_region_polygon:
+            self._reset_region_drawing_state()
+
+    # ---------- 多边形区域绘制（逐点添加，同 seg 标注） ----------
+
+    def _handle_region_polygon_press(self, mouse_pos):
+        """多边形区域：左键逐点添加顶点。"""
+        if not self._can_edit_canvas():
+            return True
+        if getattr(self._editor, 'region_fixed', False):
+            return True
+        if (not self._editor.background_images or
+            self._editor.current_background_index < 0):
+            return True
+
+        background_rect = self.get_background_rect()
+        if not background_rect or not background_rect.contains(mouse_pos):
+            return True
+
+        from ..core.config import REGION_CONFIG
+        if len(self.temp_region_points) >= REGION_CONFIG['polygon_max_points']:
+            status = getattr(self._editor, 'status_label', None)
+            if status is not None:
+                from ..ui.i18n import t as tr
+                status.setText(tr("已达最大点数"))
+            return True
+
+        point = self._canvas_to_image_point(mouse_pos, background_rect)
+        if point is None:
+            return True
+        self.temp_region_points.append(point)
+        self.selected_region = None
+        self.selected_box = None
+        self.selected_boxes = []
+        self._editor.selected_item = None
+        self.update_status_label()
+        self.update()
+        return True
+
+    def _can_close_region_polygon(self):
+        return len(self.temp_region_points) >= 3
+
+    def _region_polygon_pop_last_point(self):
+        if self.temp_region_points:
+            self.temp_region_points.pop()
+        if not self.temp_region_points:
+            self._reset_region_drawing_state()
+        else:
+            self.update()
+
+    def _finish_region_polygon(self, pop_duplicate=False):
+        if pop_duplicate and len(self.temp_region_points) > 3:
+            self.temp_region_points.pop()
+        if not self._can_close_region_polygon():
+            self._reset_region_drawing_state()
+            return
+
+        points = [list(p) for p in self.temp_region_points]
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        x, y = min(xs), min(ys)
+        width = max(xs) - x
+        height = max(ys) - y
+
+        from ..core.config import REGION_CONFIG
+        if width <= REGION_CONFIG['min_size'] or height <= REGION_CONFIG['min_size']:
+            self._reset_region_drawing_state()
+            return
+
+        if not isinstance(getattr(self._editor, 'region_boxes', None), list):
+            self._editor.region_boxes = []
+        self._editor.region_boxes.append({
+            'shape_type': 'polygon',
+            'points': points,
+            'x': float(x), 'y': float(y),
+            'width': float(width), 'height': float(height),
+        })
+        self._reset_region_drawing_state()
+
+    def _prompt_finish_region_polygon(self, pop_duplicate=False):
+        if not self._can_close_region_polygon():
+            self._reset_region_drawing_state()
+            return
+        self._finish_region_polygon(pop_duplicate=pop_duplicate)
+
     def _handle_drawing_press(self, mouse_pos):
         if not self._can_edit_canvas():
             return True

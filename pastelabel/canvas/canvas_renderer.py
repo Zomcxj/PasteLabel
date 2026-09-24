@@ -57,6 +57,9 @@ class CanvasRendererMixin:
 
             sp.setOpacity(self.shape_opacity)
 
+            if background_rect and self._is_paste_mode():
+                self._draw_regions(sp, background_rect)
+
             if background_rect:
                 self._draw_paste_items(sp, background_rect)
 
@@ -66,8 +69,12 @@ class CanvasRendererMixin:
 
             if self.is_drawing_box:
                 self._draw_temp_box(sp)
+            if getattr(self, 'is_drawing_region', False):
+                self._draw_temp_region_box(sp)
             if getattr(self, 'is_drawing_polygon', False):
                 self._draw_temp_polygon(sp, background_rect)
+            if getattr(self, 'is_drawing_region_polygon', False):
+                self._draw_temp_region_polygon(sp, background_rect)
 
             sp.setOpacity(1.0)
 
@@ -150,6 +157,77 @@ class CanvasRendererMixin:
             painter.drawLine(int(background_rect.left()), int(y),
                            int(background_rect.right()), int(y))
             y += scaled_spacing
+
+    def _is_paste_mode(self):
+        """区域仅在贴图模式显示/编辑。"""
+        return (getattr(self._editor, 'edit_mode', 'paste') == 'paste'
+                and not getattr(self._editor, '_is_delete_view', False))
+
+    def _draw_regions(self, painter, background_rect):
+        """绘制语义区域（在贴图下方），支持矩形与多边形。"""
+        regions = getattr(self._editor, 'region_boxes', None)
+        if not regions:
+            return
+        from ..core.config import REGION_CONFIG
+        color = QColor(REGION_CONFIG['border_color'])
+        fixed = getattr(self._editor, 'region_fixed', False)
+
+        painter.save()
+        for i, region in enumerate(regions):
+            is_selected = (i == self.selected_region and not fixed)
+            pen = QPen(color, REGION_CONFIG['border_width'] * (2 if is_selected else 1))
+            pen.setStyle(Qt.DashLine)
+            pen.setDashPattern(REGION_CONFIG['dash_pattern'])
+            painter.setPen(pen)
+            fill = QColor(color)
+            fill.setAlpha(REGION_CONFIG['fill_alpha'])
+            painter.setBrush(fill if is_selected else Qt.NoBrush)
+
+            if (region.get('shape_type') or 'rectangle') == 'polygon' and region.get('points'):
+                self._draw_region_polygon(painter, region, background_rect, color, is_selected)
+                continue
+
+            x = region['x'] * self.background_scale + background_rect.left()
+            y = region['y'] * self.background_scale + background_rect.top()
+            w = region['width'] * self.background_scale
+            h = region['height'] * self.background_scale
+            painter.drawRect(QRectF(x, y, w, h))
+
+            if is_selected:
+                self._draw_region_handles(painter, x, y, w, h, color)
+        painter.restore()
+
+    def _draw_region_polygon(self, painter, region, background_rect, color, is_selected):
+        """绘制多边形区域；选中时显示顶点圆点手柄。"""
+        from ..core.config import REGION_CONFIG
+        from PyQt5.QtGui import QPainterPath
+        pts = self._image_to_canvas_points(region['points'], background_rect)
+        if len(pts) < 2:
+            return
+        path = QPainterPath()
+        path.moveTo(pts[0])
+        for p in pts[1:]:
+            path.lineTo(p)
+        path.closeSubpath()
+        painter.drawPath(path)
+
+        if is_selected:
+            size = REGION_CONFIG['handle_size']
+            radius = size / 2
+            painter.setPen(QPen(color, 1))
+            painter.setBrush(QColor(255, 255, 255))
+            for p in pts:
+                painter.drawEllipse(p, radius, radius)
+
+    def _draw_region_handles(self, painter, x, y, w, h, color):
+        """区域四角缩放手柄（与检测框样式一致）。"""
+        from ..core.config import REGION_CONFIG
+        size = REGION_CONFIG['handle_size']
+        radius = size / 2
+        painter.setPen(QPen(color, 1))
+        painter.setBrush(QColor(255, 255, 255))
+        for cx, cy in ((x, y), (x + w, y), (x, y + h), (x + w, y + h)):
+            painter.drawEllipse(QPointF(cx, cy), radius, radius)
 
     def _draw_paste_items(self, painter, background_rect):
         """绘制所有贴图"""
@@ -607,6 +685,38 @@ class CanvasRendererMixin:
         for p in pts:
             painter.drawEllipse(p, 3, 3)
 
+
+    def _draw_temp_region_box(self, painter):
+        """绘制中的矩形区域预览（青色虚线，与区域颜色一致）。"""
+        if self.temp_draw_box is None or self.draw_start_pos is None:
+            return
+        from ..core.config import REGION_CONFIG
+        color = QColor(REGION_CONFIG['border_color'])
+        pen = QPen(color, REGION_CONFIG['border_width'], Qt.DashLine)
+        pen.setDashPattern(REGION_CONFIG['dash_pattern'])
+        painter.setPen(pen)
+        painter.drawRect(self.temp_draw_box)
+
+    def _draw_temp_region_polygon(self, painter, background_rect):
+        """绘制中的多边形区域预览（青色虚线）。"""
+        if not background_rect or not getattr(self, 'temp_region_points', None):
+            return
+        from PyQt5.QtGui import QPainterPath
+        from ..core.config import REGION_CONFIG
+        color = QColor(REGION_CONFIG['border_color'])
+        pts = self._image_to_canvas_points(self.temp_region_points, background_rect)
+        painter.setPen(QPen(color, REGION_CONFIG['border_width'], Qt.DashLine))
+        path = QPainterPath()
+        path.moveTo(pts[0])
+        for p in pts[1:]:
+            path.lineTo(p)
+        if self.mouse_inside:
+            path.lineTo(QPointF(self.mouse_pos.x(), self.mouse_pos.y()))
+        painter.drawPath(path)
+        painter.setBrush(QColor(255, 255, 255))
+        painter.setPen(QPen(color, 1))
+        for p in pts:
+            painter.drawEllipse(p, 3, 3)
 
     def _draw_crosshair(self, painter):
         """绘制标注模式的鼠标十字虚线。"""

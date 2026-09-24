@@ -1256,6 +1256,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
                         self._wheel_edge_target = (self.selected_box, edge)
                         self._adjust_selected_box_edge(event, edge)
 
+        # 滚轮不产生鼠标移动事件，必须主动刷新状态栏宽高
+        self.update_status_label()
         self.update()
 
     def _scale_hovered_region(self, event):

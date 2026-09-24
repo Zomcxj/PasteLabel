@@ -209,6 +209,11 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
                     parts.append(format_size_ratio(size[0], size[1],
                                                    image_w, image_h))
 
+                angle_text = _rotation_angle_status_text(
+                    self._editor.detection_boxes, self.selected_box)
+                if angle_text:
+                    parts.append(angle_text)
+
                 if stats_parts:
                     parts.append(" ".join(stats_parts))
 
@@ -220,8 +225,30 @@ class Canvas(CanvasRendererMixin, CanvasInteractionMixin, QWidget):
         parts = []
         if info:
             parts.append(f"Box:{info['box_count']} Paste:{info['paste_count']}")
+        angle_text = _rotation_angle_status_text(
+            getattr(self._editor, 'detection_boxes', None), self.selected_box)
+        if angle_text:
+            parts.append(angle_text)
         if stats_parts:
             parts.append(" ".join(stats_parts))
         if parts:
             prefix = "[移除路径] " if self._editor._is_delete_view else ""
             self._editor.status_label.setText(prefix + " | ".join(parts))
+
+
+def _rotation_angle_status_text(detection_boxes, selected_box):
+    """选中的旋转框在状态栏显示角度，如 'A:30°'；非旋转框返回空串。"""
+    if (selected_box is None or not detection_boxes or
+            not (0 <= selected_box < len(detection_boxes))):
+        return ""
+    box = detection_boxes[selected_box]
+    if not isinstance(box, dict) or box.get("shape_type") != "rotation":
+        return ""
+    points = box.get("points") or []
+    if len(points) != 4:
+        return ""
+    from ..engine.shape_io import rotation_angle_degrees
+    angle = rotation_angle_degrees(points)
+    if angle >= 359.5:
+        angle = 0.0
+    return f"A:{angle:.0f}°"

@@ -42,9 +42,22 @@ class MemoryRecordMixin:
                 for item in cached
                 if isinstance(item, dict) and str(item.get('label', '')).strip()
             }
+            tasks_by_label = {
+                str(item.get('label', '')).strip(): sorted(item.get('tasks') or [])
+                for item in cached
+                if isinstance(item, dict) and str(item.get('label', '')).strip()
+            }
         else:
-            from ...engine.image_loader import collect_background_label_counts
-            counts = collect_background_label_counts(list(self.background_images or []))
+            from ...engine.image_loader import (
+                collect_background_label_counts, collect_background_label_tasks,
+            )
+            paths = list(self.background_images or [])
+            counts = collect_background_label_counts(paths)
+            tasks_by_label = {
+                str(label).strip(): sorted(ts)
+                for label, ts in collect_background_label_tasks(paths).items()
+                if str(label).strip()
+            }
         for lbl in getattr(self, 'background_dataset_labels', set()) or set():
             counts.setdefault(lbl, 0)
         for lbl in getattr(self, 'global_labels', set()) or set():
@@ -60,7 +73,10 @@ class MemoryRecordMixin:
                     color = self.label_color_map.get(label, '') if hasattr(self, 'label_color_map') else ''
             elif hasattr(self, 'label_color_map'):
                 color = self.label_color_map.get(label, '')
-            stats.append({'label': label, 'count': int(count), 'color': color or ''})
+            stats.append({
+                'label': label, 'count': int(count), 'color': color or '',
+                'tasks': tasks_by_label.get(label, []),
+            })
         return stats
 
     def _save_memory_record_on_close(self):

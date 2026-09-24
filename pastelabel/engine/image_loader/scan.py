@@ -6,6 +6,7 @@ import concurrent.futures
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from .status import STATUS_UNANNOTATED, STATUS_ANNOTATED, STATUS_EMPTY
+from ...core.utils import shape_task_type
 
 __all__ = [
     "scan_dataset_labels", "scan_dataset_labels_with_counts", "scan_dataset_full",
@@ -60,7 +61,8 @@ def scan_dataset_labels_with_counts(image_paths, is_interrupted=None):
     return labels, counts
 
 
-def scan_dataset_full(image_paths, is_interrupted=None, progress_cb=None):
+def scan_dataset_full(image_paths, is_interrupted=None, progress_cb=None,
+                      tasks_out=None):
     """Return (labels_set, {label: count}, {image_path: status}) in one pass.
 
     Parsing each sidecar once yields both the dataset label counts and the
@@ -71,6 +73,9 @@ def scan_dataset_full(image_paths, is_interrupted=None, progress_cb=None):
     PROGRESS_BATCH results so callers can stream partial results to the UI
     instead of waiting for the whole dataset (keeps the status circles filling
     in progressively on large datasets).
+
+    tasks_out: optional dict filled with {label: set(task_types)} during the
+    same pass, so the stats dialog can show 框类型 without rescanning.
     """
     PROGRESS_BATCH = 200
     counts = {}
@@ -86,23 +91,26 @@ def scan_dataset_full(image_paths, is_interrupted=None, progress_cb=None):
     def _one(image_path):
         json_path = f"{os.path.splitext(image_path)[0]}.json"
         if not os.path.exists(json_path):
-            return image_path, STATUS_UNANNOTATED, None
+            return image_path, STATUS_UNANNOTATED, None, None
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         except Exception:
-            return image_path, STATUS_EMPTY, None
+            return image_path, STATUS_EMPTY, None, None
         shapes = data.get("shapes") if isinstance(data, dict) else None
         if not isinstance(shapes, list):
-            return image_path, STATUS_EMPTY, None
+            return image_path, STATUS_EMPTY, None, None
         local = {}
+        local_tasks = {}
         for shape in shapes:
             label = shape.get("label") if isinstance(shape, dict) else None
             if isinstance(label, str) and label.strip():
                 label = label.strip()
                 local[label] = local.get(label, 0) + 1
+                if tasks_out is not None:
+                    local_tasks.setdefault(label, set()).add(shape_task_type(shape))
         status = STATUS_ANNOTATED if local else STATUS_EMPTY
-        return image_path, status, local
+        return image_path, status, local, local_tasks
 
     batch = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
@@ -110,12 +118,15 @@ def scan_dataset_full(image_paths, is_interrupted=None, progress_cb=None):
         for future in concurrent.futures.as_completed(futures):
             if is_interrupted and is_interrupted():
                 break
-            image_path, status, local = future.result()
+            image_path, status, local, local_tasks = future.result()
             statuses[image_path] = status
             batch[image_path] = status
             if local:
                 for lbl, n in local.items():
                     counts[lbl] = counts.get(lbl, 0) + int(n or 0)
+            if tasks_out is not None and local_tasks:
+                for lbl, ts in local_tasks.items():
+                    tasks_out.setdefault(lbl, set()).update(ts)
             if progress_cb is not None and len(batch) >= PROGRESS_BATCH:
                 try:
                     progress_cb(dict(batch))
@@ -221,7 +232,7 @@ def collect_background_label_tasks(image_paths, is_interrupted=None):
 
 class DatasetLabelScanWorker(QThread):
     """Scan a fixed dataset snapshot outside the UI thread."""
-    labels_scanned = pyqtSignal(int, tuple, object, object, object)
+    labels_scanned = pyqtSignal(int, tuple, object, object, object, object)
     statuses_progress = pyqtSignal(int, tuple, object)
 
     def __init__(self, generation, image_paths, parent=None):
@@ -237,16 +248,18 @@ class DatasetLabelScanWorker(QThread):
                 )
 
         try:
+            tasks = {}
             labels, counts, statuses = scan_dataset_full(
                 self._image_paths, self.isInterruptionRequested,
-                progress_cb=_emit_progress,
+                progress_cb=_emit_progress, tasks_out=tasks,
             )
             if not self.isInterruptionRequested():
                 self.labels_scanned.emit(
-                    self._generation, self._image_paths, labels, counts, statuses
+                    self._generation, self._image_paths, labels, counts,
+                    statuses, tasks,
                 )
         except Exception:
             if not self.isInterruptionRequested():
                 self.labels_scanned.emit(
-                    self._generation, self._image_paths, set(), {}, {}
+                    self._generation, self._image_paths, set(), {}, {}, {}
                 )

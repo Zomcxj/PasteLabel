@@ -128,7 +128,7 @@ def test_snapshot_reuses_fresh_cache_without_rescan(tmp_path, monkeypatch):
 
     monkeypatch.setattr(image_loader, "collect_background_label_counts", _boom)
     stats = host._build_bg_label_stats_snapshot()
-    assert stats == [{"label": "c0", "count": 300, "color": ""}]
+    assert stats == [{"label": "c0", "count": 300, "color": "", "tasks": []}]
 
 
 def test_snapshot_rescans_when_dirty(tmp_path):

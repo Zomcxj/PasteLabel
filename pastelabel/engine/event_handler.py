@@ -319,6 +319,8 @@ class EventHandlerMixin:
             lm._save_detection_json_for_index(self.current_background_index)
         if hasattr(self, 'update_label_list'):
             self.update_label_list()
+        if hasattr(self.canvas, 'update_status_label'):
+            self.canvas.update_status_label()
         self.canvas.update()
 
     def switch_background(self, direction):

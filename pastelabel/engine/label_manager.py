@@ -744,6 +744,7 @@ class LabelManager(QObject):
                 except (TypeError, ValueError):
                     count = 0
                 color = item.get('color', '') or ''
+                tasks = list(item.get('tasks') or [])
                 # Prefer color that already belonged to the target label.
                 if orig_label == new_label and color:
                     target_color = color
@@ -751,8 +752,12 @@ class LabelManager(QObject):
                     merged[label]['count'] += count
                     if orig_label == new_label and color:
                         merged[label]['color'] = color
+                    for task in tasks:
+                        if task not in merged[label]['tasks']:
+                            merged[label]['tasks'].append(task)
                 else:
-                    merged[label] = {'label': label, 'count': count, 'color': color}
+                    merged[label] = {'label': label, 'count': count, 'color': color,
+                                     'tasks': tasks}
             if new_label in merged:
                 preferred = (
                     (color_map.get(new_label) if isinstance(color_map, dict) else None)
@@ -779,8 +784,10 @@ class LabelManager(QObject):
                 'label': label,
                 'count': count,
                 'color': item.get('color', '') or '',
+                'tasks': list(item.get('tasks') or []),
             }
         moved = max(0, int(delta or 0))
+        moved_tasks = list(by_label.get(old_label, {}).get('tasks') or [])
         if old_label in by_label:
             by_label[old_label]['count'] = max(0, by_label[old_label]['count'] - moved)
             if by_label[old_label]['count'] == 0:
@@ -790,9 +797,13 @@ class LabelManager(QObject):
                 'label': new_label,
                 'count': 0,
                 'color': _color_for(new_label),
+                'tasks': [],
             }
         by_label[new_label]['count'] += moved
         by_label[new_label]['color'] = _color_for(new_label, by_label[new_label].get('color', ''))
+        for task in moved_tasks:
+            if task not in by_label[new_label]['tasks']:
+                by_label[new_label]['tasks'].append(task)
         self.editor._cached_bg_label_stats = list(by_label.values())
 
     def rename_detection_label(self, old_label, new_label, rewrite_disk=True):

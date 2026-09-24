@@ -614,7 +614,7 @@ class ImageLoaderMixin:
                 self._update_processing_panel_labels()
 
     def _apply_dataset_labels(self, generation, image_paths, labels, counts=None,
-                              statuses=None):
+                              statuses=None, tasks=None):
         """Apply only the latest worker result for the unchanged dataset."""
         if (generation != self._background_label_scan_generation
                 or tuple(self.background_images) != tuple(image_paths)):
@@ -631,6 +631,7 @@ class ImageLoaderMixin:
         self.global_labels.update(labels)
         if isinstance(counts, dict):
             color_map = getattr(self, 'label_color_map', None) or {}
+            task_map = tasks if isinstance(tasks, dict) else {}
             stats = []
             for label, count in sorted(counts.items(), key=lambda x: (-int(x[1] or 0), x[0])):
                 if int(count or 0) <= 0:
@@ -643,7 +644,10 @@ class ImageLoaderMixin:
                         color = self.get_label_color(label)
                     except Exception:
                         color = ''
-                stats.append({'label': label, 'count': int(count), 'color': color or ''})
+                stats.append({
+                    'label': label, 'count': int(count), 'color': color or '',
+                    'tasks': sorted(task_map.get(label, set()) or set()),
+                })
             self._cached_bg_label_stats = stats
             if not self._cached_bg_label_stats_path:
                 self._cached_bg_label_stats_path = getattr(self, '_memory_background_path', '') or ''

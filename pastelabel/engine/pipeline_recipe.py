@@ -13,8 +13,6 @@ VALID_FORMATS = (
 )
 DEFAULT_FORMAT = 'YOLO Detection'
 
-DEFAULT_TRANSFORM_PARAMS = {}
-
 _DEFAULT_SPLIT = {'train': 0.8, 'val': 0.1, 'test': 0.1}
 
 

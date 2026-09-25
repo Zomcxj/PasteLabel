@@ -183,7 +183,10 @@ def load_config():
         shortcuts['delete_label'] = 'Ctrl+Shift+Z'
         config['shortcuts'] = shortcuts
         save_config(config)  # 自动保存迁移后的配置
-    
+
+    if 'pipeline_recipes' in config:
+        config['pipeline_recipes'] = _normalize_pipeline_recipes(config.get('pipeline_recipes'))
+
     return config
 
 

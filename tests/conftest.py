@@ -83,6 +83,9 @@ class _MockQWidget:
     def setWordWrap(self, *a): pass
     def style(self): return type('Style', (), {'unpolish': lambda self, *a: None, 'polish': lambda self, *a: None})()
     def layout(self): return None
+    def setVisible(self, *a): pass
+    def setHidden(self, *a): pass
+    def isVisible(self): return True
 
 
 class _MockQMainWindow(_MockQWidget):
@@ -94,6 +97,10 @@ class _MockQMainWindow(_MockQWidget):
     def setWindowTitle(self, *a): pass
     def resize(self, *a): pass
     def setWindowIcon(self, *a): pass
+    def addDockWidget(self, *a): pass
+    def splitDockWidget(self, *a): pass
+    def centralWidget(self): return None
+    def setDockNestingEnabled(self, *a): pass
 
 
 class _MockQDialog(_MockQWidget):
@@ -348,6 +355,9 @@ qtcore.Qt = type('Qt', (), {
     'NoPen': 0,
     'SolidLine': 1,
     'Key_Space': 0x20,
+    'Vertical': 2,
+    'LeftDockWidgetArea': 1, 'RightDockWidgetArea': 2,
+    'TopDockWidgetArea': 4, 'BottomDockWidgetArea': 8,
 })()
 qtcore.QPoint = type('QPoint', (), {'__init__': lambda self, x=0, y=0: None})
 qtcore.QPointF = type('QPointF', (), {'__init__': lambda self, x=0, y=0: None})
@@ -606,6 +616,34 @@ qtwidgets.QComboBox = type('QComboBox', (_MockQWidget,), {
     'setMaximumWidth': lambda self, *a: None,
     'setFixedWidth': lambda self, *a: None,
     'currentIndexChanged': type('Signal', (), {'connect': lambda self, f: None})(),
+})
+class _MockQDockWidget(_MockQWidget):
+    DockWidgetClosable = 4
+    DockWidgetMovable = 1
+    DockWidgetFloatable = 2
+    def __init__(self, *a, **kw):
+        super().__init__()
+    def setWidget(self, *a): pass
+    def widget(self): return None
+    def setFeatures(self, *a): pass
+    def features(self): return 1
+    def setAllowedAreas(self, *a): pass
+    def setWindowTitle(self, *a): pass
+    def setObjectName(self, *a): pass
+    def toggleViewAction(self):
+        return type('Act', (), {'setVisible': lambda s, *a: None})()
+
+
+qtwidgets.QDockWidget = _MockQDockWidget
+qtwidgets.QTabWidget = type('QTabWidget', (_MockQWidget,), {
+    '__init__': lambda self, *a, **kw: None,
+    'addTab': lambda self, *a: 0,
+    'setCurrentIndex': lambda self, *a: None,
+    'currentIndex': lambda self: 0,
+    'count': lambda self: 0,
+    'widget': lambda self, i: None,
+    'setDocumentMode': lambda self, *a: None,
+    'currentChanged': type('Signal', (), {'connect': lambda self, f: None})(),
 })
 qtwidgets.QToolButton = type('QToolButton', (_MockQWidget,), {
     'setIcon': lambda self, *a: None,

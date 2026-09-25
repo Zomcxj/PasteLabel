@@ -894,3 +894,34 @@ def test_update_label_list_stats_mode_hides_filtered_out_labels(monkeypatch):
     assert any(t.startswith("car") for t in texts)
     assert not any(t.startswith("road") for t in texts)
     assert not any(t.startswith("zebra") for t in texts)
+
+
+def test_rename_paste_label_rewrite_disk_updates_flagged_shapes(tmp_path):
+    import json
+    img = tmp_path / "p.png"
+    img.write_bytes(b"x")
+    sidecar = tmp_path / "p.json"
+    sidecar.write_text(json.dumps({"shapes": [
+        {"label": "logo", "points": [[0, 0], [1, 0], [1, 1], [0, 1]],
+         "shape_type": "rectangle", "flags": {"paste": True}},
+        {"label": "logo", "points": [[2, 2], [3, 2], [3, 3], [2, 3]],
+         "shape_type": "rectangle", "flags": {}},
+    ]}), encoding="utf-8")
+
+    class PasteList:
+        def count(self): return 0
+        def item(self, i): return None
+
+    editor = FakeEditor()
+    editor.background_images = [str(img)]
+    editor.paste_label_list = PasteList()
+    editor.canvas_items = []
+    editor.canvas_items_dict = {}
+    editor.label_color_map = {}
+    manager = LabelManager(editor)
+    manager.data_changed = FakeSignal()
+
+    assert manager.rename_paste_label("logo", "badge", rewrite_disk=True) is True
+    shapes = json.loads(sidecar.read_text(encoding="utf-8"))["shapes"]
+    assert shapes[0]["label"] == "badge"
+    assert shapes[1]["label"] == "logo"

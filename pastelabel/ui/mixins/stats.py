@@ -101,8 +101,9 @@ class StatsMixin:
         from PyQt5.QtWidgets import (
             QDialog, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
             QHeaderView, QPushButton, QWidget, QAbstractItemView,
+            QMainWindow, QTabWidget,
         )
-        from PyQt5.QtCore import Qt, Qt as QtCore
+        from PyQt5.QtCore import Qt as QtCore
         from ..dialog_helpers import center_on_parent
         from ..theme import ThemeManager
         from .. import i18n
@@ -136,12 +137,14 @@ class StatsMixin:
                 border: 1px solid {t['border_color']}; }}
         """)
         layout = QVBoxLayout(dialog)
-        bg_header = QPushButton(f"▼  {tr('背景图标签')}")
-        bg_header.setFlat(True)
-        bg_header.setCursor(Qt.PointingHandCursor)
-        bg_header.setStyleSheet("border: none; text-align: left; font-weight: bold; font-size: 13px; padding: 2px 0;")
-        bg_header.setFixedHeight(24)
-        layout.addWidget(bg_header)
+        host = QMainWindow()
+        host.setDockNestingEnabled(True)
+        dialog._dock_host = host
+        central = QWidget()
+        central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        host.setCentralWidget(central)
+        layout.addWidget(host)
         bg_stats = self._collect_bg_stats_for_dialog()
         bg_tasks = self._collect_bg_label_tasks_for_dialog()
         bg_table = QTableWidget(len(bg_stats), 4)
@@ -202,24 +205,6 @@ class StatsMixin:
         bg_table.itemChanged.connect(_on_bg_label_changed)
         dialog._bg_table = bg_table
         dialog._on_bg_label_changed = _on_bg_label_changed
-        bg_container = QWidget()
-        bg_cl = QVBoxLayout(bg_container)
-        bg_cl.setContentsMargins(0, 0, 0, 0)
-        bg_cl.addWidget(bg_table)
-        layout.addWidget(bg_container)
-        bg_expanded = True
-        def _toggle_bg():
-            nonlocal bg_expanded
-            bg_expanded = not bg_expanded
-            bg_container.setVisible(bg_expanded)
-            bg_header.setText(f"{'▼' if bg_expanded else '▶'}  {tr('背景图标签')}")
-        bg_header.clicked.connect(_toggle_bg)
-        paste_header = QPushButton(f"▼  {tr('贴图标签_list')}")
-        paste_header.setFlat(True)
-        paste_header.setCursor(Qt.PointingHandCursor)
-        paste_header.setStyleSheet("border: none; text-align: left; font-weight: bold; font-size: 13px; padding: 2px 0;")
-        paste_header.setFixedHeight(24)
-        layout.addWidget(paste_header)
         paste_stats = self._get_session_paste_stats()
         paste_table = QTableWidget(len(paste_stats), 3)
         paste_table.setHorizontalHeaderLabels([tr("类别"), tr("数量"), tr("颜色")])
@@ -259,7 +244,7 @@ class StatsMixin:
                 item.setText(old_label)
                 paste_table.blockSignals(False)
                 return
-            if self.label_manager.rename_paste_label(old_label, new_label):
+            if self.label_manager.rename_paste_label(old_label, new_label, rewrite_disk=True):
                 item.setData(QtCore.UserRole, new_label)
                 color_btn = paste_table.cellWidget(item.row(), 2)
                 if color_btn is not None:
@@ -277,29 +262,27 @@ class StatsMixin:
 
         paste_table.itemChanged.connect(_on_paste_label_changed)
         dialog._paste_table = paste_table
-        paste_container = QWidget()
-        paste_cl = QVBoxLayout(paste_container)
-        paste_cl.setContentsMargins(0, 0, 0, 0)
-        paste_cl.addWidget(paste_table)
-        layout.addWidget(paste_container)
-        paste_expanded = True
-        def _toggle_paste():
-            nonlocal paste_expanded
-            paste_expanded = not paste_expanded
-            paste_container.setVisible(paste_expanded)
-            paste_header.setText(f"{'▼' if paste_expanded else '▶'}  {tr('贴图标签_list')}")
-        paste_header.clicked.connect(_toggle_paste)
-        self._build_health_section(dialog, layout)
-        bg_table.cellClicked.connect(
-            lambda *_: dialog._set_health_source('annot'))
-        paste_table.cellClicked.connect(
-            lambda *_: dialog._set_health_source('paste'))
+        tabs = QTabWidget()
+        tabs.setDocumentMode(True)
+        bg_tab = QWidget()
+        bg_tl = QVBoxLayout(bg_tab)
+        bg_tl.setContentsMargins(0, 0, 0, 0)
+        bg_tl.addWidget(bg_table)
+        paste_tab = QWidget()
+        paste_tl = QVBoxLayout(paste_tab)
+        paste_tl.setContentsMargins(0, 0, 0, 0)
+        paste_tl.addWidget(paste_table)
+        tabs.addTab(bg_tab, tr('背景图标签'))
+        tabs.addTab(paste_tab, tr('贴图标签_list'))
+        central_layout.addWidget(tabs)
+        dialog._tabs = tabs
+        self._build_health_section(dialog, central_layout)
         total = QLabel(
             f"{tr('总计')}: {tr('背景图标签')} {sum(bg_stats.values())} {tr('个')} | "
             f"{tr('贴图标签_list')} {sum(paste_stats.values())} {tr('个')}"
         )
         total.setStyleSheet("font-size: 12px; margin-top: 8px;")
-        layout.addWidget(total)
+        central_layout.addWidget(total)
         dialog.exec_()
 
     def _close_health_worker(self):
@@ -315,9 +298,10 @@ class StatsMixin:
                 pass
 
     def _build_health_section(self, dialog, layout):
-        """构建「数据集健康」折叠区：5 面板 + 建议，点击上方表格切换数据源。"""
+        """构建「数据集健康」区：5 个可拖拽 dock 面板 + 建议，切换标签页切换数据源。"""
         from PyQt5.QtCore import Qt
-        from PyQt5.QtWidgets import QPushButton, QLabel, QWidget, QVBoxLayout
+        from PyQt5.QtWidgets import (
+            QPushButton, QLabel, QWidget, QVBoxLayout, QDockWidget)
         from ..i18n import t as tr
         from ..widgets.health_charts import HealthBarChart
 
@@ -330,13 +314,9 @@ class StatsMixin:
         header.setFixedHeight(24)
         layout.addWidget(header)
 
-        container = QWidget()
-        box = QVBoxLayout(container)
-        box.setContentsMargins(0, 0, 0, 0)
-
-        source_label = QLabel(tr('数据源：背景图标签（点击上方表格切换）'))
+        source_label = QLabel(tr('数据源：背景图标签（切换标签页）'))
         source_label.setStyleSheet("color: gray; font-size: 11px;")
-        box.addWidget(source_label)
+        layout.addWidget(source_label)
 
         class_chart = HealthBarChart()
         size_chart = HealthBarChart()
@@ -354,24 +334,45 @@ class StatsMixin:
             ('iou', tr('IoU 重叠分布'), tr('高 IoU 区间框多说明重复标注偏多')),
             ('paste', tr('贴图 vs 标注'), tr('贴图尺寸中位数与标注接近时合成更自然')),
         )
-        for key, title, desc in panels:
-            box.addWidget(QLabel(title))
-            desc_label = QLabel(desc)
-            desc_label.setWordWrap(True)
-            desc_label.setStyleSheet("color: gray; font-size: 11px;")
-            box.addWidget(desc_label)
-            box.addWidget(charts[key])
-            charts[key].set_placeholder(tr('正在分析'))
+        host = getattr(dialog, '_dock_host', None) or dialog
+        dialog._health_docks = {}
+        if hasattr(host, 'addDockWidget'):
+            for key, title, desc in panels:
+                panel = QWidget()
+                pl = QVBoxLayout(panel)
+                pl.setContentsMargins(6, 4, 6, 4)
+                desc_label = QLabel(desc)
+                desc_label.setWordWrap(True)
+                desc_label.setStyleSheet("color: gray; font-size: 11px;")
+                pl.addWidget(desc_label)
+                pl.addWidget(charts[key])
+                dock = QDockWidget(title, host)
+                dock.setObjectName(f"health_{key}")
+                dock.setWidget(panel)
+                dock.setFeatures(QDockWidget.DockWidgetMovable)
+                dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+                host.addDockWidget(Qt.LeftDockWidgetArea, dock)
+                dialog._health_docks[key] = dock
+                charts[key].set_placeholder(tr('正在分析'))
+            # 两列布局：左列 class/size/aspect，右列 iou/paste；拖动后自动让位
+            d = dialog._health_docks
+            host.splitDockWidget(d['class'], d['iou'], Qt.Horizontal)
+            host.splitDockWidget(d['iou'], d['paste'], Qt.Vertical)
+            host.splitDockWidget(d['size'], d['aspect'], Qt.Vertical)
+            host.splitDockWidget(d['class'], d['size'], Qt.Vertical)
+        else:
+            for key in charts:
+                charts[key].set_placeholder(tr('正在分析'))
         advice_label = QLabel(f"{tr('建议')}: {tr('正在分析')}")
         advice_label.setWordWrap(True)
-        box.addWidget(advice_label)
-        layout.addWidget(container)
+        layout.addWidget(advice_label)
 
         expanded = True
         def _toggle():
             nonlocal expanded
             expanded = not expanded
-            container.setVisible(expanded)
+            for dock in dialog._health_docks.values():
+                dock.setVisible(expanded)
             header.setText(
                 f"{'▼' if expanded else '▶'}  {tr('数据集健康')}")
         header.clicked.connect(_toggle)
@@ -385,8 +386,8 @@ class StatsMixin:
             payload = payload if payload is not None else dialog._health_payload
             dialog._health_source = source
             source_label.setText(
-                tr('数据源：背景图标签（点击上方表格切换）') if source == 'annot'
-                else tr('数据源：贴图标签（点击上方表格切换）'))
+                tr('数据源：背景图标签（切换标签页）') if source == 'annot'
+                else tr('数据源：贴图标签（切换标签页）'))
             if not payload:
                 return
             if payload.get('error'):
@@ -439,6 +440,10 @@ class StatsMixin:
             _render_source(source)
 
         dialog._set_health_source = _set_health_source
+        tabs = getattr(dialog, '_tabs', None)
+        if tabs is not None:
+            tabs.currentChanged.connect(
+                lambda idx: _set_health_source('annot' if idx == 0 else 'paste'))
 
         if not getattr(self, 'background_images', None):
             for chart in charts.values():
@@ -461,6 +466,10 @@ class StatsMixin:
 
         def _on_payload(payload):
             dialog._health_payload = payload
+            paste_class = ((payload.get('paste') or {}).get('stats') or {}).get(
+                'class_dist') or []
+            if paste_class:
+                self._reload_stats_paste_table(dialog, paste_class)
             _render_source(dialog._health_source, payload)
 
         dialog._on_health_payload = _on_payload
@@ -497,6 +506,33 @@ class StatsMixin:
             color_button.clicked.connect(lambda _, value=label, button=color_button: self._change_label_color(value, dialog, button))
             bg_table.setCellWidget(row, 3, color_button)
         bg_table.blockSignals(False)
+
+    def _reload_stats_paste_table(self, dialog, class_dist):
+        """用整库贴图统计重建贴图表格（worker payload 到达后调用）。"""
+        from PyQt5.QtWidgets import QTableWidgetItem, QPushButton
+        from PyQt5.QtCore import Qt as QtCore
+        table = getattr(dialog, '_paste_table', None)
+        if table is None:
+            return
+        rows = [(str(e.get('label', '') or ''), int(e.get('count', 0) or 0))
+                for e in class_dist if isinstance(e, dict)]
+        rows.sort(key=lambda x: (-x[1], x[0]))
+        table.blockSignals(True)
+        table.setRowCount(len(rows))
+        for row, (label, count) in enumerate(rows):
+            label_item = QTableWidgetItem(label)
+            label_item.setFlags(label_item.flags() | QtCore.ItemIsEditable)
+            label_item.setData(QtCore.UserRole, label)
+            table.setItem(row, 0, label_item)
+            count_item = QTableWidgetItem(str(count))
+            count_item.setFlags(count_item.flags() & ~QtCore.ItemIsEditable)
+            table.setItem(row, 1, count_item)
+            color_button = QPushButton()
+            self._set_label_color_button(color_button, self.get_label_color(label))
+            color_button.clicked.connect(
+                lambda _, value=label, button=color_button: self._change_label_color(value, dialog, button))
+            table.setCellWidget(row, 2, color_button)
+        table.blockSignals(False)
 
     def _set_label_color_button(self, button, color):
         button.setText(color)

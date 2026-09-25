@@ -438,14 +438,15 @@ def test_worker_paste_section_computed_with_paste():
 
 def test_i18n_stats_redesign_terms():
     from pastelabel.ui.i18n import _strings
-    for key in ("数据源：背景图标签（点击上方表格切换）",
-                "数据源：贴图标签（点击上方表格切换）",
+    for key in ("数据源：背景图标签（切换标签页）",
+                "数据源：贴图标签（切换标签页）",
                 "各类别占比应接近均衡；长尾类别建议多合成",
                 "框尺寸应覆盖多种尺度，避免集中于单一范围",
                 "长宽比多样化更贴近真实场景",
                 "高 IoU 区间框多说明重复标注偏多",
                 "贴图尺寸中位数与标注接近时合成更自然",
-                "面积", "长宽比", "框数"):
+                "面积", "长宽比", "框数",
+                "背景图标签", "贴图标签"):
         assert key in _strings["zh"], key
         assert key in _strings["en"], key
 
@@ -456,9 +457,10 @@ def test_stats_health_section_supports_source_switch():
     src = inspect.getsource(StatsMixin)
     assert "_set_health_source" in src
     assert "'annot'" in src and "'paste'" in src
-    assert "cellClicked" in src
+    assert "currentChanged" in src
     assert "_health_source" in src
     assert "_health_payload" in src
+    assert "QDockWidget" in src
 
 
 def test_health_source_switch_routes_payload_real_qt(tmp_path):
@@ -639,12 +641,13 @@ bg_table = dialog._bg_table
 paste_table = dialog._paste_table
 charts = dialog._health_charts
 
-# Gap 1: 真实接线（点击表格 → 切换数据源）
-bg_table.cellClicked.emit(0, 0)
+# Gap 1: 真实接线（切换标签页 → 切换数据源）
+tabs = dialog._tabs
+tabs.setCurrentIndex(0)
 assert dialog._health_source == "annot", dialog._health_source
-paste_table.cellClicked.emit(0, 0)
+tabs.setCurrentIndex(1)
 assert dialog._health_source == "paste", dialog._health_source
-bg_table.cellClicked.emit(0, 1)
+tabs.setCurrentIndex(0)
 assert dialog._health_source == "annot", dialog._health_source
 
 payload = {
@@ -695,6 +698,109 @@ dialog._set_health_source("paste")
 dialog._on_health_payload(payload)
 assert dialog._health_payload is payload
 assert charts["class"]._items[0]["label"] == "paste_cls", charts["class"]._items
+
+editor._close_health_worker()
+print("OK")
+'''
+    env = os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(root)}
+    result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
+                            text=True, capture_output=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+
+
+def test_stats_dialog_tabs_and_docks_real_qt(tmp_path):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = '''
+from PyQt5.QtCore import QObject
+from PyQt5.QtWidgets import QApplication, QDialog, QDockWidget
+from pastelabel.ui.mixins.stats import StatsMixin
+
+app = QApplication.instance() or QApplication([])
+
+
+class FakeLabelManager:
+    def rename_detection_label(self, old, new):
+        return False
+
+    def rename_paste_label(self, old, new, rewrite_disk=False):
+        return False
+
+
+class FakeEditor(StatsMixin, QDialog):
+    def __init__(self):
+        super().__init__()
+        self.background_images = ["x.png"]
+        self.detection_boxes_dict = {
+            0: [{"label": "bg_cls", "x": 0, "y": 0, "width": 10, "height": 10}]}
+        self.canvas_items_dict = {0: [(None, None, "paste_cls")]}
+        self.canvas_items = []
+        self.current_background_index = 0
+        self._health_worker = None
+        self._cached_bg_label_stats = None
+        self._memory_background_path = "x.png"
+        self.label_color_map = {}
+        self.global_labels = set()
+        self.background_dataset_labels = set()
+        self.label_manager = FakeLabelManager()
+        self._dataset_stats_dirty = False
+        self._background_label_scan_completed = True
+
+    def get_label_color(self, label):
+        return "#123456"
+
+
+editor = FakeEditor()
+captured = {}
+
+
+def _capture_exec(self):
+    captured["dialog"] = self
+    return 0
+
+
+QDialog.exec_ = _capture_exec
+editor._show_label_stats()
+dialog = captured["dialog"]
+editor._close_health_worker()
+
+# 单表位置：一个 QTabWidget，两个页签
+tabs = dialog._tabs
+assert tabs.count() == 2, tabs.count()
+assert dialog._bg_table is not None
+assert dialog._paste_table is not None
+
+# 切换页签 → 健康数据源联动
+tabs.setCurrentIndex(1)
+assert dialog._health_source == "paste", dialog._health_source
+tabs.setCurrentIndex(0)
+assert dialog._health_source == "annot", dialog._health_source
+
+# 5 个统计面板为可拖拽 dock
+docks = dialog._health_docks
+assert sorted(docks) == ["aspect", "class", "iou", "paste", "size"], sorted(docks)
+for dock in docks.values():
+    assert isinstance(dock, QDockWidget)
+    assert dock.features() & QDockWidget.DockWidgetMovable
+    assert not (dock.features() & QDockWidget.DockWidgetFloatable)
+
+# 整库贴图：payload 到达后贴图表重建（磁盘贴图统计进表）
+payload = {
+    "annot": {"stats": {"class_dist": [{"label": "bg_cls", "count": 9}]},
+              "advice": ["a"]},
+    "paste": {"stats": {"class_dist": [{"label": "disk_logo", "count": 7}]},
+              "advice": ["p"]},
+    "images_scanned": 1,
+}
+dialog._on_health_payload(payload)
+rows = dialog._paste_table.rowCount()
+assert rows == 1, rows
+assert dialog._paste_table.item(0, 0).text() == "disk_logo"
+assert dialog._paste_table.item(0, 1).text() == "7"
 
 editor._close_health_worker()
 print("OK")

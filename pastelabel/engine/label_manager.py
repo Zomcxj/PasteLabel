@@ -911,7 +911,7 @@ class LabelManager(QObject):
                 notify(index)
         return True
 
-    def rename_paste_label(self, old_label, new_label):
+    def rename_paste_label(self, old_label, new_label, rewrite_disk=False):
         """Rename a paste label in memory lists and canvas items."""
         old_label = (old_label or "").strip()
         new_label = (new_label or "").strip()
@@ -933,10 +933,52 @@ class LabelManager(QObject):
                 if isinstance(item, dict) and item.get('label') == old_label:
                     item['label'] = new_label
 
+        if rewrite_disk:
+            self._rewrite_paste_label_on_disk(old_label, new_label)
+
         self._transfer_label_color(old_label, new_label, move_if_unused=True)
 
         self.data_changed.emit()
         return True
+
+    def _rewrite_paste_label_on_disk(self, old_label, new_label):
+        """把所有 sidecar JSON 里 flags.paste 的 shape 改名（不动检测框）。"""
+        import json
+        import os
+        for image_path in list(getattr(self.editor, 'background_images', []) or []):
+            json_path = f"{os.path.splitext(image_path)[0]}.json"
+            if not os.path.isfile(json_path):
+                continue
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            except Exception as e:
+                from ..core.exception_hook import _write_log
+                _write_log(f"读取标注 JSON 失败 {json_path}: {e}")
+                continue
+            if not isinstance(data, dict):
+                continue
+            shapes = data.get('shapes')
+            if not isinstance(shapes, list):
+                continue
+            changed = False
+            for shape in shapes:
+                if not isinstance(shape, dict):
+                    continue
+                flags = shape.get('flags')
+                if not (isinstance(flags, dict) and flags.get('paste')):
+                    continue
+                if shape.get('label') == old_label:
+                    shape['label'] = new_label
+                    changed = True
+            if not changed:
+                continue
+            try:
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                from ..core.exception_hook import _write_log
+                _write_log(f"写入标注 JSON 失败 {json_path}: {e}")
 
     def update_global_labels(self):
         """更新全局标签集合"""

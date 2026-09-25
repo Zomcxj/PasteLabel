@@ -146,6 +146,15 @@ def test_save_all_without_recipes_keeps_stored(tmp_path, monkeypatch):
     assert [r['name'] for r in loaded] == ['kept']
 
 
+def test_i18n_recipe_terms():
+    from pastelabel.ui.i18n import _strings
+    for key in ("配方", "保存为配方", "应用配方", "删除配方", "配方名称",
+                "配方已保存", "已应用配方", "配方标签在当前数据集均不存在",
+                "覆盖同名配方", "确定删除配方", "至少选择两步", "删除"):
+        assert key in _strings["zh"], key
+        assert key in _strings["en"], key
+
+
 def test_save_all_roundtrips_pipeline_recipes(tmp_path, monkeypatch):
     from pastelabel.core import config_manager
     from pastelabel.engine.pipeline_recipe import capture_recipe

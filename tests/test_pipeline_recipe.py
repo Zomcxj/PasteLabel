@@ -135,6 +135,26 @@ def test_normalize_pipeline_recipes_caps_at_50_keeping_last():
     assert [r['name'] for r in out] == [f'r{i}' for i in range(5, 55)]
 
 
+def test_load_config_normalizes_recipes_on_read(tmp_path, monkeypatch):
+    import json
+    from pastelabel.core import config_manager
+    config_path = tmp_path / "config.json"
+    monkeypatch.setattr(config_manager, 'CONFIG_PATH', str(config_path))
+    recipes = [{'name': f'r{i}', 'steps': ['augment', 'export']} for i in range(55)]
+    recipes.append({'name': 'dup', 'steps': ['augment']})
+    recipes.append({'name': 'dup', 'steps': ['augment', 'export']})
+    config_path.write_text(json.dumps({'pipeline_recipes': recipes}), encoding='utf-8')
+    config = config_manager.load_config()
+    loaded = config['pipeline_recipes']
+    assert len(loaded) == 50
+    names = [r['name'] for r in loaded]
+    assert len(names) == len(set(names))
+    dup = [r for r in loaded if r['name'] == 'dup']
+    assert len(dup) == 1
+    assert dup[0]['steps'] == ['augment', 'export']
+    assert names == [f'r{i}' for i in range(6, 55)] + ['dup']
+
+
 def test_save_all_without_recipes_keeps_stored(tmp_path, monkeypatch):
     from pastelabel.core import config_manager
     config_path = tmp_path / "config.json"
@@ -337,7 +357,7 @@ print("OK")
         "PASTELABEL_CONFIG_PATH": str(config_path),
     }
     result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
-                            text=True, capture_output=True)
+                            text=True, capture_output=True, timeout=120)
     assert result.returncode == 0, result.stderr
 
 
@@ -381,5 +401,5 @@ print("OK")
         "PASTELABEL_CONFIG_PATH": str(config_path),
     }
     result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
-                            text=True, capture_output=True)
+                            text=True, capture_output=True, timeout=120)
     assert result.returncode == 0, result.stderr

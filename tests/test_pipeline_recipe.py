@@ -253,3 +253,19 @@ def test_apply_recipe_coerces_float_params_for_int_spinboxes():
     spins = panel._aug_widgets['bright'][1]['delta']
     assert spins[0].v == -10
     assert spins[1].v == 20
+
+
+def test_apply_recipe_rejects_invalid_recipe():
+    from pastelabel.ui.processing_panel import ProcessingPanel
+
+    class Combo:
+        def currentIndex(self):
+            return 0
+
+    panel = ProcessingPanel.__new__(ProcessingPanel)
+    panel._recipes = [{'name': 'bad', 'steps': ['augment']}]
+    panel._recipe_combo = Combo()
+    logs = []
+    panel._log = logs.append
+    panel._apply_recipe()
+    assert logs and '两步' in logs[0]

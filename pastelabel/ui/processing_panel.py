@@ -904,11 +904,15 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         recipes = getattr(self, '_recipes', None)
         if not recipes or self._recipe_combo.currentIndex() < 0:
             return
-        from ..engine.pipeline_recipe import apply_recipe_to_labels
+        from ..engine.pipeline_recipe import apply_recipe_to_labels, validate_recipe
         idx = self._recipe_combo.currentIndex()
         if not (0 <= idx < len(recipes)):
             return
         r = recipes[idx]
+        problems = validate_recipe(r)
+        if problems:
+            self._log(problems[0])
+            return
         self._pipe_aug.setChecked('augment' in r['steps'])
         self._pipe_exp.setChecked('export' in r['steps'])
         self._pipe_split.setChecked('split' in r['steps'])

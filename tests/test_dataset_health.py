@@ -82,3 +82,83 @@ def test_collect_paste_geometry():
     assert len(out) == 2
     assert all(b["label"] == "car" for b in out)
     assert out[0]["area"] == 5000.0
+
+
+def _geo(label, w, h, x=0.0, y=0.0):
+    return {'label': label, 'x': float(x), 'y': float(y),
+            'width': float(w), 'height': float(h),
+            'area': float(w * h), 'aspect': w / h}
+
+
+def test_compute_health_class_dist_descending():
+    from pastelabel.engine.dataset_health import compute_health
+    stats = compute_health([_geo("a", 10, 10), _geo("a", 10, 10),
+                            _geo("b", 10, 10)])
+    assert stats['class_dist'] == [{'label': 'a', 'count': 2},
+                                   {'label': 'b', 'count': 1}]
+    assert stats['summary']['total_boxes'] == 3
+    assert stats['summary']['class_count'] == 2
+
+
+def test_compute_health_size_hist_covers_all_boxes():
+    from pastelabel.engine.dataset_health import compute_health
+    boxes = [_geo("a", i * 10, 10) for i in range(1, 21)]
+    stats = compute_health(boxes)
+    assert sum(stats['size_hist']['counts']) == len(boxes)
+    assert len(stats['size_hist']['edges']) == len(stats['size_hist']['counts']) + 1
+
+
+def test_compute_health_aspect_hist():
+    from pastelabel.engine.dataset_health import compute_health
+    boxes = [_geo("a", 10, 10), _geo("a", 20, 10), _geo("a", 40, 10)]
+    stats = compute_health(boxes)
+    assert sum(stats['aspect_hist']['counts']) == 3
+
+
+def test_compute_health_iou_hist_same_label_only():
+    from pastelabel.engine.dataset_health import compute_health
+    # 两个同类框完全重叠 -> IoU 1.0 落最后一桶
+    boxes = [_geo("a", 100, 100), _geo("a", 100, 100)]
+    for i, b in enumerate(boxes):
+        b['image_index'] = 0
+    stats = compute_health(boxes)
+    assert stats['iou_hist']['counts'][-1] == 1
+
+
+def test_compute_health_paste_vs_annot_quantiles():
+    from pastelabel.engine.dataset_health import compute_health
+    annot = [_geo("a", w, 10) for w in (10, 20, 30, 40)]
+    paste = [_geo("p", 100, 10)]
+    stats = compute_health(annot, paste_boxes=paste)
+    assert stats['paste_vs_annot']['has_paste'] is True
+    assert stats['paste_vs_annot']['paste_quantiles'][2] == 1000.0  # 面积中位数
+
+
+def test_health_advice_rare_class():
+    from pastelabel.engine.dataset_health import health_advice
+    stats = {
+        'class_dist': [{'label': 'a', 'count': 1950}, {'label': 'b', 'count': 50}],
+        'size_hist': {'edges': [0, 1, 2], 'counts': [1000, 1000]},
+        'aspect_hist': {'edges': [0, 1, 2, 3], 'counts': [800, 600, 600]},
+        'iou_hist': {'edges': [0.0, 0.5, 1.0], 'counts': [1800, 200],
+                     'skipped_images': 0},
+        'paste_vs_annot': {'has_paste': False},
+        'summary': {'total_boxes': 2000, 'class_count': 2, 'images_scanned': 1},
+    }
+    advice = health_advice(stats)
+    assert any("b" in a for a in advice)
+
+
+def test_health_advice_no_issue():
+    from pastelabel.engine.dataset_health import health_advice
+    stats = {
+        'class_dist': [{'label': 'a', 'count': 50}, {'label': 'b', 'count': 50}],
+        'size_hist': {'edges': [0, 1, 2], 'counts': [50, 50]},
+        'aspect_hist': {'edges': [0, 1, 2, 3], 'counts': [40, 30, 30]},
+        'iou_hist': {'edges': [i / 10 for i in range(11)],
+                     'counts': [90, 0, 0, 0, 0, 0, 0, 0, 0, 10],
+                     'skipped_images': 0},
+        'paste_vs_annot': {'has_paste': False},
+        'summary': {'total_boxes': 100, 'class_count': 2, 'images_scanned': 1},
+    }
+    assert health_advice(stats) == ["未发现明显失衡"]

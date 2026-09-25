@@ -286,7 +286,12 @@ class StatsMixin:
         dialog.exec_()
 
     def _update_stats_total_label(self, dialog, bg_count=None, paste_count=None):
-        """更新统计弹窗底部总计标签；缺省计数回退到会话内存统计。"""
+        """更新统计弹窗底部总计标签。
+
+        计数来源：背景 = 实时统计缓存 `_collect_bg_stats_for_dialog()`（与背景表同源，
+        勿传 payload 的 annot 计数，它排除贴图/关键点）；贴图 = payload 整库统计优先，
+        缺省回退会话内存 `_get_session_paste_stats()`。
+        """
         from ..i18n import t as tr
         label = getattr(dialog, '_total_label', None)
         if label is None:
@@ -489,12 +494,9 @@ class StatsMixin:
                 'summary', {}).get('total_boxes')
             if not isinstance(paste_total, int) or isinstance(paste_total, bool):
                 paste_total = None
-            bg_total = (payload.get('annot') or {}).get('stats', {}).get(
-                'summary', {}).get('total_boxes')
-            if not isinstance(bg_total, int) or isinstance(bg_total, bool):
-                bg_total = None
-            self._update_stats_total_label(
-                dialog, bg_count=bg_total, paste_count=paste_total)
+            # 背景计数不取 payload：annot 统计排除贴图/关键点，与背景表（sidecar 全量）
+            # 不同源；交由 helper 回退到 _collect_bg_stats_for_dialog()，保证与表一致。
+            self._update_stats_total_label(dialog, paste_count=paste_total)
             _render_source(dialog._health_source, payload)
 
         dialog._on_health_payload = _on_payload

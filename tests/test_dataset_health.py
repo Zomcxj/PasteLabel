@@ -787,7 +787,13 @@ dialog._on_health_payload(payload)
 text = dialog._total_label.text()
 bg_part, paste_part = text.split("|")
 assert "7" in paste_part, text
-assert "9" in bg_part, text
+# 背景计数必须与背景表同源（此处磁盘无 sidecar → 表为空 → 总计背景为 0），
+# payload 的 annot 计数（9）不得覆盖它，否则总计与表行求和不一致。
+bg_table = dialog._bg_table
+table_sum = sum(int(bg_table.item(r, 1).text())
+                for r in range(bg_table.rowCount()))
+assert table_sum == 0, table_sum
+assert "0" in bg_part and "9" not in bg_part, text
 assert dialog._paste_table.item(0, 0).text() == "disk_logo"
 
 # payload 贴图段为空 → 保留会话内存贴图计数，而不是盲写 0
@@ -801,6 +807,106 @@ assert " 1 " in paste_part, dialog._total_label.text()
 editor._close_health_worker()
 print("OK")
 '''
+    env = os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(root)}
+    result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
+                            text=True, capture_output=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+
+
+def test_stats_total_bg_count_matches_bg_table_with_disk_paste_real_qt(tmp_path):
+    import json
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    img = tmp_path / "img.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n")
+    sidecar = tmp_path / "img.json"
+    sidecar.write_text(json.dumps({
+        "shapes": [
+            {"label": "car", "shape_type": "rectangle",
+             "points": [[0, 0], [10, 10]]},
+            {"label": "logo", "shape_type": "rectangle",
+             "points": [[20, 20], [30, 30]], "flags": {"paste": True}},
+        ],
+    }, ensure_ascii=False), encoding="utf-8")
+    script = '''
+import json
+from PyQt5.QtWidgets import QApplication, QDialog
+from pastelabel.ui.mixins.stats import StatsMixin
+
+app = QApplication.instance() or QApplication([])
+
+
+class FakeLabelManager:
+    def rename_detection_label(self, old, new):
+        return False
+
+    def rename_paste_label(self, old, new, rewrite_disk=False):
+        return False
+
+
+class FakeEditor(StatsMixin, QDialog):
+    def __init__(self, image_path):
+        super().__init__()
+        self.background_images = [image_path]
+        self.detection_boxes_dict = {}
+        self.canvas_items_dict = {}
+        self.canvas_items = []
+        self.current_background_index = -1
+        self._health_worker = None
+        self._cached_bg_label_stats = None
+        self._memory_background_path = image_path
+        self.label_color_map = {}
+        self.global_labels = set()
+        self.background_dataset_labels = set()
+        self.label_manager = FakeLabelManager()
+        self._dataset_stats_dirty = False
+        self._background_label_scan_completed = True
+
+    def get_label_color(self, label):
+        return "#123456"
+
+
+editor = FakeEditor(IMAGE_PATH)
+captured = {}
+
+
+def _capture_exec(self):
+    captured["dialog"] = self
+    return 0
+
+
+QDialog.exec_ = _capture_exec
+editor._show_label_stats()
+dialog = captured["dialog"]
+editor._close_health_worker()
+
+bg_table = dialog._bg_table
+# 背景表按 sidecar 全量计数：1 矩形 + 1 贴图 = 2
+table_sum = sum(int(bg_table.item(r, 1).text())
+                for r in range(bg_table.rowCount()))
+assert table_sum == 2, table_sum
+
+# payload 的 annot 统计排除贴图 → total_boxes=1；总计背景计数必须仍等于表求和 2
+payload = {
+    "annot": {"stats": {"class_dist": [{"label": "car", "count": 1}],
+                        "summary": {"total_boxes": 1}},
+              "advice": ["a"]},
+    "paste": {"stats": {"class_dist": [{"label": "logo", "count": 1}],
+                        "summary": {"total_boxes": 1}},
+              "advice": ["p"]},
+    "images_scanned": 1,
+}
+dialog._on_health_payload(payload)
+bg_part = dialog._total_label.text().split("|")[0]
+assert " 2 " in bg_part, dialog._total_label.text()
+
+editor._close_health_worker()
+print("OK")
+'''.replace("IMAGE_PATH", repr(str(img)))
     env = os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(root)}
     result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
                             text=True, capture_output=True, timeout=120)

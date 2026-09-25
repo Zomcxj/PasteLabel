@@ -178,9 +178,12 @@ def test_health_bar_chart_api_and_paint():
     from pastelabel.ui.widgets.health_charts import HealthBarChart
     chart = HealthBarChart()
     chart.set_data([{'label': 'a', 'value': 3}, {'label': 'b', 'value': 1}])
+    chart.paintEvent(None)
     chart.set_data([{'label': 'a', 'value': 3}], horizontal=False,
                    highlight_extremes=True)
+    chart.paintEvent(None)
     chart.set_histogram([0.0, 0.5, 1.0], [4, 6])
+    chart.paintEvent(None)
     chart.set_placeholder("暂无数据")
     # paintEvent 必须可调用（conftest mock QPainter）
     chart.paintEvent(None)

@@ -74,7 +74,9 @@ def test_pipeline_recipe_feature_fully_removed():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run(
-        ["git", "grep", "-n", "-E", "recipe|配方", "--", "pastelabel"],
+        ["git", "grep", "-n", "-i", "-E",
+         "recipe|配方|至少选择两步|划分比例之和", "--", "pastelabel"],
         cwd=root, text=True, capture_output=True)
+    assert result.returncode in (0, 1), result.stderr
     hits = [line for line in result.stdout.splitlines() if line.strip()]
     assert hits == [], "残留配方引用:\n" + "\n".join(hits)

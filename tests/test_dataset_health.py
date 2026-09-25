@@ -196,3 +196,13 @@ def test_i18n_health_terms():
                 "贴图 vs 标注", "建议", "未发现明显失衡"):
         assert key in _strings["zh"], key
         assert key in _strings["en"], key
+
+
+def test_stats_mixin_exposes_health_section_source():
+    import inspect
+    from pastelabel.ui.mixins.stats import StatsMixin
+    src = inspect.getsource(StatsMixin)
+    assert "_build_health_section" in src
+    assert "DatasetHealthWorker" in src
+    assert "HealthBarChart" in src
+    assert "_close_health_worker" in src

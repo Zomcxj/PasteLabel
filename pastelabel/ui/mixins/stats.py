@@ -287,6 +287,7 @@ class StatsMixin:
             paste_container.setVisible(paste_expanded)
             paste_header.setText(f"{'▼' if paste_expanded else '▶'}  {tr('贴图标签_list')}")
         paste_header.clicked.connect(_toggle_paste)
+        self._build_health_section(dialog, layout)
         total = QLabel(
             f"{tr('总计')}: {tr('背景图标签')} {sum(bg_stats.values())} {tr('个')} | "
             f"{tr('贴图标签_list')} {sum(paste_stats.values())} {tr('个')}"
@@ -294,6 +295,121 @@ class StatsMixin:
         total.setStyleSheet("font-size: 12px; margin-top: 8px;")
         layout.addWidget(total)
         dialog.exec_()
+
+    def _close_health_worker(self):
+        """中断并清理健康扫描 worker。"""
+        worker = getattr(self, '_health_worker', None)
+        self._health_worker = None
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    worker.requestInterruption()
+            except Exception:
+                pass
+
+    def _build_health_section(self, dialog, layout):
+        """构建「数据集健康」折叠区：5 面板 + 建议，后台扫描填充。"""
+        from PyQt5.QtCore import Qt
+        from PyQt5.QtWidgets import QPushButton, QLabel, QWidget, QVBoxLayout
+        from ..i18n import t as tr
+        from ..widgets.health_charts import HealthBarChart
+
+        header = QPushButton(f"▼  {tr('数据集健康')}")
+        header.setFlat(True)
+        header.setCursor(Qt.PointingHandCursor)
+        header.setStyleSheet(
+            "border: none; text-align: left; font-weight: bold; "
+            "font-size: 13px; padding: 2px 0;")
+        header.setFixedHeight(24)
+        layout.addWidget(header)
+
+        container = QWidget()
+        box = QVBoxLayout(container)
+        box.setContentsMargins(0, 0, 0, 0)
+
+        class_chart = HealthBarChart()
+        size_chart = HealthBarChart()
+        aspect_chart = HealthBarChart()
+        iou_chart = HealthBarChart()
+        paste_chart = HealthBarChart()
+        charts = {
+            'class': class_chart, 'size': size_chart, 'aspect': aspect_chart,
+            'iou': iou_chart, 'paste': paste_chart,
+        }
+        for key, title in (('class', tr('类别分布')), ('size', tr('尺寸分布')),
+                           ('aspect', tr('长宽比分布')),
+                           ('iou', tr('IoU 重叠分布')),
+                           ('paste', tr('贴图 vs 标注'))):
+            box.addWidget(QLabel(title))
+            box.addWidget(charts[key])
+            charts[key].set_placeholder(tr('正在分析'))
+        advice_label = QLabel(f"{tr('建议')}: {tr('正在分析')}")
+        advice_label.setWordWrap(True)
+        box.addWidget(advice_label)
+        layout.addWidget(container)
+
+        expanded = True
+        def _toggle():
+            nonlocal expanded
+            expanded = not expanded
+            container.setVisible(expanded)
+            header.setText(
+                f"{'▼' if expanded else '▶'}  {tr('数据集健康')}")
+        header.clicked.connect(_toggle)
+
+        dialog._health_charts = charts
+        dialog._health_advice_label = advice_label
+
+        if not getattr(self, 'background_images', None):
+            for chart in charts.values():
+                chart.set_placeholder(tr('请先加载数据集'))
+            advice_label.setText("")
+            return
+
+        from ...engine.dataset_health import DatasetHealthWorker
+        self._close_health_worker()
+        memory_boxes = {
+            idx: list(boxes) for idx, boxes in
+            (getattr(self, 'detection_boxes_dict', None) or {}).items() if boxes}
+        canvas_items = dict(getattr(self, 'canvas_items_dict', None) or {})
+        current = getattr(self, 'current_background_index', -1)
+        if current >= 0:
+            canvas_items[current] = list(getattr(self, 'canvas_items', None) or [])
+        worker = DatasetHealthWorker(
+            tuple(self.background_images), memory_boxes, canvas_items, self)
+
+        def _render(payload, charts=charts, label=advice_label, d=dialog):
+            stats = payload.get('stats') or {}
+            class_dist = stats.get('class_dist') or []
+            if class_dist:
+                charts['class'].set_data(
+                    [{'label': c['label'], 'value': c['count']} for c in class_dist],
+                    horizontal=True, highlight_extremes=True)
+            else:
+                charts['class'].set_placeholder(tr('未发现明显失衡'))
+            size = stats.get('size_hist') or {}
+            charts['size'].set_histogram(size.get('edges'), size.get('counts'))
+            aspect = stats.get('aspect_hist') or {}
+            charts['aspect'].set_histogram(aspect.get('edges'), aspect.get('counts'))
+            iou = stats.get('iou_hist') or {}
+            charts['iou'].set_histogram(iou.get('edges'), iou.get('counts'))
+            pva = stats.get('paste_vs_annot') or {}
+            if pva.get('has_paste'):
+                q = pva.get('paste_quantiles') or [0, 0, 0, 0]
+                charts['paste'].set_data([
+                    {'label': tr('贴图 vs 标注'), 'value': q[2]}])
+            else:
+                charts['paste'].set_placeholder(tr('暂无贴图数据'))
+            advice = payload.get('advice') or [tr('未发现明显失衡')]
+            label.setText(f"{tr('建议')}: " + "；".join(advice))
+
+        worker.health_ready.connect(_render)
+        self._health_worker = worker
+        worker.start()
+
+        def _on_close(*_a):
+            self._close_health_worker()
+        dialog.finished.connect(_on_close)
 
     def _reload_stats_bg_table(self, bg_table, dialog):
         """Rebuild stats dialog background table from live cache after rename/color."""

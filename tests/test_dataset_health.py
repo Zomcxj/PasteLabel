@@ -401,6 +401,112 @@ def test_stats_health_section_supports_source_switch():
     assert "_health_payload" in src
 
 
+def test_health_source_switch_routes_payload_real_qt(tmp_path):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = '''
+from PyQt5.QtCore import QObject
+from PyQt5.QtWidgets import QApplication, QDialog, QVBoxLayout
+from pastelabel.ui.mixins.stats import StatsMixin
+
+app = QApplication.instance() or QApplication([])
+
+
+class FakeEditor(StatsMixin, QObject):
+    def __init__(self):
+        super().__init__()
+        self.background_images = ["x.png"]
+        self.detection_boxes_dict = {}
+        self.canvas_items_dict = {}
+        self.canvas_items = []
+        self.current_background_index = -1
+        self._health_worker = None
+
+    def get_label_color(self, label):
+        return "#123456"
+
+
+editor = FakeEditor()
+dialog = QDialog()
+layout = QVBoxLayout(dialog)
+editor._build_health_section(dialog, layout)
+# 无事件循环，queued signal 不会投递；先停掉 worker，再同步注入 payload
+editor._close_health_worker()
+
+payload = {
+    "annot": {
+        "stats": {
+            "class_dist": [{"label": "annot_cls", "count": 9}],
+            "size_hist": {"edges": [0, 1], "counts": [9]},
+            "aspect_hist": {"edges": [0, 1], "counts": [9]},
+            "iou_hist": {"edges": [0.0, 1.0], "counts": [9]},
+            "paste_vs_annot": {"has_paste": True,
+                               "annot_quantiles": [0, 0, 111, 0],
+                               "paste_quantiles": [0, 0, 222, 0]},
+        },
+        "advice": ["annot advice"],
+    },
+    "paste": {
+        "stats": {
+            "class_dist": [{"label": "paste_cls", "count": 4}],
+            "size_hist": {"edges": [0, 1], "counts": [4]},
+            "aspect_hist": {"edges": [0, 1], "counts": [4]},
+            "iou_hist": {"edges": [0.0, 1.0], "counts": [4]},
+            # 面板 5 必须固定读 annot：此处放不同的值以捕获路由回退
+            "paste_vs_annot": {"has_paste": True,
+                               "annot_quantiles": [0, 0, 333, 0],
+                               "paste_quantiles": [0, 0, 444, 0]},
+        },
+        "advice": ["paste advice"],
+    },
+    "images_scanned": 1,
+}
+charts = dialog._health_charts
+
+dialog._health_payload = payload
+dialog._set_health_source("annot")
+assert charts["class"]._items[0]["label"] == "annot_cls", charts["class"]._items
+assert charts["class"]._items[0]["color"] == "#123456"
+assert charts["size"]._xlabel != ""
+assert charts["size"]._counts == [9], charts["size"]._counts
+
+dialog._set_health_source("paste")
+assert charts["class"]._items[0]["label"] == "paste_cls", charts["class"]._items
+assert charts["class"]._items[0]["color"] == "#123456"
+assert charts["size"]._counts == [4], charts["size"]._counts
+assert dialog._health_source == "paste"
+# 面板 5 固定 annot 对比：贴图模式仍显示 annot 的 111/222
+assert charts["paste"]._mode == "bars", charts["paste"]._mode
+assert charts["paste"]._items[0]["value"] == 111, charts["paste"]._items
+assert charts["paste"]._items[1]["value"] == 222, charts["paste"]._items
+
+# paste 空 → 1-4 显示占位符
+empty = dict(payload)
+empty["paste"] = {"stats": {}, "advice": []}
+dialog._health_payload = empty
+dialog._set_health_source("paste")
+assert charts["class"]._mode == "empty", charts["class"]._mode
+assert charts["class"]._placeholder == "暂无贴图数据", charts["class"]._placeholder
+
+# error → 全部分析失败
+dialog._health_payload = {"error": True}
+dialog._set_health_source("annot")
+assert charts["class"]._placeholder == "分析失败", charts["class"]._placeholder
+assert charts["paste"]._placeholder == "分析失败", charts["paste"]._placeholder
+
+editor._close_health_worker()
+print("OK")
+'''
+    env = os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(root)}
+    result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
+                            text=True, capture_output=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+
+
 def test_stats_dialog_min_width_810():
     import inspect
     from pastelabel.ui.main_window import ImageEditor

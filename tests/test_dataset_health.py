@@ -209,3 +209,77 @@ def test_stats_mixin_exposes_health_section_source():
     assert "worker.finished.connect(worker.deleteLater)" in src
     assert "requestInterruption" in src
     assert "worker.wait(" in src
+
+
+class _FakeSignal:
+    def __init__(self):
+        self._fns = []
+    def connect(self, fn):
+        self._fns.append(fn)
+    def emit(self, payload):
+        for fn in self._fns:
+            fn(payload)
+
+
+def _run_health_worker(image_paths=(), memory_boxes=None, canvas_items=None):
+    from pastelabel.engine.dataset_health import DatasetHealthWorker
+    w = DatasetHealthWorker(tuple(image_paths), memory_boxes or {},
+                            canvas_items or {})
+    w.health_ready = _FakeSignal()
+    w.isInterruptionRequested = lambda: False
+    captured = {}
+    w.health_ready.connect(lambda p: captured.update(p))
+    w.run()
+    return captured
+
+
+def test_collect_paste_geometry_carries_image_index():
+    from pastelabel.engine.dataset_health import collect_paste_geometry
+
+    class Rect:
+        def __init__(self, w, h, x=0, y=0):
+            self._w, self._h, self._x, self._y = w, h, x, y
+        def width(self): return self._w
+        def height(self): return self._h
+        def x(self): return self._x
+        def y(self): return self._y
+
+    items = {3: [(None, Rect(10, 10), "a")], 7: [(None, Rect(20, 20), "b")]}
+    out = collect_paste_geometry(items)
+    assert sorted(b['image_index'] for b in out) == [3, 7]
+
+
+def test_worker_payload_has_annot_and_paste_sections():
+    captured = _run_health_worker()
+    assert 'annot' in captured
+    assert 'paste' in captured
+    assert 'stats' in captured['annot']
+    assert 'advice' in captured['annot']
+    assert 'stats' in captured['paste']
+    assert 'advice' in captured['paste']
+    assert captured['images_scanned'] == 0
+
+
+def test_worker_paste_section_empty_without_paste():
+    captured = _run_health_worker()
+    assert captured['paste']['stats'] == {}
+    assert captured['paste']['advice'] == []
+
+
+def test_worker_paste_section_computed_with_paste():
+    class Rect:
+        def __init__(self, w, h, x=0, y=0):
+            self._w, self._h, self._x, self._y = w, h, x, y
+        def width(self): return self._w
+        def height(self): return self._h
+        def x(self): return self._x
+        def y(self): return self._y
+
+    captured = _run_health_worker(
+        canvas_items={0: [(None, Rect(30, 20), "a"), (None, Rect(30, 20), "a")]})
+    paste_stats = captured['paste']['stats']
+    assert paste_stats['class_dist'] == [{'label': 'a', 'count': 2}]
+    assert paste_stats['summary']['total_boxes'] == 2
+    assert isinstance(captured['paste']['advice'], list)
+    # annot 侧仍带对比数据
+    assert captured['annot']['stats']['paste_vs_annot']['has_paste'] is True

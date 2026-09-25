@@ -87,7 +87,7 @@ def collect_shape_geometry(image_paths, memory_boxes=None, is_interrupted=None):
 def collect_paste_geometry(canvas_items_dict):
     """从 {index: [(pixmap, rect, label), ...]} 提取贴图几何。"""
     boxes = []
-    for _index, items in (canvas_items_dict or {}).items():
+    for index, items in (canvas_items_dict or {}).items():
         for entry in items or []:
             if not entry or len(entry) < 3:
                 continue
@@ -105,6 +105,7 @@ def collect_paste_geometry(canvas_items_dict):
                 'label': str(label or ''),
                 'x': x, 'y': y, 'width': w, 'height': h,
                 'area': w * h, 'aspect': w / h,
+                'image_index': index,
             })
     return boxes
 
@@ -275,14 +276,21 @@ class DatasetHealthWorker(QThread):
                 self._image_paths, memory_boxes=self._memory_boxes,
                 is_interrupted=self.isInterruptionRequested)
             paste = collect_paste_geometry(self._canvas_items_dict)
-            stats = compute_health(geo['boxes'], paste_boxes=paste)
-            advice = health_advice(stats)
+            annot_stats = compute_health(geo['boxes'], paste_boxes=paste)
             payload = {
-                'stats': stats, 'advice': advice,
+                'annot': {'stats': annot_stats,
+                          'advice': health_advice(annot_stats)},
+                'paste': {},
                 'images_scanned': geo['images_scanned'],
             }
+            if paste:
+                paste_stats = compute_health(paste)
+                payload['paste'] = {'stats': paste_stats,
+                                    'advice': health_advice(paste_stats)}
+            else:
+                payload['paste'] = {'stats': {}, 'advice': []}
         except Exception:
-            payload = {'stats': {}, 'advice': [], 'images_scanned': 0,
-                       'error': True}
+            payload = {'error': True, 'annot': {}, 'paste': {},
+                       'images_scanned': 0}
         if not self.isInterruptionRequested():
             self.health_ready.emit(payload)

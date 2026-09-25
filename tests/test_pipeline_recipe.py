@@ -1,0 +1,113 @@
+"""流水线配方纯逻辑测试。"""
+
+
+def _state(**over):
+    state = {
+        'steps': ['augment', 'export', 'split'],
+        'augment': {
+            'transforms': {
+                'fliph': {'checked': True, 'params': {}},
+                'bright': {'checked': True, 'params': {'delta': [-30, 30]}},
+            },
+            'ratio': 0.5, 'mode': 'random',
+            'include_original': False, 'skip_empty': True,
+        },
+        'export': {'format': 'YOLO Seg', 'labels': ['cat', 'dog'], 'skip_empty': False},
+        'split': {'train': 0.7, 'val': 0.2, 'test': 0.1},
+    }
+    state.update(over)
+    return state
+
+
+def test_normalize_fills_defaults_on_empty():
+    from pastelabel.engine.pipeline_recipe import normalize_recipe
+    r = normalize_recipe({})
+    assert r['version'] == 1
+    assert r['name'] == ''
+    assert r['steps'] == []
+    assert r['augment']['transforms'] == {}
+    assert r['augment']['ratio'] == 1.0
+    assert r['augment']['mode'] == 'all'
+    assert r['augment']['include_original'] is True
+    assert r['augment']['skip_empty'] is True
+    assert r['export']['format'] == 'YOLO Detection'
+    assert r['export']['labels'] == []
+    assert r['export']['skip_empty'] is True
+    assert r['split'] == {'train': 0.8, 'val': 0.1, 'test': 0.1}
+
+
+def test_normalize_coerces_bad_types_and_unknown_format():
+    from pastelabel.engine.pipeline_recipe import normalize_recipe
+    r = normalize_recipe({
+        'steps': 'augment',
+        'augment': {'ratio': 'x', 'mode': 'bogus',
+                    'transforms': {'fliph': 'yes', 'bad': {'checked': 1, 'params': 'z'}}},
+        'export': {'format': 'Nope', 'labels': 'cat'},
+        'split': {'train': 'a', 'val': 2.0, 'test': -1},
+    })
+    assert r['steps'] == []
+    assert r['augment']['ratio'] == 1.0
+    assert r['augment']['mode'] == 'all'
+    assert r['augment']['transforms']['fliph'] == {'checked': False, 'params': {}}
+    assert r['augment']['transforms']['bad'] == {'checked': True, 'params': {}}
+    assert r['export']['format'] == 'YOLO Detection'
+    assert r['export']['labels'] == []
+    assert r['split']['train'] == 0.8
+    assert r['split']['val'] == 1.0
+    assert r['split']['test'] == 0.0
+
+
+def test_normalize_keeps_valid_values():
+    from pastelabel.engine.pipeline_recipe import normalize_recipe, capture_recipe
+    r = capture_recipe('my recipe', _state())
+    assert r['name'] == 'my recipe'
+    assert r['steps'] == ['augment', 'export', 'split']
+    assert r['augment']['transforms']['bright']['params'] == {'delta': [-30.0, 30.0]}
+    assert r['augment']['ratio'] == 0.5
+    assert r['augment']['mode'] == 'random'
+    assert r['augment']['include_original'] is False
+    assert r['export']['format'] == 'YOLO Seg'
+    assert r['export']['labels'] == ['cat', 'dog']
+    assert r['export']['skip_empty'] is False
+    assert r['split'] == {'train': 0.7, 'val': 0.2, 'test': 0.1}
+
+
+def test_normalize_filters_unknown_steps_and_orders_them():
+    from pastelabel.engine.pipeline_recipe import normalize_recipe
+    r = normalize_recipe({'steps': ['split', 'bogus', 'augment', 'split']})
+    assert r['steps'] == ['augment', 'split']
+
+
+def test_validate_requires_two_steps():
+    from pastelabel.engine.pipeline_recipe import normalize_recipe, validate_recipe
+    assert validate_recipe(normalize_recipe({'steps': ['augment']}))
+
+
+def test_validate_flags_split_sum():
+    from pastelabel.engine.pipeline_recipe import normalize_recipe, validate_recipe
+    bad = normalize_recipe({'steps': ['augment', 'split'],
+                            'split': {'train': 0.5, 'val': 0.5, 'test': 0.5}})
+    assert any('比例' in p for p in validate_recipe(bad))
+
+
+def test_validate_ok_for_good_recipe():
+    from pastelabel.engine.pipeline_recipe import capture_recipe, validate_recipe
+    assert validate_recipe(capture_recipe('r', _state())) == []
+
+
+def test_apply_labels_intersection():
+    from pastelabel.engine.pipeline_recipe import capture_recipe, apply_recipe_to_labels
+    r = capture_recipe('r', _state())
+    assert apply_recipe_to_labels(r, ['dog', 'bird']) == ['dog']
+
+
+def test_apply_labels_all_missing_returns_empty():
+    from pastelabel.engine.pipeline_recipe import capture_recipe, apply_recipe_to_labels
+    r = capture_recipe('r', _state())
+    assert apply_recipe_to_labels(r, ['bird']) == []
+
+
+def test_apply_labels_case_sensitive():
+    from pastelabel.engine.pipeline_recipe import capture_recipe, apply_recipe_to_labels
+    r = capture_recipe('r', _state())
+    assert apply_recipe_to_labels(r, ['Cat', 'DOG']) == []

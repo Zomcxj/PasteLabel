@@ -512,3 +512,134 @@ def test_stats_dialog_min_width_810():
     from pastelabel.ui.main_window import ImageEditor
     src = inspect.getsource(ImageEditor._show_label_stats)
     assert "dialog.setMinimumSize(810, 600)" in src
+
+
+def test_stats_dialog_table_wiring_and_worker_payload_real_qt(tmp_path):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = '''
+from PyQt5.QtCore import QObject
+from PyQt5.QtWidgets import QApplication, QDialog, QWidget
+from pastelabel.ui.mixins.stats import StatsMixin
+
+app = QApplication.instance() or QApplication([])
+
+
+class FakeLabelManager:
+    def rename_detection_label(self, old, new):
+        return False
+
+    def rename_paste_label(self, old, new):
+        return False
+
+
+class FakeEditor(StatsMixin, QWidget):
+    def __init__(self):
+        super().__init__()
+        self.background_images = ["x.png"]
+        self.detection_boxes_dict = {
+            0: [{"label": "bg_cls", "x": 0, "y": 0, "width": 10, "height": 10}]}
+        self.canvas_items_dict = {0: [(None, None, "paste_cls")]}
+        self.canvas_items = []
+        self.current_background_index = 0
+        self._health_worker = None
+        self._cached_bg_label_stats = None
+        self._memory_background_path = "x.png"
+        self.label_color_map = {}
+        self.global_labels = set()
+        self.background_dataset_labels = set()
+        self.label_manager = FakeLabelManager()
+        self._dataset_stats_dirty = False
+        self._background_label_scan_completed = True
+
+    def get_label_color(self, label):
+        return "#123456"
+
+
+editor = FakeEditor()
+# 无事件循环：拦截 exec_ 以捕获真实 _StatsDialog
+captured = {}
+
+
+def _capture_exec(self):
+    captured["dialog"] = self
+    return 0
+
+
+QDialog.exec_ = _capture_exec
+editor._show_label_stats()
+dialog = captured["dialog"]
+editor._close_health_worker()
+
+bg_table = dialog._bg_table
+paste_table = dialog._paste_table
+charts = dialog._health_charts
+
+# Gap 1: 真实接线（点击表格 → 切换数据源）
+bg_table.cellClicked.emit(0, 0)
+assert dialog._health_source == "annot", dialog._health_source
+paste_table.cellClicked.emit(0, 0)
+assert dialog._health_source == "paste", dialog._health_source
+bg_table.cellClicked.emit(0, 1)
+assert dialog._health_source == "annot", dialog._health_source
+
+payload = {
+    "annot": {
+        "stats": {
+            "class_dist": [{"label": "annot_cls", "count": 9}],
+            "size_hist": {"edges": [0, 1], "counts": [9]},
+            "aspect_hist": {"edges": [0, 1], "counts": [9]},
+            "iou_hist": {"edges": [0.0, 1.0], "counts": [9]},
+            "paste_vs_annot": {"has_paste": True,
+                               "annot_quantiles": [0, 0, 111, 0],
+                               "paste_quantiles": [0, 0, 222, 0]},
+        },
+        "advice": ["annot advice"],
+    },
+    "paste": {
+        "stats": {
+            "class_dist": [{"label": "paste_cls", "count": 4}],
+            "size_hist": {"edges": [0, 1], "counts": [4]},
+            "aspect_hist": {"edges": [0, 1], "counts": [4]},
+            "iou_hist": {"edges": [0.0, 1.0], "counts": [4]},
+        },
+        "advice": ["paste advice"],
+    },
+    "images_scanned": 1,
+}
+
+# Gap 2: worker payload 投递（存储 + 渲染）
+payload2 = {
+    "annot": payload["annot"],
+    "paste": {"stats": {
+        "class_dist": [{"label": "from_worker", "count": 7}],
+        "size_hist": {"edges": [0, 1], "counts": [7]},
+        "aspect_hist": {"edges": [0, 1], "counts": [7]},
+        "iou_hist": {"edges": [0.0, 1.0], "counts": [7]},
+    }, "advice": ["w"]},
+    "images_scanned": 2,
+}
+dialog._set_health_source("paste")
+dialog._on_health_payload(payload2)
+assert dialog._health_payload is payload2
+assert charts["class"]._items[0]["label"] == "from_worker", charts["class"]._items
+assert dialog._health_source == "paste"
+
+# payload 到达前已选 paste：存储的数据源优先
+dialog._health_payload = None
+dialog._set_health_source("paste")
+dialog._on_health_payload(payload)
+assert dialog._health_payload is payload
+assert charts["class"]._items[0]["label"] == "paste_cls", charts["class"]._items
+
+editor._close_health_worker()
+print("OK")
+'''
+    env = os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(root)}
+    result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
+                            text=True, capture_output=True, timeout=120)
+    assert result.returncode == 0, result.stderr

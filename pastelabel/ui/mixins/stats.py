@@ -276,6 +276,7 @@ class StatsMixin:
                 paste_table.blockSignals(False)
 
         paste_table.itemChanged.connect(_on_paste_label_changed)
+        dialog._paste_table = paste_table
         paste_container = QWidget()
         paste_cl = QVBoxLayout(paste_container)
         paste_cl.setContentsMargins(0, 0, 0, 0)
@@ -462,6 +463,7 @@ class StatsMixin:
             dialog._health_payload = payload
             _render_source(dialog._health_source, payload)
 
+        dialog._on_health_payload = _on_payload
         worker.health_ready.connect(_on_payload)
         self._health_worker = worker
         worker.start()

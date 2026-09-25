@@ -253,3 +253,35 @@ def health_advice(stats):
             advice.append(f"重复/高度重叠框偏多（{high * 100:.0f}%）")
 
     return advice or ["未发现明显失衡"]
+
+
+from PyQt5.QtCore import QThread, pyqtSignal
+
+
+class DatasetHealthWorker(QThread):
+    """后台扫描数据集并计算健康统计。"""
+    health_ready = pyqtSignal(object)
+
+    def __init__(self, image_paths, memory_boxes=None, canvas_items_dict=None,
+                 parent=None):
+        super().__init__(parent)
+        self._image_paths = tuple(image_paths or ())
+        self._memory_boxes = dict(memory_boxes or {})
+        self._canvas_items_dict = dict(canvas_items_dict or {})
+
+    def run(self):
+        try:
+            geo = collect_shape_geometry(
+                self._image_paths, memory_boxes=self._memory_boxes,
+                is_interrupted=self.isInterruptionRequested)
+            paste = collect_paste_geometry(self._canvas_items_dict)
+            stats = compute_health(geo['boxes'], paste_boxes=paste)
+            advice = health_advice(stats)
+            payload = {
+                'stats': stats, 'advice': advice,
+                'images_scanned': geo['images_scanned'],
+            }
+        except Exception:
+            payload = {'stats': {}, 'advice': [], 'images_scanned': 0}
+        if not self.isInterruptionRequested():
+            self.health_ready.emit(payload)

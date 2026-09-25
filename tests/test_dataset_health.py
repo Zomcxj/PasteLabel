@@ -162,3 +162,13 @@ def test_health_advice_no_issue():
         'summary': {'total_boxes': 100, 'class_count': 2, 'images_scanned': 1},
     }
     assert health_advice(stats) == ["未发现明显失衡"]
+
+
+def test_worker_signals_and_run_source():
+    import inspect
+    from pastelabel.engine import dataset_health
+    assert hasattr(dataset_health, 'DatasetHealthWorker')
+    src = inspect.getsource(dataset_health.DatasetHealthWorker)
+    assert 'health_ready' in src
+    assert 'collect_shape_geometry' in src
+    assert 'health_advice' in src

@@ -68,3 +68,12 @@ def test_documentation_covers_dataset_health():
     for term in ("类别分布", "尺寸分布", "长宽比分布", "IoU 重叠分布"):
         assert term in guide, term
 
+
+def test_documentation_covers_pipeline_recipe():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    guide = (ROOT / "docs" / "user_guide.md").read_text(encoding="utf-8")
+    assert "配方" in readme
+    assert "配方" in guide
+    assert "保存为配方" in guide
+    assert "应用配方" in guide
+

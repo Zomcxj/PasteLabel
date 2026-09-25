@@ -59,3 +59,12 @@ def test_documentation_covers_semantic_region_and_quality_lint():
     assert "质检忽略" in settings
     assert "lint_ignored_rules" in settings
 
+
+def test_documentation_covers_dataset_health():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    guide = (ROOT / "docs" / "user_guide.md").read_text(encoding="utf-8")
+    assert "数据集健康" in readme
+    assert "数据集健康" in guide
+    for term in ("类别分布", "尺寸分布", "长宽比分布", "IoU 重叠分布"):
+        assert term in guide, term
+

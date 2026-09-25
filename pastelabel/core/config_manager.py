@@ -5,7 +5,6 @@ import os
 import json
 from . import config as config_module
 from .config import SHORTCUT_CONFIG, STATUSBAR_CONFIG, DETECTION_BOX_CONFIG, MAGNIFIER_CONFIG, LABEL_CACHE_SLOTS, NUDGE_CONFIG, DETECTION_BOX_WHEEL_CONFIG, CROSSHAIR_CONFIG, BOX_BORDER_CONFIG, LABEL_COLORS, OBB_CONFIG
-from pastelabel.engine.pipeline_recipe import normalize_recipe as _normalize_recipe
 
 
 CONFIG_PATH = os.environ.get('PASTELABEL_CONFIG_PATH') or os.path.join(
@@ -50,22 +49,6 @@ def _normalize_lint_ignored_rules(rules):
         if cleaned:
             normalized[kind] = cleaned
     return normalized
-
-
-_MAX_PIPELINE_RECIPES = 50
-
-
-def _normalize_pipeline_recipes(recipes):
-    """流水线配方列表：逐项规整、无名丢弃、按 name 去重（后者覆盖）、上限 50。"""
-    if not isinstance(recipes, (list, tuple)):
-        return []
-    merged = {}
-    for raw in recipes:
-        recipe = _normalize_recipe(raw)
-        if not recipe['name']:
-            continue
-        merged[recipe['name']] = recipe
-    return list(merged.values())[-_MAX_PIPELINE_RECIPES:]
 
 
 def _filter_shortcuts(shortcuts):
@@ -183,9 +166,6 @@ def load_config():
         shortcuts['delete_label'] = 'Ctrl+Shift+Z'
         config['shortcuts'] = shortcuts
         save_config(config)  # 自动保存迁移后的配置
-
-    if 'pipeline_recipes' in config:
-        config['pipeline_recipes'] = _normalize_pipeline_recipes(config.get('pipeline_recipes'))
 
     return config
 
@@ -419,7 +399,7 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
                detection_box_wheel_edge_step=None,
               crosshair_width=None, crosshair_color=None, crosshair_alpha=None,
                box_border_width=None, label_colors=None, label_color_map=None,
-               lint_ignored_rules=None, pipeline_recipes=None):
+               lint_ignored_rules=None):
     """保存所有配置"""
     config = load_config()
     if shortcuts is not None:
@@ -462,8 +442,6 @@ def save_all(shortcuts=None, theme=None, language=None, max_labels=None,
         config['nudge_step'] = max(1, min(5, int(nudge_step)))
     if lint_ignored_rules is not None:
         config['lint_ignored_rules'] = _normalize_lint_ignored_rules(lint_ignored_rules)
-    if pipeline_recipes is not None:
-        config['pipeline_recipes'] = _normalize_pipeline_recipes(pipeline_recipes)
     if detection_box_scale_step is not None:
         config['detection_box_scale_step'] = max(0.01, min(0.30, float(detection_box_scale_step)))
     if paste_item_scale_step is not None:

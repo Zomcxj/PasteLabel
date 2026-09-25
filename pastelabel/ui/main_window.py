@@ -449,8 +449,6 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
             self._refresh_menu_shortcuts()
         if hasattr(self, '_rebuild_label_cache_menu'):
             self._rebuild_label_cache_menu()
-        if getattr(self, '_processing_panel', None) is not None:
-            self._processing_panel._load_recipes()
         if hasattr(self, 'canvas'):
             self.canvas.update()
         return True

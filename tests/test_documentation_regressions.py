@@ -69,11 +69,12 @@ def test_documentation_covers_dataset_health():
         assert term in guide, term
 
 
-def test_documentation_covers_pipeline_recipe():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    guide = (ROOT / "docs" / "user_guide.md").read_text(encoding="utf-8")
-    assert "配方" in readme
-    assert "配方" in guide
-    assert "保存为配方" in guide
-    assert "应用配方" in guide
-
+def test_pipeline_recipe_feature_fully_removed():
+    import subprocess
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        ["git", "grep", "-n", "-E", "recipe|配方", "--", "pastelabel"],
+        cwd=root, text=True, capture_output=True)
+    hits = [line for line in result.stdout.splitlines() if line.strip()]
+    assert hits == [], "残留配方引用:\n" + "\n".join(hits)

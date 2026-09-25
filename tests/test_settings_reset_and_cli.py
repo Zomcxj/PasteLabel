@@ -153,6 +153,7 @@ def test_reset_settings_to_default_reloads_and_refreshes(temp_config, monkeypatc
     assert "self._load_settings()" in source
     assert "self._apply_theme()" in source
     assert "self._refresh_ui_texts()" in source
+    assert "_load_recipes()" in source
 
 
 # ---------- B-2 CLI ----------

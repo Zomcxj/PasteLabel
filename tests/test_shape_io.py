@@ -121,3 +121,21 @@ def test_point_shape_roundtrips_through_labelme():
 def test_yolo_seg_line_skips_fewer_than_three_points():
     box = {"shape_type": "polygon", "points": [[1, 1], [2, 2]]}
     assert yolo_seg_line(box, 0, 100, 100) is None
+
+
+def test_paste_flag_round_trip():
+    from pastelabel.engine.shape_io import labelme_shape_from_box, box_from_labelme_shape
+    box = {"label": "logo", "x": 1, "y": 2, "width": 3, "height": 4}
+    shape = labelme_shape_from_box(box)
+    assert shape["flags"] == {}
+    assert box_from_labelme_shape(shape)["is_paste"] is False
+    shape["flags"] = {"paste": True}
+    assert box_from_labelme_shape(shape)["is_paste"] is True
+
+
+def test_labelme_shape_from_box_preserves_flags():
+    from pastelabel.engine.shape_io import labelme_shape_from_box
+    shape = labelme_shape_from_box(
+        {"label": "logo", "x": 0, "y": 0, "width": 1, "height": 1,
+         "flags": {"paste": True}})
+    assert shape["flags"] == {"paste": True}

@@ -394,11 +394,12 @@ class SaveManager(QObject):
             "imageWidth": width
         }
         
-        # 添加贴图
+        # 添加贴图（flags.paste 供统计区分贴图与检测框）
         for pixmap, rect, label in items_to_use:
             shape = self._build_labelme_shape(
                 label, rect.x(), rect.y(), rect.width(), rect.height()
             )
+            shape["flags"] = {"paste": True}
             json_data["shapes"].append(shape)
         
         # 添加检测框

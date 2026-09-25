@@ -357,6 +357,66 @@ print("OK")
     assert result.returncode == 0, result.stderr
 
 
+def test_collect_shape_geometry_empty_memory_slot_falls_back_to_disk(tmp_path):
+    """已加载但内存为空的图（应用里每张图都有空槽）必须回读磁盘。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = _write(tmp_path, "mem_empty", [_box("cat", w=100, h=50)])
+    out = collect_shape_geometry([img], memory_boxes={0: []})
+    assert [b["label"] for b in out["boxes"]] == ["cat"]
+    assert out["images_scanned"] == 1
+
+
+def test_collect_shape_geometry_routes_paste_shapes(tmp_path):
+    """磁盘 flags.paste 的 shape 进 paste_boxes，不进 boxes。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = _write(tmp_path, "flagged", [
+        _box("cat", w=100, h=50),
+        dict(_box("logo", w=10, h=10), flags={"paste": True}),
+    ])
+    out = collect_shape_geometry([img])
+    assert [b["label"] for b in out["boxes"]] == ["cat"]
+    assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
+    assert out["paste_boxes"][0]["image_index"] == 0
+
+
+def test_collect_shape_geometry_memory_paste_boxes_routed(tmp_path):
+    """内存框带 is_paste（新会话从磁盘载入的贴图）也要进 paste_boxes。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = _write(tmp_path, "mem_paste", [_box("cat", w=100, h=50)])
+    memory = {0: [
+        {"label": "cat", "x": 0, "y": 0, "width": 100, "height": 50},
+        {"label": "logo", "x": 5, "y": 5, "width": 10, "height": 10,
+         "is_paste": True},
+    ]}
+    out = collect_shape_geometry([img], memory_boxes=memory)
+    assert [b["label"] for b in out["boxes"]] == ["cat"]
+    assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
+
+
+def test_merge_paste_geometry_prefers_memory_and_dedupes():
+    from pastelabel.engine.dataset_health import merge_paste_geometry
+    disk = [{"label": "old", "x": 1.0, "y": 2.0, "width": 10.0, "height": 10.0,
+             "area": 100.0, "aspect": 1.0, "image_index": 0}]
+    memory = [{"label": "new", "x": 1.0, "y": 2.0, "width": 10.0, "height": 10.0,
+               "area": 100.0, "aspect": 1.0, "image_index": 0},
+              {"label": "extra", "x": 50.0, "y": 50.0, "width": 5.0, "height": 5.0,
+               "area": 25.0, "aspect": 1.0, "image_index": 1}]
+    merged = merge_paste_geometry(disk, memory)
+    assert sorted(b["label"] for b in merged) == ["extra", "new"]
+
+
+def test_worker_paste_section_includes_disk_paste(tmp_path):
+    img = _write(tmp_path, "disk_paste", [
+        _box("cat", w=100, h=50),
+        dict(_box("logo", w=10, h=10), flags={"paste": True}),
+    ])
+    captured = _run_health_worker(image_paths=[img])
+    assert captured["paste"]["stats"]["class_dist"] == [
+        {"label": "logo", "count": 1}]
+    assert captured["annot"]["stats"]["class_dist"] == [
+        {"label": "cat", "count": 1}]
+
+
 def test_worker_paste_section_computed_with_paste():
     class Rect:
         def __init__(self, w, h, x=0, y=0):
@@ -367,7 +427,7 @@ def test_worker_paste_section_computed_with_paste():
         def y(self): return self._y
 
     captured = _run_health_worker(
-        canvas_items={0: [(None, Rect(30, 20), "a"), (None, Rect(30, 20), "a")]})
+        canvas_items={0: [(None, Rect(30, 20), "a"), (None, Rect(30, 20, 40, 0), "a")]})
     paste_stats = captured['paste']['stats']
     assert paste_stats['class_dist'] == [{'label': 'a', 'count': 2}]
     assert paste_stats['summary']['total_boxes'] == 2

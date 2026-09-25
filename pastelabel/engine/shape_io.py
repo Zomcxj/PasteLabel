@@ -7,6 +7,8 @@ def box_from_labelme_shape(shape):
         return None
     points = shape.get("points") or []
     shape_type = shape.get("shape_type") or "rectangle"
+    flags = shape.get("flags") if isinstance(shape.get("flags"), dict) else {}
+    is_paste = bool(flags.get("paste"))
     if shape_type == "point":
         if len(points) != 1:
             return None
@@ -17,6 +19,7 @@ def box_from_labelme_shape(shape):
             "shape_type": shape_type,
             "group_id": shape.get("group_id"),
             "points": [list(points[0])],
+            "is_paste": is_paste,
         }
     if len(points) < 2:
         return None
@@ -33,6 +36,7 @@ def box_from_labelme_shape(shape):
         "label": label,
         "shape_type": shape_type,
         "group_id": shape.get("group_id"),
+        "is_paste": is_paste,
     }
     if shape_type != "rectangle":
         box["points"] = [list(p) for p in points]
@@ -54,7 +58,7 @@ def labelme_shape_from_box(box):
         "group_id": box.get("group_id"),
         "description": "",
         "shape_type": shape_type,
-        "flags": {},
+        "flags": dict(box.get("flags") or {}),
     }
     if "visible" in box:
         shape["visible"] = box["visible"]

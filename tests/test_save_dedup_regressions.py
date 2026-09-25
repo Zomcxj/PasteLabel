@@ -60,6 +60,33 @@ class _FakeBg:
         return 80
 
 
+def test_save_json_marks_paste_shapes_with_flags(tmp_path):
+    import json
+    from pastelabel.engine.save_manager import SaveManager
+
+    img = tmp_path / "d.png"
+    img.write_bytes(b"x")
+
+    class Editor:
+        _is_delete_view = False
+        edit_mode = "paste"
+        canvas_items = [(None, Rect(10, 20, 30, 40), "logo")]
+        detection_boxes = [{"label": "cat", "x": 0, "y": 0, "width": 5, "height": 5}]
+        detection_boxes_dict = {0: detection_boxes}
+        current_background_index = 0
+        current_background = _FakeBg()
+        background_images = [str(img)]
+
+    editor = Editor()
+    mgr = SaveManager(editor)
+    mgr.save_json(str(img), "d.png", "", canvas_items=editor.canvas_items,
+                  image_width=100, image_height=80, current_index=0)
+    data = json.loads((tmp_path / "d.json").read_text(encoding="utf-8"))
+    by_label = {s["label"]: s for s in data["shapes"]}
+    assert by_label["logo"]["flags"] == {"paste": True}
+    assert by_label["cat"]["flags"] == {}
+
+
 def test_save_current_json_annotate_skips_never_annotated(tmp_path):
     img = tmp_path / "a.jpg"
     img.write_bytes(b"x")

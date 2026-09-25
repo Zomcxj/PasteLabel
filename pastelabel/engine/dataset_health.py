@@ -41,11 +41,17 @@ def _read_json_shapes(json_path):
     return shapes
 
 
+def _shape_is_paste(shape):
+    flags = shape.get("flags")
+    return bool(isinstance(flags, dict) and flags.get("paste"))
+
+
 def collect_shape_geometry(image_paths, memory_boxes=None, is_interrupted=None):
-    """采集逐框几何。已加载图以内存框为准；缺 sidecar 跳过。"""
+    """采集逐框几何。已加载图以内存为准（空内存槽回读磁盘）；贴图单独归类。"""
     image_paths = list(image_paths or [])
     memory_boxes = memory_boxes or {}
     boxes = []
+    paste_boxes = []
     images_scanned = 0
 
     def _one(index, path):
@@ -53,10 +59,10 @@ def collect_shape_geometry(image_paths, memory_boxes=None, is_interrupted=None):
         loaded = index in memory_boxes
         if loaded:
             shapes = list(memory_boxes.get(index) or [])
-            exists = os.path.exists(json_path)
-            if not shapes and not exists:
-                return index, None
-            return index, shapes
+            if shapes:
+                return index, shapes
+            # 空内存槽只代表"未加载"，不代表"已清空"：磁盘有就回读
+            return index, _read_json_shapes(json_path)
         return index, _read_json_shapes(json_path)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
@@ -80,8 +86,10 @@ def collect_shape_geometry(image_paths, memory_boxes=None, is_interrupted=None):
                 if geo is None:
                     continue
                 geo['image_index'] = index
-                boxes.append(geo)
-    return {'boxes': boxes, 'images_scanned': images_scanned}
+                is_paste = _shape_is_paste(shape) or bool(shape.get('is_paste'))
+                (paste_boxes if is_paste else boxes).append(geo)
+    return {'boxes': boxes, 'paste_boxes': paste_boxes,
+            'images_scanned': images_scanned}
 
 
 def collect_paste_geometry(canvas_items_dict):
@@ -108,6 +116,22 @@ def collect_paste_geometry(canvas_items_dict):
                 'image_index': index,
             })
     return boxes
+
+
+def merge_paste_geometry(disk_boxes, memory_boxes):
+    """合并磁盘与内存贴图：同一位置以内存为准（内存含未保存的最新状态）。"""
+    def _key(box):
+        return (box.get('image_index'), round(float(box.get('x', 0)), 1),
+                round(float(box.get('y', 0)), 1),
+                round(float(box.get('width', 0)), 1),
+                round(float(box.get('height', 0)), 1))
+
+    merged = {}
+    for box in disk_boxes or []:
+        merged[_key(box)] = box
+    for box in memory_boxes or []:
+        merged[_key(box)] = box
+    return list(merged.values())
 
 
 def _bucket_count(n):
@@ -275,7 +299,8 @@ class DatasetHealthWorker(QThread):
             geo = collect_shape_geometry(
                 self._image_paths, memory_boxes=self._memory_boxes,
                 is_interrupted=self.isInterruptionRequested)
-            paste = collect_paste_geometry(self._canvas_items_dict)
+            memory_paste = collect_paste_geometry(self._canvas_items_dict)
+            paste = merge_paste_geometry(geo['paste_boxes'], memory_paste)
             annot_stats = compute_health(geo['boxes'], paste_boxes=paste)
             payload = {
                 'annot': {'stats': annot_stats,

@@ -38,3 +38,24 @@ def test_documentation_describes_stats_color_replacement_and_separate_wheel_step
         assert "贴图缩放步长" in source
         assert "检测框滚轮缩放" in source
         assert "贴图滚轮缩放" in source
+
+
+def test_documentation_covers_semantic_region_and_quality_lint():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    guide = (ROOT / "docs" / "user_guide.md").read_text(encoding="utf-8")
+    settings = (ROOT / "docs" / "settings_guide.md").read_text(encoding="utf-8")
+
+    assert "语义区域" in readme
+    assert "完整落在" in readme
+    assert "语义区域" in guide
+    assert "完整落在" in guide
+
+    assert "标注质检" in readme
+    assert "标注质检" in guide
+    for term in ("越界框", "超小框", "重复框", "异类重叠", "近似名", "分组不一致"):
+        assert term in guide, term
+    assert "双击" in guide and "忽略此类问题" in guide
+
+    assert "质检忽略" in settings
+    assert "lint_ignored_rules" in settings
+

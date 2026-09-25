@@ -28,6 +28,7 @@ class QualityLintDialog(QDialog):
         self._issues = []
         self._all_issues = []
         self._kind_filter = None
+        self._scanned_images = 0
         self.setWindowTitle(tr("标注质检"))
         self.setMinimumSize(720, 580)
         t = ThemeManager.get_theme()
@@ -96,6 +97,7 @@ class QualityLintDialog(QDialog):
     def set_result(self, result):
         summary = result.get('summary') or {}
         self._all_issues = list(result.get('issues') or [])
+        self._scanned_images = int(summary.get('scanned_images') or 0)
         self._rebuild_filter_combo()
         self._apply_filter()
         self.status_label.setText("")
@@ -104,6 +106,8 @@ class QualityLintDialog(QDialog):
 
     def _update_summary(self, summary):
         parts = []
+        if self._scanned_images:
+            parts.append(tr("扫描图片") + f": {self._scanned_images}")
         for kind, label in KIND_LABELS.items():
             count = summary.get(kind, 0)
             if count:

@@ -69,11 +69,11 @@ class CanvasRendererMixin:
 
             if self.is_drawing_box:
                 self._draw_temp_box(sp)
-            if getattr(self, 'is_drawing_region', False):
+            if getattr(self, 'is_drawing_region', False) and self._is_paste_mode():
                 self._draw_temp_region_box(sp)
             if getattr(self, 'is_drawing_polygon', False):
                 self._draw_temp_polygon(sp, background_rect)
-            if getattr(self, 'is_drawing_region_polygon', False):
+            if getattr(self, 'is_drawing_region_polygon', False) and self._is_paste_mode():
                 self._draw_temp_region_polygon(sp, background_rect)
 
             sp.setOpacity(1.0)

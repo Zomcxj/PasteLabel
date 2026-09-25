@@ -328,7 +328,8 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
             self.canvas.is_dragging_region = False
             self.canvas.is_resizing_region = False
             self.canvas.region_resize_handle = None
-            if getattr(self.canvas, 'is_drawing_region', False):
+            if (getattr(self.canvas, 'is_drawing_region', False)
+                    or getattr(self.canvas, 'is_drawing_region_polygon', False)):
                 self.canvas._reset_region_drawing_state()
             self.canvas.update()
         self._apply_mode_visibility_defaults()
@@ -516,6 +517,8 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
         if hasattr(self, '_cleanup_delete_worker') and not self._cleanup_delete_worker():
             event.ignore()
             return
+        if hasattr(self, '_close_lint_dialog'):
+            self._close_lint_dialog()
         if hasattr(self, '_processing_panel') and self._processing_panel:
             self._processing_panel.close()
         if self.current_background_index >= 0:

@@ -419,7 +419,9 @@ def _remove_shapes_at_indices(json_path, indices):
 def _remove_shapes_matching(json_path, boxes):
     """内存框与磁盘 JSON 对齐删除：按内容签名匹配，避免索引错位。
 
-    返回 (removed, ok)：ok=False 仅表示已存在文件读取/写入失败；
+    返回 (removed, ok)：ok=False 表示磁盘未按预期删除（读取/写入失败，
+    或签名失配导致磁盘与内存不一致），由调用方标记该图失败，避免仅删
+    内存、磁盘残留导致重载后问题复现。
     文件不存在（内存独有）视为成功，由内存同步兜底。
     """
     pending = {}
@@ -446,7 +448,7 @@ def _remove_shapes_matching(json_path, boxes):
             continue
         kept.append(shape)
     if removed <= 0:
-        return 0, True
+        return 0, False
     data['shapes'] = kept
     if not _write_json(json_path, data):
         return 0, False

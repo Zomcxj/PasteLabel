@@ -1282,3 +1282,119 @@ print("OK")
         text=True, capture_output=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+# --------------------------------------------------------------------------
+# 审计修复回归：汇总计数重建 / 签名失配不静默成功 / 实时刷新挂钩 / 关窗清理
+# --------------------------------------------------------------------------
+def test_filtered_lint_result_rebuilds_summary_after_ignore_all():
+    """整类忽略后汇总计数必须重建，不能残留被忽略类的旧计数（回归 §2-2）。"""
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+
+    editor = type("Editor", (QualityLintMixin,), {})()
+    result = {
+        "issues": [
+            {"kind": "tiny_box", "label": "a", "detail": "1"},
+            {"kind": "tiny_box", "label": "b", "detail": "2"},
+            {"kind": "out_of_bounds", "label": "c", "detail": "3"},
+        ],
+        "summary": {"scanned_images": 7, "tiny_box": 2, "out_of_bounds": 1},
+    }
+    filtered = editor._filtered_lint_result(result, {"tiny_box": ["*"]})
+
+    assert [i["kind"] for i in filtered["issues"]] == ["out_of_bounds"]
+    assert filtered["summary"]["tiny_box"] == 0
+    assert filtered["summary"]["out_of_bounds"] == 1
+    assert filtered["summary"]["scanned_images"] == 7
+
+
+def test_remove_shapes_matching_signature_mismatch_reports_failure(tmp_path):
+    """内存框与磁盘签名失配时必须报失败，不能静默成功（回归 §2-5）。"""
+    from pastelabel.engine.quality_lint import _remove_shapes_matching
+
+    img = _write_image_and_json(tmp_path, "sigmiss", [
+        {"label": "Truck", "x": 0, "y": 0, "width": 100, "height": 100},
+    ])
+    json_path = str(tmp_path / "sigmiss.json")
+    memory_box = {"label": "Truck", "x": 50, "y": 50, "width": 100, "height": 100}
+
+    removed, ok = _remove_shapes_matching(json_path, [memory_box])
+
+    assert removed == 0
+    assert ok is False
+    payload = json.loads((tmp_path / "sigmiss.json").read_text(encoding="utf-8"))
+    assert len(payload["shapes"]) == 1
+
+
+def test_remove_selected_signature_mismatch_marks_failed(tmp_path):
+    """端到端：签名失配的已加载图进入 failed，且内存同步兜底不删磁盘。"""
+    from pastelabel.engine.quality_lint import remove_selected_cross_overlaps
+
+    img = _write_image_and_json(tmp_path, "sigmiss2", [
+        {"label": "Truck", "x": 0, "y": 0, "width": 100, "height": 100},
+        {"label": "ZTruck", "x": 2, "y": 2, "width": 100, "height": 100},
+    ])
+    memory = {0: [
+        {"label": "Truck", "x": 50, "y": 50, "width": 100, "height": 100},
+        {"label": "ZTruck", "x": 2, "y": 2, "width": 100, "height": 100},
+    ]}
+    selected = [_cross_issue(0, 0, "Truck", 1, "ZTruck", img)]
+
+    result = remove_selected_cross_overlaps(
+        selected, "Truck", [img], memory_boxes=memory)
+
+    assert result["failed"] == [img]
+    assert result["removed"] == 0
+    payload = json.loads((tmp_path / "sigmiss2.json").read_text(encoding="utf-8"))
+    assert [s["label"] for s in payload["shapes"]] == ["Truck", "ZTruck"]
+
+
+def test_close_lint_dialog_interrupts_and_clears():
+    """关窗/切数据集：中断扫描并清空引用，旧结果不再跳错图（回归 §2-9）。"""
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+
+    class Worker:
+        def __init__(self):
+            self.interrupted = False
+
+        def isRunning(self):
+            return True
+
+        def requestInterruption(self):
+            self.interrupted = True
+
+    class Dialog:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    editor = type("Editor", (QualityLintMixin,), {})()
+    worker, dialog = Worker(), Dialog()
+    editor._lint_worker = worker
+    editor._lint_dialog = dialog
+
+    editor._close_lint_dialog()
+
+    assert worker.interrupted is True
+    assert dialog.closed is True
+    assert editor._lint_worker is None
+    assert editor._lint_dialog is None
+
+
+def test_dialog_summary_shows_scanned_image_count():
+    """汇总行需展示扫描图片数（回归 §2-3）。"""
+    import inspect
+    from pastelabel.ui.quality_lint_dialog import QualityLintDialog
+    src = inspect.getsource(QualityLintDialog._update_summary)
+    assert "_scanned_images" in src
+    assert "扫描图片" in src
+
+
+def test_label_manager_notifies_lint_on_rename_and_delete():
+    """标签重命名/删除后必须触发质检实时刷新挂钩（回归 §2-10）。"""
+    import inspect
+    from pastelabel.engine import label_manager
+    src = inspect.getsource(label_manager.LabelManager)
+    assert src.count("_notify_lint_boxes_changed") >= 5

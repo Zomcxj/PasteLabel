@@ -48,6 +48,9 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         if getattr(self, 'is_drawing_region', False):
             # 区域绘制模式：左键画矩形，右键取消
             self._drag_out_pending = False
+            if not self._is_paste_mode():
+                self._reset_region_drawing_state()
+                return
             if event.button() == Qt.LeftButton:
                 self._handle_region_press(mouse_pos)
             elif event.button() == Qt.RightButton:
@@ -57,6 +60,9 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
         if getattr(self, 'is_drawing_region_polygon', False):
             # 多边形区域绘制：左键逐点添加，右键完成
             self._drag_out_pending = False
+            if not self._is_paste_mode():
+                self._reset_region_drawing_state()
+                return
             if event.button() == Qt.LeftButton:
                 self._handle_region_polygon_press(mouse_pos)
             elif event.button() == Qt.RightButton:

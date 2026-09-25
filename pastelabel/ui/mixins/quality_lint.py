@@ -18,6 +18,15 @@ class QualityLintMixin:
         self._lint_ignored_rules = dict(rules or {})
         config_manager.save_all(lint_ignored_rules=self._lint_ignored_rules)
 
+    def _filtered_lint_result(self, result, rules):
+        """按忽略规则过滤结果：汇总计数必须重建（否则整类忽略后残留旧计数）。"""
+        from ...engine.quality_lint import filter_ignored_issues, summarize_issues
+        filtered = filter_ignored_issues(result.get('issues') or [], rules)
+        summary = {k: 0 for k in (result.get('summary') or {})}
+        summary.update(summarize_issues(filtered))
+        summary['scanned_images'] = (result.get('summary') or {}).get('scanned_images', 0)
+        return {'issues': filtered, 'summary': summary}
+
     def _open_quality_lint(self):
         if getattr(self, '_busy', False):
             return
@@ -43,11 +52,7 @@ class QualityLintMixin:
         def _finish(result, d=dialog, rules=ignored_rules):
             if d is not getattr(self, '_lint_dialog', None):
                 return
-            filtered = filter_ignored_issues(result.get('issues') or [], rules)
-            from ...engine.quality_lint import summarize_issues
-            summary = dict(result.get('summary') or {})
-            summary.update(summarize_issues(filtered))
-            d.set_result({'issues': filtered, 'summary': summary})
+            d.set_result(self._filtered_lint_result(result, rules))
             self._cleanup_lint_worker(getattr(self, '_lint_worker', None))
 
         worker.lint_finished.connect(_finish)
@@ -125,6 +130,17 @@ class QualityLintMixin:
                 pass
         if worker is getattr(self, '_lint_worker', None):
             self._lint_worker = None
+
+    def _close_lint_dialog(self):
+        """关闭质检弹窗并中断扫描（切数据集/关窗时避免旧结果跳错图）。"""
+        self._cleanup_lint_worker()
+        dialog = getattr(self, '_lint_dialog', None)
+        self._lint_dialog = None
+        if dialog is not None:
+            try:
+                dialog.close()
+            except Exception:
+                pass
 
     def _notify_lint_boxes_changed(self, index=None):
         """标注变化后实时刷新质检弹窗中该图的问题（去抖 250ms）。"""

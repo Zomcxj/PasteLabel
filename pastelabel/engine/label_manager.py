@@ -256,6 +256,9 @@ class LabelManager(QObject):
                 bg.add(new_label)
             self.label_list_changed.emit()
             self.data_changed.emit()
+            notify = getattr(self.editor, '_notify_lint_boxes_changed', None)
+            if callable(notify):
+                notify(current_index)
             return
 
         # Stats mode: full rename (memory + color + stats + disk)
@@ -353,6 +356,9 @@ class LabelManager(QObject):
                 self._save_detection_json_for_index(current_index)
             self.label_list_changed.emit()
             self.data_changed.emit()
+            notify = getattr(self.editor, '_notify_lint_boxes_changed', None)
+            if callable(notify):
+                notify(current_index)
             return
 
         if confirm:
@@ -396,6 +402,10 @@ class LabelManager(QObject):
 
         self.label_list_changed.emit()
         self.data_changed.emit()
+        notify = getattr(self.editor, '_notify_lint_boxes_changed', None)
+        if callable(notify):
+            for index in self.editor.detection_boxes_dict:
+                notify(index)
 
     def _save_detection_json_for_index(self, index):
         """按背景索引保存检测框，避免当前图片与其它图片标签串写。"""
@@ -897,7 +907,8 @@ class LabelManager(QObject):
         self.data_changed.emit()
         notify = getattr(self.editor, '_notify_lint_boxes_changed', None)
         if callable(notify):
-            notify(current_index)
+            for index in self.editor.detection_boxes_dict:
+                notify(index)
         return True
 
     def rename_paste_label(self, old_label, new_label):

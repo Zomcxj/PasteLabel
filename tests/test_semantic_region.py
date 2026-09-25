@@ -842,3 +842,46 @@ def test_paint_scene_dispatches_region_rect_preview():
     source = inspect.getsource(CanvasRendererMixin._paint_scene)
     assert "is_drawing_region" in source
     assert "_draw_temp_region_box" in source
+
+
+class MouseEvent:
+    def __init__(self, pos, button=1):
+        self._pos = pos
+        self._button = button
+        self._accepted = False
+
+    def pos(self):
+        return self._pos
+
+    def button(self):
+        return self._button
+
+    def accept(self):
+        self._accepted = True
+
+
+def test_region_polygon_press_ignored_outside_paste_mode():
+    """回归：切到 annotate 后，残留的多边形区域绘制不得继续加点/完成。"""
+    canvas = Canvas()
+    canvas.setFocus = lambda: None
+    canvas.is_drawing_region_polygon = True
+    canvas._handle_region_polygon_press(Point(100, 100))
+    assert len(canvas.temp_region_points) == 1
+
+    canvas._editor.edit_mode = 'annotate'
+    canvas.mousePressEvent(MouseEvent(Point(200, 200)))
+    assert canvas.temp_region_points == []
+    assert canvas.is_drawing_region_polygon is False
+    assert canvas._editor.region_boxes == []
+
+
+def test_region_rect_press_ignored_outside_paste_mode():
+    """回归：切到 annotate 后，残留的矩形区域绘制不得继续。"""
+    canvas = Canvas()
+    canvas.setFocus = lambda: None
+    canvas.is_drawing_region = True
+    canvas.draw_start_pos = Point(10, 10)
+    canvas._editor.edit_mode = 'annotate'
+    canvas.mousePressEvent(MouseEvent(Point(200, 200)))
+    assert canvas.is_drawing_region is False
+    assert canvas._editor.region_boxes == []

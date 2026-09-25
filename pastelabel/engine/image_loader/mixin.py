@@ -159,6 +159,9 @@ class ImageLoaderMixin:
         """
         if hasattr(self, '_save_memory_record_on_close'):
             self._save_memory_record_on_close()
+        close_lint = getattr(self, '_close_lint_dialog', None)
+        if callable(close_lint):
+            close_lint()
         self._memory_background_path = folder_path
         self._start_background_replacement()
         self._pending_memory_index = restore_index

@@ -139,3 +139,12 @@ def test_labelme_shape_from_box_preserves_flags():
         {"label": "logo", "x": 0, "y": 0, "width": 1, "height": 1,
          "flags": {"paste": True}})
     assert shape["flags"] == {"paste": True}
+
+
+def test_labelme_shape_from_box_rebuilds_paste_flag_from_is_paste():
+    """磁盘载入的贴图 box（只有 is_paste 无 flags）再保存不丢标记。"""
+    from pastelabel.engine.shape_io import labelme_shape_from_box
+    shape = labelme_shape_from_box(
+        {"label": "logo", "x": 0, "y": 0, "width": 1, "height": 1,
+         "is_paste": True})
+    assert shape["flags"] == {"paste": True}

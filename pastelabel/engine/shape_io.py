@@ -52,13 +52,16 @@ def labelme_shape_from_box(box):
         points = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
     else:
         points = [list(p) for p in (box.get("points") or [])]
+    flags = dict(box.get("flags") or {})
+    if box.get("is_paste"):
+        flags["paste"] = True
     shape = {
         "label": box.get("label", ""),
         "points": points,
         "group_id": box.get("group_id"),
         "description": "",
         "shape_type": shape_type,
-        "flags": dict(box.get("flags") or {}),
+        "flags": flags,
     }
     if "visible" in box:
         shape["visible"] = box["visible"]

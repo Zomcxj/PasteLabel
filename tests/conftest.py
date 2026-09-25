@@ -340,6 +340,10 @@ qtcore.Qt = type('Qt', (), {
     'AlignCenter': 0x0084,
     'AlignRight': 0x0002,
     'AlignVCenter': 0x0080,
+    'AlignLeft': 0x0001,
+    'AlignTop': 0x0020,
+    'AlignBottom': 0x0040,
+    'AlignHCenter': 0x0004,
     'DotLine': 1,
     'NoPen': 0,
     'SolidLine': 1,
@@ -399,6 +403,7 @@ qtgui.QColor = type('QColor', (), {
     'setAlpha': lambda self, *a: None,
     'isValid': lambda self: True,
     'name': lambda self: '#00FF80',
+    'lighter': lambda self, *a: self,
 })
 qtgui.QPainter = type('QPainter', (), {
     '__init__': lambda self, *a: None,
@@ -415,7 +420,10 @@ qtgui.QPainter = type('QPainter', (), {
     'end': lambda self: None,
     'font': lambda self: type('F', (), {'pointSize': lambda: 12})(),
 })
-qtgui.QPen = type('QPen', (), {'__init__': lambda self, *a: None})
+qtgui.QPen = type('QPen', (), {
+    '__init__': lambda self, *a: None,
+    'setWidth': lambda self, *a: None,
+})
 qtgui.QFontMetrics = type('QFontMetrics', (), {
     '__init__': lambda self, *a: None,
     'width': lambda self, *a: 50,

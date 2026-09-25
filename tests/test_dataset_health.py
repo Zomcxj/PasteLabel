@@ -266,6 +266,53 @@ def test_worker_paste_section_empty_without_paste():
     assert captured['paste']['advice'] == []
 
 
+def test_fmt_num_formats_thousands_and_millions():
+    from pastelabel.ui.widgets.health_charts import _fmt_num
+    assert _fmt_num(0) == '0'
+    assert _fmt_num(999) == '999'
+    assert _fmt_num(1200) == '1.2k'
+    assert _fmt_num(2500000) == '2.5M'
+
+
+def test_chart_accepts_colors_and_axis_labels():
+    from pastelabel.ui.widgets.health_charts import HealthBarChart
+    chart = HealthBarChart()
+    chart.set_data([{'label': 'a', 'value': 3, 'color': '#FF0000'},
+                    {'label': 'b', 'value': 1}])
+    chart.paintEvent(None)
+    chart.set_histogram([0.0, 0.5, 1.0], [4, 6],
+                        xlabel='面积', ylabel='框数')
+    chart.paintEvent(None)
+
+
+def test_chart_paint_offscreen_real_qt(tmp_path):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    script = '''
+from PyQt5.QtWidgets import QApplication
+from pastelabel.ui.widgets.health_charts import HealthBarChart, _fmt_num
+app = QApplication.instance() or QApplication([])
+assert _fmt_num(1200) == "1.2k"
+c = HealthBarChart()
+c.resize(400, 140)
+c.set_data([{"label": "cat", "value": 30, "color": "#FF0000"},
+            {"label": "dog", "value": 10}])
+c.paintEvent(None)
+c.set_histogram([0.0, 0.5, 1.0], [4, 6], xlabel="面积", ylabel="框数")
+c.paintEvent(None)
+c.set_placeholder("暂无数据")
+c.paintEvent(None)
+print("OK")
+'''
+    env = os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(root)}
+    result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
+                            text=True, capture_output=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+
+
 def test_worker_paste_section_computed_with_paste():
     class Rect:
         def __init__(self, w, h, x=0, y=0):

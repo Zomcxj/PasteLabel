@@ -167,3 +167,89 @@ def test_save_all_roundtrips_pipeline_recipes(tmp_path, monkeypatch):
     assert len(loaded) == 1
     assert loaded[0]['name'] == 'demo'
     assert loaded[0]['export']['labels'] == ['cat']
+
+
+def test_pipeline_section_source_has_recipe_widgets():
+    import inspect
+    from pastelabel.ui.mixins.processing_panel_builder import ProcessingPanelBuilderMixin
+    src = inspect.getsource(ProcessingPanelBuilderMixin._build_pipeline_section)
+    assert "_recipe_combo" in src
+    assert "_recipe_save_btn" in src
+    assert "_recipe_apply_btn" in src
+    assert "_recipe_del_btn" in src
+
+
+def test_processing_panel_exposes_recipe_methods():
+    import inspect
+    from pastelabel.ui.processing_panel import ProcessingPanel
+    for name in ("_load_recipes", "_collect_pipeline_state", "_save_recipe",
+                 "_apply_recipe", "_delete_recipe"):
+        assert hasattr(ProcessingPanel, name), name
+    src = inspect.getsource(ProcessingPanel)
+    assert "capture_recipe" in src
+    assert "apply_recipe_to_labels" in src
+
+
+def test_apply_recipe_coerces_float_params_for_int_spinboxes():
+    from PyQt5.QtWidgets import QSpinBox
+    from pastelabel.ui.processing_panel import ProcessingPanel
+    from pastelabel.engine.pipeline_recipe import capture_recipe
+
+    class IntSpin(QSpinBox):
+        def __init__(self):
+            self.v = None
+
+        def setValue(self, v):
+            if not isinstance(v, int):
+                raise TypeError("int required")
+            self.v = v
+
+    class Dummy:
+        def setChecked(self, v):
+            self.checked = v
+
+        def isChecked(self):
+            return getattr(self, 'checked', False)
+
+        def setCurrentIndex(self, i):
+            self.idx = i
+
+        def currentIndex(self):
+            return getattr(self, 'idx', 0)
+
+        def findText(self, t):
+            return 0
+
+        def setValue(self, v):
+            self.v = v
+
+        def value(self):
+            return getattr(self, 'v', 0.0)
+
+    panel = ProcessingPanel.__new__(ProcessingPanel)
+    panel._recipes = [capture_recipe('r', {
+        'steps': ['augment', 'export'],
+        'augment': {'transforms': {
+            'bright': {'checked': True, 'params': {'delta': [-10.0, 20.0]}}}},
+        'export': {'labels': []},
+    })]
+    panel._recipe_combo = Dummy()
+    panel._pipe_aug = Dummy()
+    panel._pipe_exp = Dummy()
+    panel._pipe_split = Dummy()
+    panel._aug_widgets = {'bright': (Dummy(), {'delta': (IntSpin(), IntSpin())}, 'bright')}
+    panel._aug_ratio = Dummy()
+    panel._aug_mode = Dummy()
+    panel._aug_inc_orig = Dummy()
+    panel._aug_skip_empty = Dummy()
+    panel._exp_format = Dummy()
+    panel._exp_skip_empty = Dummy()
+    panel._exp_label_checkboxes = {}
+    panel._split_train = Dummy()
+    panel._split_val = Dummy()
+    panel._split_test = Dummy()
+    panel._log = lambda msg: None
+    panel._apply_recipe()
+    spins = panel._aug_widgets['bright'][1]['delta']
+    assert spins[0].v == -10
+    assert spins[1].v == 20

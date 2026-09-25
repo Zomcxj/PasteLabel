@@ -282,6 +282,7 @@ class DatasetHealthWorker(QThread):
                 'images_scanned': geo['images_scanned'],
             }
         except Exception:
-            payload = {'stats': {}, 'advice': [], 'images_scanned': 0}
+            payload = {'stats': {}, 'advice': [], 'images_scanned': 0,
+                       'error': True}
         if not self.isInterruptionRequested():
             self.health_ready.emit(payload)

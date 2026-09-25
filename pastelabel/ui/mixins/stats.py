@@ -382,6 +382,11 @@ class StatsMixin:
         worker.finished.connect(worker.deleteLater)
 
         def _render(payload, charts=charts, label=advice_label):
+            if payload.get('error'):
+                for chart in charts.values():
+                    chart.set_placeholder(tr('分析失败'))
+                label.setText(tr('分析失败'))
+                return
             stats = payload.get('stats') or {}
             class_dist = stats.get('class_dist') or []
             if class_dist:
@@ -398,9 +403,12 @@ class StatsMixin:
             charts['iou'].set_histogram(iou.get('edges'), iou.get('counts'))
             pva = stats.get('paste_vs_annot') or {}
             if pva.get('has_paste'):
-                q = pva.get('paste_quantiles') or [0, 0, 0, 0]
+                annot_q = pva.get('annot_quantiles') or [0, 0, 0, 0]
+                paste_q = pva.get('paste_quantiles') or [0, 0, 0, 0]
                 charts['paste'].set_data([
-                    {'label': tr('贴图 vs 标注'), 'value': q[2]}])
+                    {'label': tr('标注'), 'value': annot_q[2]},
+                    {'label': tr('贴图'), 'value': paste_q[2]},
+                ], horizontal=True)
             else:
                 charts['paste'].set_placeholder(tr('暂无贴图数据'))
             advice = payload.get('advice') or [tr('未发现明显失衡')]

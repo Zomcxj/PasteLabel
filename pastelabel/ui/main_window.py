@@ -519,6 +519,8 @@ class ImageEditor(TranslationMixin, ThemeMixin, BackgroundListMixin, StatsMixin,
             return
         if hasattr(self, '_close_lint_dialog'):
             self._close_lint_dialog()
+        if hasattr(self, '_close_health_worker'):
+            self._close_health_worker()
         if hasattr(self, '_processing_panel') and self._processing_panel:
             self._processing_panel.close()
         if self.current_background_index >= 0:

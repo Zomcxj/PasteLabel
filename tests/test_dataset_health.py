@@ -187,3 +187,12 @@ def test_health_bar_chart_api_and_paint():
     chart.set_placeholder("暂无数据")
     # paintEvent 必须可调用（conftest mock QPainter）
     chart.paintEvent(None)
+
+
+def test_i18n_health_terms():
+    from pastelabel.ui.i18n import _strings
+    for key in ("数据集健康", "正在分析", "暂无贴图数据", "请先加载数据集",
+                "类别分布", "尺寸分布", "长宽比分布", "IoU 重叠分布",
+                "贴图 vs 标注", "建议", "未发现明显失衡"):
+        assert key in _strings["zh"], key
+        assert key in _strings["en"], key

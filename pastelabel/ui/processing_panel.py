@@ -875,9 +875,9 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         from ..engine.pipeline_recipe import capture_recipe, validate_recipe
         state = self._collect_pipeline_state()
         recipe = capture_recipe('', state)
-        problems = validate_recipe(recipe)
-        if problems:
-            self._log(problems[0])
+        for key, params in validate_recipe(recipe):
+            self._log(tr(key).format(**params))
+        if len(recipe['steps']) < 2:
             return
         name, ok = QInputDialog.getText(self, tr("保存为配方"), tr("配方名称"))
         name = (name or '').strip()
@@ -892,7 +892,9 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
                 return
         recipes = [r for r in getattr(self, '_recipes', []) if r['name'] != name]
         recipes.append(capture_recipe(name, state))
-        config_manager.save_all(pipeline_recipes=recipes)
+        if not config_manager.save_all(pipeline_recipes=recipes):
+            self._log(tr("保存失败"))
+            return
         self._load_recipes()
         idx = self._recipe_combo.findText(name)
         if idx >= 0:
@@ -909,10 +911,8 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         if not (0 <= idx < len(recipes)):
             return
         r = recipes[idx]
-        problems = validate_recipe(r)
-        if problems:
-            self._log(problems[0])
-            return
+        for key, params in validate_recipe(r):
+            self._log(tr(key).format(**params))
         self._pipe_aug.setChecked('augment' in r['steps'])
         self._pipe_exp.setChecked('export' in r['steps'])
         self._pipe_split.setChecked('split' in r['steps'])
@@ -944,9 +944,11 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         if r['export']['labels'] and not chosen:
             self._log(tr("配方标签在当前数据集均不存在"))
         sp = r['split']
-        self._split_train.setValue(sp['train'])
-        self._split_val.setValue(sp['val'])
-        self._split_test.setValue(sp['test'])
+        for key in SPLIT_KEYS:
+            sb = getattr(self, f"_split_{key}")
+            sb.blockSignals(True)
+            sb.setValue(sp[key])
+            sb.blockSignals(False)
         self._log(tr("已应用配方"))
 
     def _delete_recipe(self):
@@ -966,7 +968,9 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         if reply != QMessageBox.Yes:
             return
         remaining = [r for r in recipes if r['name'] != name]
-        config_manager.save_all(pipeline_recipes=remaining)
+        if not config_manager.save_all(pipeline_recipes=remaining):
+            self._log(tr("保存失败"))
+            return
         self._load_recipes()
 
     def _run_pipeline(self):

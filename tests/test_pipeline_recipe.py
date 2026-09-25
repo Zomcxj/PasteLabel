@@ -87,7 +87,7 @@ def test_validate_flags_split_sum():
     from pastelabel.engine.pipeline_recipe import normalize_recipe, validate_recipe
     bad = normalize_recipe({'steps': ['augment', 'split'],
                             'split': {'train': 0.5, 'val': 0.5, 'test': 0.5}})
-    assert any('比例' in p for p in validate_recipe(bad))
+    assert any('比例' in p[0] for p in validate_recipe(bad))
 
 
 def test_validate_ok_for_good_recipe():
@@ -150,7 +150,8 @@ def test_i18n_recipe_terms():
     from pastelabel.ui.i18n import _strings
     for key in ("配方", "保存为配方", "应用配方", "删除配方", "配方名称",
                 "配方已保存", "已应用配方", "配方标签在当前数据集均不存在",
-                "覆盖同名配方", "确定删除配方", "至少选择两步", "删除"):
+                "覆盖同名配方", "确定删除配方", "至少选择两步", "删除",
+                "划分比例之和应为 1.0（当前 {total:.2f}）"):
         assert key in _strings["zh"], key
         assert key in _strings["en"], key
 
@@ -226,6 +227,9 @@ def test_apply_recipe_coerces_float_params_for_int_spinboxes():
         def value(self):
             return getattr(self, 'v', 0.0)
 
+        def blockSignals(self, b):
+            pass
+
     panel = ProcessingPanel.__new__(ProcessingPanel)
     panel._recipes = [capture_recipe('r', {
         'steps': ['augment', 'export'],
@@ -255,17 +259,127 @@ def test_apply_recipe_coerces_float_params_for_int_spinboxes():
     assert spins[1].v == 20
 
 
-def test_apply_recipe_rejects_invalid_recipe():
+def test_apply_recipe_backfills_even_when_invalid():
     from pastelabel.ui.processing_panel import ProcessingPanel
+    from pastelabel.engine.pipeline_recipe import capture_recipe
 
-    class Combo:
-        def currentIndex(self):
-            return 0
+    class Dummy:
+        def setChecked(self, v): self.checked = v
+        def isChecked(self): return getattr(self, 'checked', False)
+        def setCurrentIndex(self, i): self.idx = i
+        def currentIndex(self): return getattr(self, 'idx', 0)
+        def findText(self, t): return 0
+        def setValue(self, v): self.v = v
+        def value(self): return getattr(self, 'v', 0.0)
+        def blockSignals(self, b): pass
 
     panel = ProcessingPanel.__new__(ProcessingPanel)
-    panel._recipes = [{'name': 'bad', 'steps': ['augment']}]
-    panel._recipe_combo = Combo()
+    panel._recipes = [capture_recipe('bad', {'steps': ['augment']})]
+    panel._recipe_combo = Dummy()
+    panel._pipe_aug = Dummy()
+    panel._pipe_exp = Dummy()
+    panel._pipe_split = Dummy()
+    panel._aug_widgets = {}
+    panel._aug_ratio = Dummy()
+    panel._aug_mode = Dummy()
+    panel._aug_inc_orig = Dummy()
+    panel._aug_skip_empty = Dummy()
+    panel._exp_format = Dummy()
+    panel._exp_skip_empty = Dummy()
+    panel._exp_label_checkboxes = {}
+    panel._split_train = Dummy()
+    panel._split_val = Dummy()
+    panel._split_test = Dummy()
     logs = []
     panel._log = logs.append
     panel._apply_recipe()
-    assert logs and '两步' in logs[0]
+    assert panel._pipe_aug.checked is True
+    assert panel._pipe_exp.checked is False
+    assert any('两步' in m for m in logs)
+
+
+def test_apply_recipe_split_roundtrip_real_qt(tmp_path):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    config_path = tmp_path / "config.json"
+    script = '''
+from PyQt5.QtWidgets import QApplication
+from pastelabel.core import config_manager
+from pastelabel.engine.pipeline_recipe import capture_recipe
+from pastelabel.ui.processing_panel import ProcessingPanel
+
+app = QApplication.instance() or QApplication([])
+config_manager.save_all(pipeline_recipes=[capture_recipe('r', {
+    'steps': ['augment', 'export', 'split'],
+    'split': {'train': 0.8, 'val': 0.1, 'test': 0.1}})])
+
+class FakeEditor:
+    background_images = []
+    _background_label_scan_pending = False
+    _background_label_scan_completed = True
+
+panel = ProcessingPanel(FakeEditor())
+panel._split_train.setValue(0.1)
+panel._split_val.setValue(0.45)
+panel._split_test.setValue(0.45)
+panel._apply_recipe()
+vals = (panel._split_train.value(), panel._split_val.value(), panel._split_test.value())
+assert vals == (0.8, 0.1, 0.1), vals
+print("OK")
+'''
+    env = os.environ | {
+        "QT_QPA_PLATFORM": "offscreen",
+        "PYTHONPATH": str(root),
+        "PASTELABEL_CONFIG_PATH": str(config_path),
+    }
+    result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
+                            text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_save_recipe_allows_split_sum_below_one_real_qt(tmp_path):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    config_path = tmp_path / "config.json"
+    script = '''
+from PyQt5.QtWidgets import QApplication, QInputDialog
+from pastelabel.core import config_manager
+from pastelabel.ui.processing_panel import ProcessingPanel
+
+app = QApplication.instance() or QApplication([])
+QInputDialog.getText = staticmethod(lambda *a, **kw: ('n', True))
+
+class FakeEditor:
+    background_images = []
+    _background_label_scan_pending = False
+    _background_label_scan_completed = True
+
+panel = ProcessingPanel(FakeEditor())
+panel._split_train.setValue(0.6)   # 0.6/0.1/0.1 = 0.8
+panel._save_recipe()
+names = [r['name'] for r in config_manager.load_config().get('pipeline_recipes', [])]
+assert names == ['n'], names
+
+panel._pipe_exp.setChecked(False)
+panel._pipe_split.setChecked(False)
+panel._save_recipe()
+names = [r['name'] for r in config_manager.load_config().get('pipeline_recipes', [])]
+assert names == ['n'], names
+print("OK")
+'''
+    env = os.environ | {
+        "QT_QPA_PLATFORM": "offscreen",
+        "PYTHONPATH": str(root),
+        "PASTELABEL_CONFIG_PATH": str(config_path),
+    }
+    result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
+                            text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr

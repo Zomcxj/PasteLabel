@@ -117,16 +117,16 @@ def capture_recipe(name, state):
 
 
 def validate_recipe(recipe):
-    """返回问题列表（空 = 有效）。"""
+    """返回问题列表（空 = 有效）。每项为 (i18n 键, 格式化参数)。"""
     recipe = normalize_recipe(recipe)
     problems = []
     if len(recipe['steps']) < 2:
-        problems.append('至少选择两步')
+        problems.append(('至少选择两步', {}))
     split = recipe['split']
     if recipe['steps'] and 'split' in recipe['steps']:
         total = split['train'] + split['val'] + split['test']
         if abs(total - 1.0) > 1e-6:
-            problems.append(f'划分比例之和应为 1.0（当前 {total:.2f}）')
+            problems.append(('划分比例之和应为 1.0（当前 {total:.2f}）', {'total': total}))
     return problems
 
 

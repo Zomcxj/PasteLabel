@@ -69,6 +69,18 @@ def test_documentation_covers_dataset_health():
         assert term in guide, term
 
 
+def test_documentation_covers_health_source_switch():
+    guide = (ROOT / "docs" / "user_guide.md").read_text(encoding="utf-8")
+    assert "点击表格切换" in guide
+    assert "数据源" in guide
+    assert "配方" not in guide
+
+
+def test_readme_no_recipe_bullet():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "配方" not in readme
+
+
 def test_pipeline_recipe_feature_fully_removed():
     import subprocess
     from pathlib import Path

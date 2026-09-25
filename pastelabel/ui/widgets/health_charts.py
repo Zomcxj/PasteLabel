@@ -12,6 +12,13 @@ _PALETTE = (
 _LEFT_LABEL_W = 70
 _RIGHT_PAD = 8
 _AXIS_H = 18
+_TOP_PAD = 16
+
+
+def _bar_label(value, total):
+    """条形图右侧文字：数量 + 整数百分比。"""
+    pct = int(round(value / total * 100)) if total else 0
+    return f"{_fmt_num(value)} ({pct}%)"
 
 
 def _fmt_num(v):
@@ -89,30 +96,40 @@ class HealthBarChart(QWidget):
         total = sum(values) or 1.0
         border = QColor(t['border_color'])
         text_pen = QPen(QColor(t['text_primary']))
-        row_h = max(8, h // max(1, len(self._items)))
-        bar_area_w = max(10, w - _LEFT_LABEL_W - 90)
-        for idx, item in enumerate(self._items):
-            y = idx * row_h
-            value = float(item.get('value', 0) or 0)
-            bar_w = int((value / peak) * bar_area_w)
-            color = QColor(item.get('color') or _PALETTE[idx % len(_PALETTE)])
-            if self._highlight and idx in (0, len(self._items) - 1):
-                pen = QPen(QColor(t['accent_hover']))
-                pen.setWidth(2)
-                painter.setPen(pen)
-            else:
+        if self._horizontal:
+            row_h = max(8, h // max(1, len(self._items)))
+            bar_area_w = max(10, w - _LEFT_LABEL_W - 90)
+            for idx, item in enumerate(self._items):
+                y = idx * row_h
+                value = float(item.get('value', 0) or 0)
+                bar_w = int((value / peak) * bar_area_w)
+                color = QColor(item.get('color') or _PALETTE[idx % len(_PALETTE)])
+                if self._highlight and idx in (0, len(self._items) - 1):
+                    pen = QPen(QColor(t['accent_hover']))
+                    pen.setWidth(2)
+                    painter.setPen(pen)
+                else:
+                    painter.setPen(QPen(border))
+                painter.setBrush(color)
+                painter.drawRect(_LEFT_LABEL_W, y + 2, bar_w, row_h - 4)
+                painter.setPen(text_pen)
+                painter.drawText(0, y, _LEFT_LABEL_W - 4, row_h,
+                                 Qt.AlignVCenter | Qt.AlignRight,
+                                 str(item.get('label', '')))
+                painter.drawText(_LEFT_LABEL_W + bar_w + 4, y,
+                                 w - _LEFT_LABEL_W - bar_w - 4, row_h,
+                                 Qt.AlignVCenter | Qt.AlignLeft,
+                                 _bar_label(value, total))
+        else:
+            col_w = max(4, w // max(1, len(self._items)))
+            for idx, item in enumerate(self._items):
+                x = idx * col_w
+                value = float(item.get('value', 0) or 0)
+                bar_h = int((value / peak) * (h - 20))
+                color = QColor(item.get('color') or _PALETTE[idx % len(_PALETTE)])
                 painter.setPen(QPen(border))
-            painter.setBrush(color)
-            painter.drawRect(_LEFT_LABEL_W, y + 2, bar_w, row_h - 4)
-            painter.setPen(text_pen)
-            painter.drawText(0, y, _LEFT_LABEL_W - 4, row_h,
-                             Qt.AlignVCenter | Qt.AlignRight,
-                             str(item.get('label', '')))
-            pct = int(round(value / total * 100))
-            painter.drawText(_LEFT_LABEL_W + bar_w + 4, y,
-                             w - _LEFT_LABEL_W - bar_w - 4, row_h,
-                             Qt.AlignVCenter | Qt.AlignLeft,
-                             f"{_fmt_num(value)} ({pct}%)")
+                painter.setBrush(color)
+                painter.drawRect(x + 2, h - bar_h, col_w - 4, bar_h)
 
     def _paint_hist(self, painter, w, h, t):
         if not self._counts:
@@ -121,19 +138,20 @@ class HealthBarChart(QWidget):
         accent = QColor(t['accent'])
         border = QColor(t['border_color'])
         text_pen = QPen(QColor(t['text_primary']))
-        plot_h = max(10, h - _AXIS_H - 12)
+        plot_h = max(10, h - _AXIS_H - 12 - _TOP_PAD)
         n = len(self._counts)
         col_w = max(2, w // max(1, n))
         for idx, count in enumerate(self._counts):
             x = idx * col_w
-            bar_h = int((count / peak) * plot_h)
+            bar_h = int((count / peak) * max(1, plot_h - _TOP_PAD))
+            top = plot_h - bar_h
             color = accent.lighter(100 + (idx % 5) * 6)
             painter.setPen(QPen(border))
             painter.setBrush(color)
-            painter.drawRect(x + 1, plot_h - bar_h, col_w - 2, bar_h)
+            painter.drawRect(x + 1, top, col_w - 2, bar_h)
             if count > 0:
                 painter.setPen(text_pen)
-                painter.drawText(x, plot_h - bar_h - 14, col_w, 12,
+                painter.drawText(x, top - 14, col_w, 12,
                                  Qt.AlignHCenter | Qt.AlignBottom,
                                  _fmt_num(count))
         edges = self._edges

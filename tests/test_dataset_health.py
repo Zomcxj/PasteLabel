@@ -274,6 +274,13 @@ def test_fmt_num_formats_thousands_and_millions():
     assert _fmt_num(2500000) == '2.5M'
 
 
+def test_bar_label_formats_value_and_percent():
+    from pastelabel.ui.widgets.health_charts import _bar_label
+    assert _bar_label(3, 4) == '3 (75%)'
+    assert _bar_label(1200, 2400) == '1.2k (50%)'
+    assert _bar_label(0, 0) == '0 (0%)'
+
+
 def test_chart_accepts_colors_and_axis_labels():
     from pastelabel.ui.widgets.health_charts import HealthBarChart
     chart = HealthBarChart()
@@ -305,9 +312,46 @@ c.set_histogram([0.0, 0.5, 1.0], [4, 6], xlabel="面积", ylabel="框数")
 c.paintEvent(None)
 c.set_placeholder("暂无数据")
 c.paintEvent(None)
+from PyQt5.QtGui import QImage
+from PyQt5.QtCore import Qt
+
+img = QImage(200, 60, QImage.Format_ARGB32)
+img.fill(Qt.white)
+c2 = HealthBarChart()
+c2.resize(200, 60)
+c2.set_data([{'label': 'a', 'value': 10, 'color': '#FF0000'}])
+c2.render(img)
+pix = img.pixelColor(90, 20)
+assert pix.red() > 200 and pix.green() < 80, (pix.red(), pix.green(), pix.blue())
+
+img2 = QImage(200, 140, QImage.Format_ARGB32)
+img2.fill(Qt.white)
+c3 = HealthBarChart()
+c3.resize(200, 140)
+c3.set_histogram([0.0, 1.0], [5, 1])
+c3.render(img2)
+dark = any(img2.pixelColor(x, y).lightness() < 128
+           for x in range(0, 200, 4) for y in range(0, 16, 2))
+assert dark, "peak bar count label missing in top band"
+
+img3 = QImage(200, 140, QImage.Format_ARGB32)
+img3.fill(Qt.white)
+c4 = HealthBarChart()
+c4.resize(200, 140)
+c4.set_data([{"label": "a", "value": 10, "color": "#FF0000"},
+             {"label": "b", "value": 5, "color": "#00FF00"}], horizontal=False)
+c4.render(img3)
+v1 = img3.pixelColor(50, 130)
+v2 = img3.pixelColor(150, 130)
+assert v1.red() > 200 and v1.green() < 80, v1.getRgb()
+assert v2.green() > 200 and v2.red() < 80, v2.getRgb()
 print("OK")
 '''
     env = os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(root)}
+    font_dir = next((p for p in (r"C:\Windows\Fonts", "/usr/share/fonts",
+                                 "/System/Library/Fonts") if Path(p).is_dir()), None)
+    if font_dir:
+        env["QT_QPA_FONTDIR"] = font_dir
     result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
                             text=True, capture_output=True, timeout=120)
     assert result.returncode == 0, result.stderr

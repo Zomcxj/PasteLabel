@@ -374,3 +374,35 @@ def test_worker_paste_section_computed_with_paste():
     assert isinstance(captured['paste']['advice'], list)
     # annot 侧仍带对比数据
     assert captured['annot']['stats']['paste_vs_annot']['has_paste'] is True
+
+
+def test_i18n_stats_redesign_terms():
+    from pastelabel.ui.i18n import _strings
+    for key in ("数据源：背景图标签（点击上方表格切换）",
+                "数据源：贴图标签（点击上方表格切换）",
+                "各类别占比应接近均衡；长尾类别建议多合成",
+                "框尺寸应覆盖多种尺度，避免集中于单一范围",
+                "长宽比多样化更贴近真实场景",
+                "高 IoU 区间框多说明重复标注偏多",
+                "贴图尺寸中位数与标注接近时合成更自然",
+                "面积", "长宽比", "框数"):
+        assert key in _strings["zh"], key
+        assert key in _strings["en"], key
+
+
+def test_stats_health_section_supports_source_switch():
+    import inspect
+    from pastelabel.ui.mixins.stats import StatsMixin
+    src = inspect.getsource(StatsMixin)
+    assert "_set_health_source" in src
+    assert "'annot'" in src and "'paste'" in src
+    assert "cellClicked" in src
+    assert "_health_source" in src
+    assert "_health_payload" in src
+
+
+def test_stats_dialog_min_width_810():
+    import inspect
+    from pastelabel.ui.main_window import ImageEditor
+    src = inspect.getsource(ImageEditor._show_label_stats)
+    assert "dialog.setMinimumSize(810, 600)" in src

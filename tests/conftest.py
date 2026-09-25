@@ -507,6 +507,7 @@ qtwidgets.QTableWidget = type('QTableWidget', (_MockQWidget,), {
     'blockSignals': lambda self, *a: None,
     'clearContents': lambda self: None,
     'setStyleSheet': lambda self, *a: None,
+    'cellClicked': type('Signal', (), {'connect': lambda self, f: None})(),
 })
 qtwidgets.QTableWidgetItem = type('QTableWidgetItem', (), {
     '__init__': lambda self, *a, **kw: None,

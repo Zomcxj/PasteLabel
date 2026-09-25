@@ -116,7 +116,7 @@ class StatsMixin:
         t = ThemeManager.get_theme()
         dialog = _StatsDialog(self)
         dialog.setWindowTitle(tr("标签统计"))
-        dialog.setMinimumSize(540, 600)
+        dialog.setMinimumSize(810, 600)
         from PyQt5.QtCore import QTimer
         def _sync():
             hwnd = int(dialog.winId())
@@ -289,6 +289,10 @@ class StatsMixin:
             paste_header.setText(f"{'▼' if paste_expanded else '▶'}  {tr('贴图标签_list')}")
         paste_header.clicked.connect(_toggle_paste)
         self._build_health_section(dialog, layout)
+        bg_table.cellClicked.connect(
+            lambda *_: dialog._set_health_source('annot'))
+        paste_table.cellClicked.connect(
+            lambda *_: dialog._set_health_source('paste'))
         total = QLabel(
             f"{tr('总计')}: {tr('背景图标签')} {sum(bg_stats.values())} {tr('个')} | "
             f"{tr('贴图标签_list')} {sum(paste_stats.values())} {tr('个')}"
@@ -310,7 +314,7 @@ class StatsMixin:
                 pass
 
     def _build_health_section(self, dialog, layout):
-        """构建「数据集健康」折叠区：5 面板 + 建议，后台扫描填充。"""
+        """构建「数据集健康」折叠区：5 面板 + 建议，点击上方表格切换数据源。"""
         from PyQt5.QtCore import Qt
         from PyQt5.QtWidgets import QPushButton, QLabel, QWidget, QVBoxLayout
         from ..i18n import t as tr
@@ -329,6 +333,10 @@ class StatsMixin:
         box = QVBoxLayout(container)
         box.setContentsMargins(0, 0, 0, 0)
 
+        source_label = QLabel(tr('数据源：背景图标签（点击上方表格切换）'))
+        source_label.setStyleSheet("color: gray; font-size: 11px;")
+        box.addWidget(source_label)
+
         class_chart = HealthBarChart()
         size_chart = HealthBarChart()
         aspect_chart = HealthBarChart()
@@ -338,11 +346,19 @@ class StatsMixin:
             'class': class_chart, 'size': size_chart, 'aspect': aspect_chart,
             'iou': iou_chart, 'paste': paste_chart,
         }
-        for key, title in (('class', tr('类别分布')), ('size', tr('尺寸分布')),
-                           ('aspect', tr('长宽比分布')),
-                           ('iou', tr('IoU 重叠分布')),
-                           ('paste', tr('贴图 vs 标注'))):
+        panels = (
+            ('class', tr('类别分布'), tr('各类别占比应接近均衡；长尾类别建议多合成')),
+            ('size', tr('尺寸分布'), tr('框尺寸应覆盖多种尺度，避免集中于单一范围')),
+            ('aspect', tr('长宽比分布'), tr('长宽比多样化更贴近真实场景')),
+            ('iou', tr('IoU 重叠分布'), tr('高 IoU 区间框多说明重复标注偏多')),
+            ('paste', tr('贴图 vs 标注'), tr('贴图尺寸中位数与标注接近时合成更自然')),
+        )
+        for key, title, desc in panels:
             box.addWidget(QLabel(title))
+            desc_label = QLabel(desc)
+            desc_label.setWordWrap(True)
+            desc_label.setStyleSheet("color: gray; font-size: 11px;")
+            box.addWidget(desc_label)
             box.addWidget(charts[key])
             charts[key].set_placeholder(tr('正在分析'))
         advice_label = QLabel(f"{tr('建议')}: {tr('正在分析')}")
@@ -361,6 +377,67 @@ class StatsMixin:
 
         dialog._health_charts = charts
         dialog._health_advice_label = advice_label
+        dialog._health_source = 'annot'
+        dialog._health_payload = None
+
+        def _render_source(source, payload=None):
+            payload = payload if payload is not None else dialog._health_payload
+            dialog._health_source = source
+            source_label.setText(
+                tr('数据源：背景图标签（点击上方表格切换）') if source == 'annot'
+                else tr('数据源：贴图标签（点击上方表格切换）'))
+            if not payload:
+                return
+            if payload.get('error'):
+                for chart in charts.values():
+                    chart.set_placeholder(tr('分析失败'))
+                advice_label.setText(tr('分析失败'))
+                return
+            section = payload.get(source) or {}
+            stats = section.get('stats') or {}
+            if source == 'paste' and not stats:
+                for key in ('class', 'size', 'aspect', 'iou'):
+                    charts[key].set_placeholder(tr('暂无贴图数据'))
+                charts['paste'].set_placeholder(tr('暂无贴图数据'))
+                advice_label.setText("")
+                return
+            class_dist = stats.get('class_dist') or []
+            if class_dist:
+                charts['class'].set_data(
+                    [{'label': c['label'], 'value': c['count'],
+                      'color': self.get_label_color(c['label'])}
+                     for c in class_dist],
+                    horizontal=True, highlight_extremes=True)
+            else:
+                charts['class'].set_placeholder(tr('未发现明显失衡'))
+            size = stats.get('size_hist') or {}
+            charts['size'].set_histogram(size.get('edges'), size.get('counts'),
+                                         xlabel=tr('面积'), ylabel=tr('框数'))
+            aspect = stats.get('aspect_hist') or {}
+            charts['aspect'].set_histogram(aspect.get('edges'),
+                                           aspect.get('counts'),
+                                           xlabel=tr('长宽比'), ylabel=tr('框数'))
+            iou = stats.get('iou_hist') or {}
+            charts['iou'].set_histogram(iou.get('edges'), iou.get('counts'),
+                                        xlabel=tr('IoU'), ylabel=tr('框数'))
+            pva = (payload.get('annot') or {}).get('stats', {}).get(
+                'paste_vs_annot') or {}
+            if pva.get('has_paste'):
+                annot_q = pva.get('annot_quantiles') or [0, 0, 0, 0]
+                paste_q = pva.get('paste_quantiles') or [0, 0, 0, 0]
+                charts['paste'].set_data([
+                    {'label': tr('标注'), 'value': annot_q[2]},
+                    {'label': tr('贴图'), 'value': paste_q[2]},
+                ], horizontal=True)
+            else:
+                charts['paste'].set_placeholder(tr('暂无贴图数据'))
+            advice = section.get('advice') or [tr('未发现明显失衡')]
+            advice_label.setText(f"{tr('建议')}: " + "；".join(advice))
+
+        def _set_health_source(source):
+            _render_source(source)
+
+        dialog._set_health_source = _set_health_source
 
         if not getattr(self, 'background_images', None):
             for chart in charts.values():
@@ -381,40 +458,11 @@ class StatsMixin:
             tuple(self.background_images), memory_boxes, canvas_items, self)
         worker.finished.connect(worker.deleteLater)
 
-        def _render(payload, charts=charts, label=advice_label):
-            if payload.get('error'):
-                for chart in charts.values():
-                    chart.set_placeholder(tr('分析失败'))
-                label.setText(tr('分析失败'))
-                return
-            stats = payload.get('stats') or {}
-            class_dist = stats.get('class_dist') or []
-            if class_dist:
-                charts['class'].set_data(
-                    [{'label': c['label'], 'value': c['count']} for c in class_dist],
-                    horizontal=True, highlight_extremes=True)
-            else:
-                charts['class'].set_placeholder(tr('未发现明显失衡'))
-            size = stats.get('size_hist') or {}
-            charts['size'].set_histogram(size.get('edges'), size.get('counts'))
-            aspect = stats.get('aspect_hist') or {}
-            charts['aspect'].set_histogram(aspect.get('edges'), aspect.get('counts'))
-            iou = stats.get('iou_hist') or {}
-            charts['iou'].set_histogram(iou.get('edges'), iou.get('counts'))
-            pva = stats.get('paste_vs_annot') or {}
-            if pva.get('has_paste'):
-                annot_q = pva.get('annot_quantiles') or [0, 0, 0, 0]
-                paste_q = pva.get('paste_quantiles') or [0, 0, 0, 0]
-                charts['paste'].set_data([
-                    {'label': tr('标注'), 'value': annot_q[2]},
-                    {'label': tr('贴图'), 'value': paste_q[2]},
-                ], horizontal=True)
-            else:
-                charts['paste'].set_placeholder(tr('暂无贴图数据'))
-            advice = payload.get('advice') or [tr('未发现明显失衡')]
-            label.setText(f"{tr('建议')}: " + "；".join(advice))
+        def _on_payload(payload):
+            dialog._health_payload = payload
+            _render_source(dialog._health_source, payload)
 
-        worker.health_ready.connect(_render)
+        worker.health_ready.connect(_on_payload)
         self._health_worker = worker
         worker.start()
 

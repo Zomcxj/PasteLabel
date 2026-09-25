@@ -708,6 +708,105 @@ print("OK")
     assert result.returncode == 0, result.stderr
 
 
+def test_stats_total_label_payload_paste_count_real_qt(tmp_path):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = '''
+from PyQt5.QtCore import QObject
+from PyQt5.QtWidgets import QApplication, QDialog
+from pastelabel.ui.mixins.stats import StatsMixin
+
+app = QApplication.instance() or QApplication([])
+
+
+class FakeLabelManager:
+    def rename_detection_label(self, old, new):
+        return False
+
+    def rename_paste_label(self, old, new, rewrite_disk=False):
+        return False
+
+
+class FakeEditor(StatsMixin, QDialog):
+    def __init__(self):
+        super().__init__()
+        self.background_images = ["x.png"]
+        self.detection_boxes_dict = {
+            0: [{"label": "bg_cls", "x": 0, "y": 0, "width": 10, "height": 10}]}
+        self.canvas_items_dict = {}
+        self.canvas_items = []
+        self.current_background_index = 0
+        self._health_worker = None
+        self._cached_bg_label_stats = None
+        self._memory_background_path = "x.png"
+        self.label_color_map = {}
+        self.global_labels = set()
+        self.background_dataset_labels = set()
+        self.label_manager = FakeLabelManager()
+        self._dataset_stats_dirty = False
+        self._background_label_scan_completed = True
+
+    def get_label_color(self, label):
+        return "#123456"
+
+
+editor = FakeEditor()
+captured = {}
+
+
+def _capture_exec(self):
+    captured["dialog"] = self
+    return 0
+
+
+QDialog.exec_ = _capture_exec
+editor._show_label_stats()
+dialog = captured["dialog"]
+editor._close_health_worker()
+
+# 会话内存无贴图 → 初始总计贴图数为 0
+label = dialog._total_label
+bg_part, paste_part = label.text().split("|")
+assert "0" in paste_part, label.text()
+
+# worker payload 携带整库贴图统计（磁盘上有 7 个）→ 总计贴图数须为 7
+payload = {
+    "annot": {"stats": {"class_dist": [{"label": "bg_cls", "count": 9}],
+                        "summary": {"total_boxes": 9}},
+              "advice": ["a"]},
+    "paste": {"stats": {"class_dist": [{"label": "disk_logo", "count": 7}],
+                        "summary": {"total_boxes": 7}},
+              "advice": ["p"]},
+    "images_scanned": 1,
+}
+dialog._on_health_payload(payload)
+text = dialog._total_label.text()
+bg_part, paste_part = text.split("|")
+assert "7" in paste_part, text
+assert "9" in bg_part, text
+assert dialog._paste_table.item(0, 0).text() == "disk_logo"
+
+# payload 贴图段为空 → 保留会话内存贴图计数，而不是盲写 0
+editor.canvas_items = [(None, None, "mem_paste")]
+empty_payload = {"annot": {"stats": {"summary": {"total_boxes": 9}}},
+                 "paste": {"stats": {}, "advice": []}, "images_scanned": 1}
+dialog._on_health_payload(empty_payload)
+paste_part = dialog._total_label.text().split("|")[1]
+assert " 1 " in paste_part, dialog._total_label.text()
+
+editor._close_health_worker()
+print("OK")
+'''
+    env = os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(root)}
+    result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
+                            text=True, capture_output=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+
+
 def test_stats_dialog_tabs_and_docks_real_qt(tmp_path):
     import os
     import subprocess

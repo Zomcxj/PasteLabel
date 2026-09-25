@@ -277,13 +277,28 @@ class StatsMixin:
         central_layout.addWidget(tabs)
         dialog._tabs = tabs
         self._build_health_section(dialog, central_layout)
-        total = QLabel(
-            f"{tr('总计')}: {tr('背景图标签')} {sum(bg_stats.values())} {tr('个')} | "
-            f"{tr('贴图标签_list')} {sum(paste_stats.values())} {tr('个')}"
-        )
+        total = QLabel()
         total.setStyleSheet("font-size: 12px; margin-top: 8px;")
         central_layout.addWidget(total)
+        dialog._total_label = total
+        self._update_stats_total_label(
+            dialog, bg_count=sum(bg_stats.values()), paste_count=sum(paste_stats.values()))
         dialog.exec_()
+
+    def _update_stats_total_label(self, dialog, bg_count=None, paste_count=None):
+        """更新统计弹窗底部总计标签；缺省计数回退到会话内存统计。"""
+        from ..i18n import t as tr
+        label = getattr(dialog, '_total_label', None)
+        if label is None:
+            return
+        if not isinstance(bg_count, int) or isinstance(bg_count, bool):
+            bg_count = sum(self._collect_bg_stats_for_dialog().values())
+        if not isinstance(paste_count, int) or isinstance(paste_count, bool):
+            paste_count = sum(self._get_session_paste_stats().values())
+        label.setText(
+            f"{tr('总计')}: {tr('背景图标签')} {bg_count} {tr('个')} | "
+            f"{tr('贴图标签_list')} {paste_count} {tr('个')}"
+        )
 
     def _close_health_worker(self):
         """中断并清理健康扫描 worker。"""
@@ -470,6 +485,16 @@ class StatsMixin:
                 'class_dist') or []
             if paste_class:
                 self._reload_stats_paste_table(dialog, paste_class)
+            paste_total = (payload.get('paste') or {}).get('stats', {}).get(
+                'summary', {}).get('total_boxes')
+            if not isinstance(paste_total, int) or isinstance(paste_total, bool):
+                paste_total = None
+            bg_total = (payload.get('annot') or {}).get('stats', {}).get(
+                'summary', {}).get('total_boxes')
+            if not isinstance(bg_total, int) or isinstance(bg_total, bool):
+                bg_total = None
+            self._update_stats_total_label(
+                dialog, bg_count=bg_total, paste_count=paste_total)
             _render_source(dialog._health_source, payload)
 
         dialog._on_health_payload = _on_payload

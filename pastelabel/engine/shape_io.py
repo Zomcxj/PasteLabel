@@ -52,7 +52,8 @@ def labelme_shape_from_box(box):
         points = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
     else:
         points = [list(p) for p in (box.get("points") or [])]
-    flags = dict(box.get("flags") or {})
+    raw_flags = box.get("flags")
+    flags = dict(raw_flags) if isinstance(raw_flags, dict) else {}
     if box.get("is_paste"):
         flags["paste"] = True
     shape = {

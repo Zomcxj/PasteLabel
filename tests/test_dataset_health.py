@@ -206,3 +206,6 @@ def test_stats_mixin_exposes_health_section_source():
     assert "DatasetHealthWorker" in src
     assert "HealthBarChart" in src
     assert "_close_health_worker" in src
+    assert "worker.finished.connect(worker.deleteLater)" in src
+    assert "requestInterruption" in src
+    assert "worker.wait(" in src

@@ -97,6 +97,7 @@ class StatsMixin:
 
     def _show_label_stats(self):
         """显示标签统计弹窗"""
+        self._close_health_worker()
         from PyQt5.QtWidgets import (
             QDialog, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
             QHeaderView, QPushButton, QWidget, QAbstractItemView,
@@ -304,6 +305,7 @@ class StatsMixin:
             try:
                 if worker.isRunning():
                     worker.requestInterruption()
+                    worker.wait(3000)
             except Exception:
                 pass
 
@@ -370,15 +372,16 @@ class StatsMixin:
         self._close_health_worker()
         memory_boxes = {
             idx: list(boxes) for idx, boxes in
-            (getattr(self, 'detection_boxes_dict', None) or {}).items() if boxes}
+            (getattr(self, 'detection_boxes_dict', None) or {}).items()}
         canvas_items = dict(getattr(self, 'canvas_items_dict', None) or {})
         current = getattr(self, 'current_background_index', -1)
         if current >= 0:
             canvas_items[current] = list(getattr(self, 'canvas_items', None) or [])
         worker = DatasetHealthWorker(
             tuple(self.background_images), memory_boxes, canvas_items, self)
+        worker.finished.connect(worker.deleteLater)
 
-        def _render(payload, charts=charts, label=advice_label, d=dialog):
+        def _render(payload, charts=charts, label=advice_label):
             stats = payload.get('stats') or {}
             class_dist = stats.get('class_dist') or []
             if class_dist:

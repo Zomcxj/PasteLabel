@@ -127,6 +127,25 @@ def test_normalize_pipeline_recipes_dedup_and_limit():
     assert _normalize_pipeline_recipes('not a list') == []
 
 
+def test_normalize_pipeline_recipes_caps_at_50_keeping_last():
+    from pastelabel.core.config_manager import _normalize_pipeline_recipes
+    recipes = [{'name': f'r{i}', 'steps': ['augment', 'export']} for i in range(55)]
+    out = _normalize_pipeline_recipes(recipes)
+    assert len(out) == 50
+    assert [r['name'] for r in out] == [f'r{i}' for i in range(5, 55)]
+
+
+def test_save_all_without_recipes_keeps_stored(tmp_path, monkeypatch):
+    from pastelabel.core import config_manager
+    config_path = tmp_path / "config.json"
+    monkeypatch.setattr(config_manager, 'CONFIG_PATH', str(config_path))
+    recipe = {'name': 'kept', 'steps': ['augment', 'export']}
+    config_manager.save_all(pipeline_recipes=[recipe])
+    config_manager.save_all(theme='dark')
+    loaded = config_manager.load_config().get('pipeline_recipes')
+    assert [r['name'] for r in loaded] == ['kept']
+
+
 def test_save_all_roundtrips_pipeline_recipes(tmp_path, monkeypatch):
     from pastelabel.core import config_manager
     from pastelabel.engine.pipeline_recipe import capture_recipe

@@ -111,3 +111,31 @@ def test_apply_labels_case_sensitive():
     from pastelabel.engine.pipeline_recipe import capture_recipe, apply_recipe_to_labels
     r = capture_recipe('r', _state())
     assert apply_recipe_to_labels(r, ['Cat', 'DOG']) == []
+
+
+def test_normalize_pipeline_recipes_dedup_and_limit():
+    from pastelabel.core.config_manager import _normalize_pipeline_recipes
+    recipes = [
+        {'name': 'a', 'steps': ['augment', 'export']},
+        {'name': ''},
+        {'name': 'a', 'steps': ['augment', 'split']},  # later wins
+        'junk',
+    ]
+    out = _normalize_pipeline_recipes(recipes)
+    assert [r['name'] for r in out] == ['a']
+    assert out[0]['steps'] == ['augment', 'split']
+    assert _normalize_pipeline_recipes('not a list') == []
+
+
+def test_save_all_roundtrips_pipeline_recipes(tmp_path, monkeypatch):
+    from pastelabel.core import config_manager
+    from pastelabel.engine.pipeline_recipe import capture_recipe
+    config_path = tmp_path / "config.json"
+    monkeypatch.setattr(config_manager, 'CONFIG_PATH', str(config_path))
+    recipe = capture_recipe('demo', {'steps': ['augment', 'export'],
+                                     'export': {'labels': ['cat']}})
+    config_manager.save_all(pipeline_recipes=[recipe])
+    loaded = config_manager.load_config().get('pipeline_recipes')
+    assert len(loaded) == 1
+    assert loaded[0]['name'] == 'demo'
+    assert loaded[0]['export']['labels'] == ['cat']

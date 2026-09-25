@@ -56,6 +56,7 @@ class _MockQWidget:
     def __init__(self, *a, **kw):
         pass
     def setMinimumSize(self, *a): pass
+    def setMinimumHeight(self, *a): pass
     def setMouseTracking(self, *a): pass
     def setFocusPolicy(self, *a): pass
     def setFocus(self): pass
@@ -336,6 +337,7 @@ qtcore.Qt = type('Qt', (), {
     'ArrowCursor': 0,
     'WA_StyledBackground': 9,
     'NoFocus': 0,
+    'AlignCenter': 0x0084,
     'AlignRight': 0x0002,
     'AlignVCenter': 0x0080,
     'DotLine': 1,
@@ -400,6 +402,7 @@ qtgui.QColor = type('QColor', (), {
 })
 qtgui.QPainter = type('QPainter', (), {
     '__init__': lambda self, *a: None,
+    'Antialiasing': 1,
     'setRenderHint': lambda self, *a: None,
     'setPen': lambda self, *a: None,
     'setBrush': lambda self, *a: None,

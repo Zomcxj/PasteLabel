@@ -164,6 +164,7 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
             self.selected_region_vertex = vertex[1]
             self.region_vertex_drag_index = vertex[1]
             self.is_dragging_region_vertex = True
+            self.region_drag_start = mouse_pos
             self._editor.selected_item = None
             self.selected_item_size = None
             self.selected_box = None
@@ -1240,7 +1241,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
         if event.modifiers() & Qt.ControlModifier:
             self._scale_background(event)
-        elif (self._region_at(self.mouse_pos) is not None and
+        elif (self._is_paste_mode() and
+              self._region_at(self.mouse_pos) is not None and
               self.find_item_at_position(self.mouse_pos) is None):
             self._scale_hovered_region(event)
         elif self._editor.selected_item is not None:

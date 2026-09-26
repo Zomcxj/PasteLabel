@@ -142,6 +142,12 @@ class Canvas(CanvasInteractionMixin):
     def find_item_at_position(self, _pos):
         return None
 
+    def _can_edit_canvas(self):
+        return True
+
+    def _sync_detection_box_to_dict(self, _box_index):
+        pass
+
 
 class WheelEvent:
     def __init__(self, delta, modifiers=0):
@@ -515,6 +521,42 @@ def test_wheel_region_blocked_when_fixed():
     assert region['height'] == 100.0
 
 
+def test_wheel_scales_selected_box_not_region_in_annotate_mode():
+    """回归：标注模式下悬停区域不得吞掉滚轮，选中的检测框仍要缩放。"""
+    canvas = Canvas(regions=[{'x': 100.0, 'y': 100.0, 'width': 100.0, 'height': 100.0}])
+    canvas._editor.edit_mode = 'annotate'
+    canvas._editor.detection_boxes = [
+        {'label': 'cat', 'x': 120.0, 'y': 120.0, 'width': 60.0, 'height': 60.0},
+    ]
+    canvas.selected_box = 0
+    canvas.mouse_pos = Point(150, 150)
+
+    canvas.wheelEvent(WheelEvent(120))
+
+    region = canvas._editor.region_boxes[0]
+    assert region['width'] == 100.0
+    assert region['height'] == 100.0
+    box = canvas._editor.detection_boxes[0]
+    assert box['width'] > 60.0
+    assert box['height'] > 60.0
+
+
+def test_wheel_still_scales_region_in_paste_mode():
+    """对照：贴图模式下滚轮仍缩放悬停区域。"""
+    canvas = Canvas(regions=[{'x': 100.0, 'y': 100.0, 'width': 100.0, 'height': 100.0}])
+    canvas._editor.detection_boxes = [
+        {'label': 'cat', 'x': 120.0, 'y': 120.0, 'width': 60.0, 'height': 60.0},
+    ]
+    canvas.selected_box = 0
+    canvas.mouse_pos = Point(150, 150)
+
+    canvas.wheelEvent(WheelEvent(120))
+
+    region = canvas._editor.region_boxes[0]
+    assert region['width'] > 100.0
+    assert canvas._editor.detection_boxes[0]['width'] == 60.0
+
+
 def test_wheel_region_min_size_clamped():
     canvas = Canvas(regions=[{'x': 100.0, 'y': 100.0, 'width': 30.0, 'height': 30.0}])
     canvas.mouse_pos = Point(115, 115)
@@ -696,6 +738,39 @@ def test_drag_region_vertex_clamped_to_background():
     canvas.mouse_pos = Point(-10000, -10000)
     canvas._drag_region_vertex()
     assert canvas._editor.region_boxes[0]['points'][0] == [0.0, 0.0]
+
+
+def test_region_vertex_click_then_drag_moves_by_delta_not_absolute():
+    """回归：点击顶点进入拖动后，第一次拖动必须按鼠标位移移动，
+    不能瞬移到光标绝对坐标（region_drag_start 未初始化）。"""
+    canvas = Canvas(regions=[_poly_region(DIAMOND['points'])])
+
+    assert canvas._handle_region_click(Point(200, 50)) is True
+    assert canvas.is_dragging_region_vertex is True
+    assert canvas.region_vertex_drag_index == 0
+    assert canvas.region_drag_start is not None
+
+    canvas.mouse_pos = Point(205, 55)
+    canvas._drag_region_vertex()
+    region = canvas._editor.region_boxes[0]
+    assert region['points'][0] == [205.0, 55.0]
+
+    canvas.mouse_pos = Point(210, 60)
+    canvas._drag_region_vertex()
+    assert region['points'][0] == [210.0, 60.0]
+
+
+def test_drag_region_vertex_entry_path_scales_delta_by_background_scale():
+    """scale != 1 时按位移/scale 移动，而不是跳到绝对坐标。"""
+    canvas = Canvas(regions=[_poly_region(DIAMOND['points'])])
+    canvas.background_scale = 2.0
+    canvas._handle_region_click(Point(400, 100))
+    assert canvas.is_dragging_region_vertex is True
+
+    canvas.mouse_pos = Point(410, 110)
+    canvas._drag_region_vertex()
+    region = canvas._editor.region_boxes[0]
+    assert region['points'][0] == [205.0, 55.0]
 
 
 def test_insert_region_vertex():

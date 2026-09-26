@@ -25,7 +25,10 @@ class QualityLintMixin:
         summary = {k: 0 for k in (result.get('summary') or {})}
         summary.update(summarize_issues(filtered))
         summary['scanned_images'] = (result.get('summary') or {}).get('scanned_images', 0)
-        return {'issues': filtered, 'summary': summary}
+        out = {'issues': filtered, 'summary': summary}
+        if result.get('error'):
+            out['error'] = True
+        return out
 
     def _open_quality_lint(self):
         if getattr(self, '_busy', False):
@@ -126,6 +129,8 @@ class QualityLintMixin:
             try:
                 if worker.isRunning():
                     worker.requestInterruption()
+                    # 等 worker 退出，避免销毁运行中的线程/向已关闭弹窗发信号
+                    worker.wait(5000)
             except Exception:
                 pass
         if worker is getattr(self, '_lint_worker', None):
@@ -421,6 +426,14 @@ class QualityLintMixin:
                 changed_indexes.add(index)
         if not changed_indexes:
             return
+        # 跨类删除是已确认的不可逆操作（见 _delete_cross_label_overlaps 提示）。
+        # 撤销栈里还留着删除前的快照，Ctrl+Z 会把删掉的框复活并在下次保存写回盘。
+        undo_manager = getattr(self, 'undo_manager', None)
+        if undo_manager is not None and hasattr(undo_manager, 'clear'):
+            try:
+                undo_manager.clear()
+            except Exception:
+                pass
         current = getattr(self, 'current_background_index', -1)
         if current in changed_indexes:
             self.detection_boxes = list(boxes_dict.get(current) or [])

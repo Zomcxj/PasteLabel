@@ -231,6 +231,59 @@ def test_finished_non_interrupted_worker_leaves_pending_until_queued_result_is_a
     assert editor._background_label_scan_pending is True
 
 
+def test_upload_background_closes_lint_dialog(monkeypatch):
+    """上传背景图会换数据集，质检弹窗必须关闭（否则指向旧图）。"""
+
+    class Pixmap:
+        def __init__(self, path):
+            self.path = path
+
+        def isNull(self):
+            return False
+
+    class List:
+        def clear(self):
+            pass
+
+        def addItem(self, item):
+            pass
+
+    class Item:
+        def __init__(self, text):
+            pass
+
+        def setData(self, role, value):
+            pass
+
+    editor = type("Editor", (ImageLoaderMixin,), {})()
+    editor._memory_background_path = ""
+    editor._background_label_scan_generation = 0
+    editor.global_labels = set()
+    editor.background_images = []
+    editor.background_list = List()
+    editor.current_background = None
+    editor.detection_boxes_dict = {}
+    editor.canvas_items_dict = {}
+    editor.canvas_items = []
+    editor.canvas = type("Canvas", (), {
+        "background_scale": 0, "is_manual_scale": True, "update": lambda self: None})()
+    editor.load_detection_boxes = lambda path: []
+    editor.update_label_list = lambda: None
+    editor.update_file_count = lambda: None
+    editor._start_dataset_label_scan = lambda: None
+    closed = []
+    editor._close_lint_dialog = lambda: closed.append(True)
+    monkeypatch.setattr(image_loader.QFileDialog, "getOpenFileNames",
+                        lambda *args: (["first.png"], ""))
+    monkeypatch.setattr(image_loader.mixin, "QPixmap", Pixmap)
+    monkeypatch.setattr(image_loader.mixin, "QListWidgetItem", Item)
+    monkeypatch.setattr(image_loader.mixin, "Qt", type("Qt", (), {"UserRole": 32})())
+
+    editor.upload_background()
+
+    assert closed == [True]
+
+
 def test_upload_background_starts_dataset_label_scan_after_loading_first_image(monkeypatch):
     class Pixmap:
         def __init__(self, path):

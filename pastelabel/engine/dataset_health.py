@@ -52,7 +52,10 @@ def _shape_dedupe_key(shape):
     save_json 会把当前图的检测框同时写进原目录与输出目录 sidecar，
     不按内容去重会把同一个框计两次。
     """
-    rect = _bbox(shape)
+    try:
+        rect = _bbox(shape)
+    except Exception:
+        return None
     if rect is None:
         return None
     try:
@@ -106,10 +109,13 @@ def collect_shape_geometry(image_paths, memory_boxes=None, is_interrupted=None):
             return index, None
         return index, _merge_shapes(original, output)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+    interrupted = False
+    try:
         futures = [pool.submit(_one, i, p) for i, p in enumerate(image_paths)]
         for future in concurrent.futures.as_completed(futures):
             if is_interrupted and is_interrupted():
+                interrupted = True
                 break
             index, shapes = future.result()
             if shapes is None:
@@ -132,6 +138,9 @@ def collect_shape_geometry(image_paths, memory_boxes=None, is_interrupted=None):
                 geo['image_index'] = index
                 is_paste = _shape_is_paste(shape) or bool(shape.get('is_paste'))
                 (paste_boxes if is_paste else boxes).append(geo)
+    finally:
+        # 中断时放弃排队中的读盘任务，避免 requestInterruption 后仍被拖住
+        pool.shutdown(wait=not interrupted, cancel_futures=interrupted)
     return {'boxes': boxes, 'paste_boxes': paste_boxes,
             'images_scanned': images_scanned}
 

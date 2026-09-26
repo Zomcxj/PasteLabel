@@ -314,6 +314,12 @@ class StatsMixin:
                 if worker.isRunning():
                     worker.requestInterruption()
                     worker.wait(3000)
+                if worker.isRunning():
+                    # 超时未停：先断开信号再丢引用，避免 worker 向已销毁的弹窗发结果
+                    try:
+                        worker.health_ready.disconnect()
+                    except Exception:
+                        pass
             except Exception:
                 pass
 

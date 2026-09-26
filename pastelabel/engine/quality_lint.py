@@ -26,7 +26,11 @@ KIND_LABELS = {
 
 
 def _bbox(box):
-    """(x1, y1, x2, y2)；优先用 x/y/width/height，缺失时回退 points。"""
+    """(x1, y1, x2, y2)；优先用 x/y/width/height，缺失时回退 points。
+
+    坏数据（非数值坐标 / 点数不足）返回 None，由调用方跳过该 shape，
+    不能让它中断整库扫描。
+    """
     x = box.get("x")
     y = box.get("y")
     w = box.get("width")
@@ -35,10 +39,16 @@ def _bbox(box):
         points = box.get("points") or []
         if not points:
             return None
-        xs = [p[0] for p in points]
-        ys = [p[1] for p in points]
+        try:
+            xs = [float(p[0]) for p in points]
+            ys = [float(p[1]) for p in points]
+        except (TypeError, ValueError, IndexError, KeyError):
+            return None
         return (min(xs), min(ys), max(xs), max(ys))
-    return (x, y, x + w, y + h)
+    try:
+        return (float(x), float(y), float(x) + float(w), float(y) + float(h))
+    except (TypeError, ValueError):
+        return None
 
 
 def lint_shapes(shapes, image_width, image_height, label_index=None):
@@ -232,6 +242,13 @@ def summarize_issues(issues):
     return summary
 
 
+def _safe_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _read_json_shapes(json_path):
     """返回 (shapes, image_w, image_h)；文件缺失/损坏返回 None。"""
     if not os.path.exists(json_path):
@@ -246,7 +263,7 @@ def _read_json_shapes(json_path):
     shapes = data.get('shapes')
     if not isinstance(shapes, list):
         shapes = []
-    return shapes, int(data.get('imageWidth') or 0), int(data.get('imageHeight') or 0)
+    return shapes, _safe_int(data.get('imageWidth')), _safe_int(data.get('imageHeight'))
 
 
 def lint_image_shapes(image_path, shapes, image_width, image_height):
@@ -318,10 +335,13 @@ def lint_dataset(image_paths, memory_boxes=None, progress_cb=None,
         shapes, img_w, img_h = image_shapes_for_lint(index, path, memory_boxes)
         return index, path, shapes, img_w, img_h
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+    interrupted = False
+    try:
         futures = [pool.submit(_one, i, p) for i, p in enumerate(image_paths)]
         for future in concurrent.futures.as_completed(futures):
             if is_interrupted and is_interrupted():
+                interrupted = True
                 break
             index, path, shapes, img_w, img_h = future.result()
             done += 1
@@ -337,6 +357,9 @@ def lint_dataset(image_paths, memory_boxes=None, progress_cb=None,
                     progress_cb(done, total)
                 except Exception:
                     pass
+    finally:
+        # 中断时放弃排队中的读盘任务，避免 wait() 被未开始的 future 拖住
+        pool.shutdown(wait=not interrupted, cancel_futures=interrupted)
     return {'issues': issues, 'summary': summary}
 
 
@@ -362,7 +385,8 @@ class QualityLintWorker(QThread):
                 is_interrupted=self.isInterruptionRequested,
             )
         except Exception:
-            result = {'issues': [], 'summary': {}}
+            # 带 error 标记：UI 要显示"扫描失败"，不能伪装成"未发现问题"
+            result = {'issues': [], 'summary': {}, 'error': True}
         if not self.isInterruptionRequested():
             self.lint_finished.emit(result)
 

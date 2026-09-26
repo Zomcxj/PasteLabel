@@ -107,6 +107,9 @@ class ImageLoaderMixin:
             self, tr("选择背景图片"), "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)"
         )
         if files:
+            close_lint = getattr(self, '_close_lint_dialog', None)
+            if callable(close_lint):
+                close_lint()
             self._memory_background_path = os.path.dirname(files[0])
             self._start_background_replacement()
             self.background_images.clear()

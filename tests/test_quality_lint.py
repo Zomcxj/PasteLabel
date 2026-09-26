@@ -221,6 +221,229 @@ def test_lint_dataset_interruptible(tmp_path):
     assert results['summary']['scanned_images'] == 0
 
 
+def test_bbox_returns_none_for_non_numeric_coordinates():
+    from pastelabel.engine.quality_lint import _bbox
+    assert _bbox({"label": "a", "x": "abc", "y": 0, "width": 10, "height": 10}) is None
+    assert _bbox({"label": "a", "points": [[5]]}) is None
+    assert _bbox({"label": "a", "points": []}) is None
+    assert _bbox({"label": "a", "points": [["x", "y"]]}) is None
+    assert _bbox({"label": "a", "x": 0, "y": 0, "width": 10, "height": 10}) == (0, 0, 10, 10)
+
+
+def test_malformed_shape_does_not_abort_scan(tmp_path):
+    """坏 shape 不能中断整库扫描，其它图的问题仍要报出来。"""
+    from pastelabel.engine.quality_lint import lint_dataset
+    bad = _write_image_and_json(tmp_path, "bad", [
+        {"label": "cat", "points": [[5]]},
+        {"label": "cat", "x": "abc", "y": 0, "width": 10, "height": 10},
+    ])
+    good = _write_image_and_json(tmp_path, "good", [
+        {"label": "cat", "x": -50, "y": 0, "width": 100, "height": 100},
+    ])
+
+    results = lint_dataset([bad, good])
+
+    assert results['summary']['out_of_bounds'] == 1
+    assert results['summary']['scanned_images'] == 2
+
+
+def test_read_json_shapes_tolerates_non_numeric_size(tmp_path):
+    from pastelabel.engine.quality_lint import _read_json_shapes
+    img = tmp_path / "weird.png"
+    img.write_bytes(b"x")
+    (tmp_path / "weird.json").write_text(json.dumps({
+        "shapes": [{"label": "cat", "x": -50, "y": 0, "width": 10, "height": 10}],
+        "imageWidth": "abc", "imageHeight": None,
+    }), encoding="utf-8")
+
+    info = _read_json_shapes(str(tmp_path / "weird.json"))
+
+    assert info is not None
+    assert info[1] == 0 and info[2] == 0
+    assert info[0][0]["label"] == "cat"
+
+
+def test_filtered_lint_result_preserves_error_flag():
+    """error 结果经忽略规则过滤后必须保留标记，UI 才能显示失败。"""
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+
+    editor = type("Editor", (QualityLintMixin,), {})()
+    filtered = editor._filtered_lint_result(
+        {"issues": [], "summary": {}, "error": True}, {})
+    assert filtered.get("error") is True
+
+
+def test_lint_dialog_shows_failure_not_clean_message():
+    """error 结果不能显示『未发现问题』。"""
+    import inspect
+    from pastelabel.ui.quality_lint_dialog import QualityLintDialog
+    src = inspect.getsource(QualityLintDialog.set_result)
+    assert "error" in src
+    assert "扫描失败" in src
+    from pastelabel.ui.i18n import _strings
+    assert "扫描失败" in _strings["zh"]
+    assert "扫描失败" in _strings["en"]
+
+
+def test_cleanup_lint_worker_waits_for_worker():
+    """关闭质检弹窗必须等待 worker 结束，不能只发中断就丢引用（回归）。"""
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+
+    class Worker:
+        def __init__(self):
+            self.interrupted = 0
+            self.waited = []
+
+        def isRunning(self):
+            return True
+
+        def requestInterruption(self):
+            self.interrupted += 1
+
+        def wait(self, timeout=0):
+            self.waited.append(timeout)
+            return True
+
+    editor = type("Editor", (QualityLintMixin,), {})()
+    worker = Worker()
+    editor._lint_worker = worker
+
+    editor._cleanup_lint_worker(worker)
+
+    assert worker.interrupted == 1
+    assert worker.waited and worker.waited[0] > 0
+    assert editor._lint_worker is None
+
+
+def test_cleanup_lint_worker_tolerates_missing_wait():
+    """假 worker（无 wait）不能抛异常。"""
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+
+    class Worker:
+        def isRunning(self):
+            return False
+
+        def requestInterruption(self):
+            raise AssertionError("未运行不应中断")
+
+    editor = type("Editor", (QualityLintMixin,), {})()
+    editor._lint_worker = Worker()
+
+    editor._cleanup_lint_worker()
+
+
+def test_lint_dataset_abandons_pending_reads_on_interrupt(tmp_path, monkeypatch):
+    """中断后不能等所有排队读盘 future 完成。"""
+    import time
+    from pastelabel.engine import quality_lint
+
+    def _slow_read(json_path):
+        time.sleep(0.5)
+        return [], 0, 0
+
+    monkeypatch.setattr(quality_lint, "_read_json_shapes", _slow_read)
+    paths = [str(tmp_path / f"p{i}.png") for i in range(40)]
+
+    t0 = time.perf_counter()
+    result = quality_lint.lint_dataset(paths, is_interrupted=lambda: True)
+    elapsed = time.perf_counter() - t0
+
+    assert result['summary']['scanned_images'] == 0
+    # 8 workers 跑完全部 40 个 0.5s 任务要 2.5s；中断后只等已在跑的 8 个
+    assert elapsed < 1.2, elapsed
+
+
+def test_sync_boxes_after_delete_clears_undo_history():
+    """跨类删除不可撤销：同步内存后必须清空撤销栈，否则 Ctrl+Z 会复活删掉的框。"""
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+
+    class Undo:
+        def __init__(self):
+            self.cleared = 0
+
+        def clear(self):
+            self.cleared += 1
+
+    editor = type("Editor", (QualityLintMixin,), {})()
+    editor.detection_boxes_dict = {0: [
+        {"label": "Truck", "x": 0, "y": 0, "width": 100, "height": 100},
+        {"label": "ZTruck", "x": 2, "y": 2, "width": 100, "height": 100},
+    ]}
+    editor.detection_boxes = list(editor.detection_boxes_dict[0])
+    editor.current_background_index = 0
+    editor.undo_manager = Undo()
+
+    editor._sync_boxes_after_delete({0: [
+        {"label": "Truck", "x": 0, "y": 0, "width": 100, "height": 100},
+    ]})
+
+    assert [b["label"] for b in editor.detection_boxes_dict[0]] == ["ZTruck"]
+    assert editor.undo_manager.cleared == 1
+
+
+def test_sync_boxes_after_delete_keeps_undo_when_nothing_removed():
+    """没有实际删除时不能清空撤销栈。"""
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+
+    class Undo:
+        def __init__(self):
+            self.cleared = 0
+
+        def clear(self):
+            self.cleared += 1
+
+    editor = type("Editor", (QualityLintMixin,), {})()
+    editor.detection_boxes_dict = {0: [
+        {"label": "ZTruck", "x": 2, "y": 2, "width": 100, "height": 100},
+    ]}
+    editor.detection_boxes = list(editor.detection_boxes_dict[0])
+    editor.current_background_index = 0
+    editor.undo_manager = Undo()
+
+    editor._sync_boxes_after_delete({0: [
+        {"label": "Truck", "x": 0, "y": 0, "width": 100, "height": 100},
+    ]})
+
+    assert editor.undo_manager.cleared == 0
+
+
+def test_sync_boxes_after_delete_tolerates_missing_undo_manager():
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+
+    editor = type("Editor", (QualityLintMixin,), {})()
+    editor.detection_boxes_dict = {0: [
+        {"label": "Truck", "x": 0, "y": 0, "width": 100, "height": 100},
+    ]}
+    editor.detection_boxes = list(editor.detection_boxes_dict[0])
+    editor.current_background_index = 0
+
+    editor._sync_boxes_after_delete({0: [
+        {"label": "Truck", "x": 0, "y": 0, "width": 100, "height": 100},
+    ]})
+
+    assert editor.detection_boxes_dict[0] == []
+
+
+def test_worker_reports_error_field_on_failure(monkeypatch):
+    """扫描异常必须带 error=True，UI 才能提示失败而不是『未发现问题』。"""
+    from pastelabel.engine import quality_lint
+
+    def _boom(*a, **kw):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(quality_lint, "lint_dataset", _boom)
+    worker = quality_lint.QualityLintWorker(("a.png",))
+    emitted = []
+    worker.lint_finished = type("S", (), {
+        "emit": staticmethod(lambda payload: emitted.append(payload))})()
+    worker.isInterruptionRequested = lambda: False
+
+    worker.run()
+
+    assert emitted and emitted[0].get('error') is True
+    assert emitted[0].get('issues') == []
+
+
 # --------------------------------------------------------------------------
 # Task 4: Worker
 # --------------------------------------------------------------------------

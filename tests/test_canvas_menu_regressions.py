@@ -487,3 +487,49 @@ def test_delete_current_label_file_removes_json_and_clears_boxes(tmp_path, monke
     assert canvas._editor.refreshed == [(0, str(img))]
     assert canvas.updated is True
     assert canvas._editor.jumped_to == [0]
+
+
+def test_remove_current_background_closes_lint_dialog(tmp_path):
+    """移除图片会重排索引，质检弹窗必须关闭（否则指向错图）。"""
+    img0 = tmp_path / "r0.png"
+    img1 = tmp_path / "r1.png"
+    img0.write_bytes(b"x")
+    img1.write_bytes(b"x")
+
+    class Editor:
+        _is_delete_view = False
+        current_background_index = 0
+        background_images = [str(img0), str(img1)]
+        detection_boxes = []
+        detection_boxes_dict = {0: [], 1: []}
+        canvas_items_dict = {0: [], 1: []}
+        canvas_items = []
+        current_background = None
+        closed = []
+
+        def _close_lint_dialog(self):
+            self.closed.append(True)
+
+        def update_file_count(self):
+            pass
+
+        def update_label_list(self):
+            pass
+
+        def _show_work_view(self):
+            pass
+
+    class Canvas(CanvasMenuMixin):
+        def __init__(self):
+            self._editor = Editor()
+
+        def update(self):
+            pass
+
+        def reset_view(self):
+            pass
+
+    canvas = Canvas()
+    canvas._remove_current_background()
+
+    assert canvas._editor.closed == [True]

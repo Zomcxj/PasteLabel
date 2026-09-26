@@ -419,6 +419,68 @@ def test_collect_shape_geometry_reads_output_dir_paste_sidecar(tmp_path):
     assert out["images_scanned"] == 1
 
 
+def test_close_health_worker_disconnects_signal_before_drop():
+    """超时未停的 worker 不能再往已销毁的弹窗发信号：丢引用前必须断开。"""
+    from pastelabel.ui.mixins.stats import StatsMixin
+
+    class Signal:
+        def __init__(self):
+            self.disconnected = 0
+
+        def disconnect(self):
+            self.disconnected += 1
+
+    class Worker:
+        def __init__(self):
+            self.health_ready = Signal()
+            self.interrupted = 0
+            self.waited = []
+
+        def isRunning(self):
+            return True
+
+        def requestInterruption(self):
+            self.interrupted += 1
+
+        def wait(self, timeout=0):
+            self.waited.append(timeout)
+            return False
+
+    editor = type("Editor", (StatsMixin,), {})()
+    worker = Worker()
+    editor._health_worker = worker
+
+    editor._close_health_worker()
+
+    assert worker.interrupted == 1
+    assert worker.waited and worker.waited[0] == 3000
+    assert worker.health_ready.disconnected == 1
+    assert editor._health_worker is None
+
+
+def test_collect_shape_geometry_abandons_pending_reads_on_interrupt(tmp_path, monkeypatch):
+    """健康扫描中断后不能等所有排队读盘 future 完成。"""
+    import time
+    from pastelabel.engine import dataset_health
+
+    def _slow_read(json_path):
+        time.sleep(0.5)
+        return []
+
+    monkeypatch.setattr(dataset_health, "_read_json_shapes", _slow_read)
+    monkeypatch.setattr(dataset_health, "_read_output_sidecar", lambda path: None)
+    paths = [str(tmp_path / f"h{i}.png") for i in range(40)]
+
+    t0 = time.perf_counter()
+    out = dataset_health.collect_shape_geometry(
+        paths, is_interrupted=lambda: True)
+    elapsed = time.perf_counter() - t0
+
+    assert out["boxes"] == []
+    # 8 workers 跑完 40 个 0.5s 任务要 2.5s；中断后只等已在跑的
+    assert elapsed < 1.2, elapsed
+
+
 def test_collect_shape_geometry_output_sidecar_only(tmp_path):
     """只有输出目录 sidecar（原图未标注）时，检测框与贴图都要采到。"""
     from pastelabel.engine.dataset_health import collect_shape_geometry
@@ -446,6 +508,40 @@ def test_collect_shape_geometry_dedupes_shapes_in_both_sidecars(tmp_path):
     out = collect_shape_geometry([img])
     assert [b["label"] for b in out["boxes"]] == ["cat"]
     assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
+
+
+def test_collect_shape_geometry_skips_malformed_shape(tmp_path):
+    """坏 shape（点数为 1 / 非数值坐标）不能中断整库扫描。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = _write(tmp_path, "malformed", [
+        {"label": "bad", "points": [[5]]},
+        {"label": "bad2", "points": [["x", "y"], ["z", "w"]]},
+        _box("ok", w=10, h=10),
+    ])
+    out = collect_shape_geometry([img])
+    assert [b["label"] for b in out["boxes"]] == ["ok"]
+    assert out["images_scanned"] == 1
+
+
+def test_collect_shape_geometry_survives_geometry_exception(tmp_path, monkeypatch):
+    """_geometry_of 抛异常时跳过该 shape，不能中断整库扫描。"""
+    from pastelabel.engine import dataset_health
+    img = _write(tmp_path, "geo_raise", [
+        _box("bad", w=10, h=10),
+        _box("ok", w=20, h=20),
+    ])
+    real_geometry = dataset_health._geometry_of
+    calls = {"n": 0}
+
+    def _flaky_geometry(label, rect):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ValueError("malformed")
+        return real_geometry(label, rect)
+
+    monkeypatch.setattr(dataset_health, "_geometry_of", _flaky_geometry)
+    out = dataset_health.collect_shape_geometry([img])
+    assert [b["label"] for b in out["boxes"]] == ["ok"]
 
 
 def test_merge_paste_geometry_prefers_memory_and_dedupes():

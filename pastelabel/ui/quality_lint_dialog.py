@@ -95,6 +95,15 @@ class QualityLintDialog(QDialog):
         self.status_label.setText(f"{tr('扫描中')} {done}/{total}")
 
     def set_result(self, result):
+        if result.get('error'):
+            self._all_issues = []
+            self._scanned_images = 0
+            self._rebuild_filter_combo()
+            self._apply_filter()
+            self.progress.setValue(self.progress.maximum())
+            self.status_label.setText(tr("扫描失败"))
+            self.summary_label.setText(tr("扫描失败"))
+            return
         summary = result.get('summary') or {}
         self._all_issues = list(result.get('issues') or [])
         self._scanned_images = int(summary.get('scanned_images') or 0)

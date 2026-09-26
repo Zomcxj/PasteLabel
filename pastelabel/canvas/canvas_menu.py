@@ -705,6 +705,10 @@ class CanvasMenuMixin:
         idx = self._editor.current_background_index
         if idx < 0 or idx >= len(self._editor.background_images):
             return
+        # 移除后索引重排，质检弹窗继续指向旧索引会跳错图
+        close_lint = getattr(self._editor, '_close_lint_dialog', None)
+        if callable(close_lint):
+            close_lint()
         file_path = self._editor.background_images[idx]
 
         delete_dir = os.path.join(os.path.dirname(file_path), '_delete_')

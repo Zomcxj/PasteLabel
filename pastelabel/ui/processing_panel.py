@@ -59,6 +59,7 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         self._crop_spec = None
         self._run_images = []
         self._run_boxes = {}
+        self._path_edit.textChanged.connect(self._on_path_changed)
         self._pipe_mode = False
         self._pipe_steps = []
         self._pipe_idx = 0
@@ -553,12 +554,16 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         return 0, 0
 
     def _default_crop_spec(self):
-        W, H = self._crop_ref_size()
-        if not W or not H:
-            W, H = 960, 540
-        ov = min(round(min(W, H) * 0.1), 639)
-        return {"w": 640, "h": 640, "overlap": max(0, ov),
+        size = 640
+        return {"w": size, "h": size, "overlap": 200,  # 默认重叠 200 像素
                 "min_visible": 0.3, "square": True}
+
+    def _on_path_changed(self, _text=""):
+        """切换数据集目录：清空本轮裁剪配置与缓存，摘要回到默认口径。"""
+        self._crop_spec = None
+        self._run_images = []
+        self._run_boxes = {}
+        self._update_crop_summary()
 
     def _get_crop_spec(self):
         if not self._crop_check.isChecked():
@@ -575,9 +580,11 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         rows = cols = "?"
         W, H = self._crop_ref_size()
         if W and H:
-            from ..engine.augmenter.crop import window_starts
-            cols = len(window_starts(W, spec["w"], spec["overlap"]))
-            rows = len(window_starts(H, spec["h"], spec["overlap"]))
+            from ..engine.augmenter.crop import normalized_window, window_starts
+            cw, ch, ov = normalized_window(W, H, spec)
+            cols = len(window_starts(W, cw, ov))
+            rows = len(window_starts(H, ch, ov))
+            spec = {**spec, "overlap": ov}
         self._crop_summary_lbl.setText(tr("crop_summary").format(
             w=spec["w"], h=spec["h"], ov=spec["overlap"], rows=rows, cols=cols))
 

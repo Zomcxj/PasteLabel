@@ -22,7 +22,15 @@ def size_for_count(length: int, count: int, overlap: int) -> int:
     if count <= 1:
         return length
     c = round((length + (count - 1) * overlap) / count)
-    return max(overlap + 1, min(c, length))
+    return min(max(overlap + 1, c), length)
+
+
+def normalized_window(iw: int, ih: int, spec: dict) -> tuple:
+    """把 spec 钳制到图像尺寸：返回 (cw, ch, ov)，面板/预览/引擎三处共用。"""
+    cw = min(int(spec["w"]), iw)
+    ch = min(int(spec["h"]), ih)
+    ov = max(0, min(int(spec["overlap"]), cw - 1, ch - 1))
+    return cw, ch, ov
 
 
 def crop_boxes(boxes: List[dict], x0: int, y0: int, cw: int, ch: int,
@@ -56,7 +64,9 @@ def crop_boxes(boxes: List[dict], x0: int, y0: int, cw: int, ch: int,
             continue
         ix1, iy1 = max(bx1, x0), max(by1, y0)
         ix2, iy2 = min(bx2, wx1), min(by2, wy1)
-        if max(0, ix2 - ix1) * max(0, iy2 - iy1) / (bw * bh) < min_visible:
+        if ix2 <= ix1 or iy2 <= iy1:  # 零交集无条件丢弃（min_visible=0 也不例外）
+            continue
+        if (ix2 - ix1) * (iy2 - iy1) / (bw * bh) < min_visible:
             continue
         if st == "rectangle" and not pts:
             nx1, ny1 = max(b["x"], x0), max(b["y"], y0)

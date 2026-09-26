@@ -1,5 +1,7 @@
 """滑窗裁剪测试：网格公式 + 标注过滤（纯逻辑，conftest mock 下可直接跑）。"""
-from pastelabel.engine.augmenter.crop import crop_boxes, size_for_count, window_starts
+from pastelabel.engine.augmenter.crop import (
+    crop_boxes, normalized_window, size_for_count, window_starts,
+)
 
 
 # ---------- 网格公式 ----------
@@ -36,6 +38,18 @@ def test_size_for_count_exact_fit():
 
 def test_size_for_count_clamps():
     assert size_for_count(50, 99, 10) == 11   # 10.4 → 钳到 ov+1
+
+
+def test_size_for_count_overlap_exceeds_length_returns_length():
+    # ov+1 > length 时钳到 length（不再返回 > length 的尺寸）
+    assert size_for_count(10, 5, 20) == 10
+
+
+def test_normalized_window_clamps_to_image():
+    assert normalized_window(10, 10, {"w": 4, "h": 4, "overlap": 10}) == (4, 4, 3)
+    assert normalized_window(100, 80, {"w": 640, "h": 640, "overlap": 54}) == (100, 80, 54)
+    assert normalized_window(20000, 20000, {"w": 640, "h": 640, "overlap": 320}) == (640, 640, 320)
+    assert normalized_window(640, 480, {"w": 640, "h": 640, "overlap": 0}) == (640, 480, 0)
 
 
 # ---------- 标注过滤 ----------
@@ -80,6 +94,17 @@ def test_crop_polygon_low_ratio_dropped():
             "points": [[0, 0], [30, 0], [30, 30], [0, 30]],
             "x": 0, "y": 0, "width": 30, "height": 30}
     assert crop_boxes([poly], 25, 25, 20, 20, 0.3) == []  # 25/900 < 0.3
+
+
+def test_crop_zero_intersection_dropped_even_with_zero_min_visible():
+    # min_visible=0 时零交集也必须丢弃，否则整框平移出窗、坐标越界污染导出
+    poly = {"label": "car", "shape_type": "polygon",
+            "points": [[200, 0], [230, 0], [230, 30], [200, 30]],
+            "x": 200, "y": 0, "width": 30, "height": 30}
+    rot = {"label": "car", "shape_type": "rotation",
+           "points": [[200, 200], [230, 200], [230, 230], [200, 230]],
+           "x": 200, "y": 200, "width": 30, "height": 30}
+    assert crop_boxes([poly, rot], 0, 0, 100, 100, 0.0) == []
 
 
 def test_crop_point_inside_kept_outside_dropped():
@@ -223,13 +248,13 @@ panel = ProcessingPanel(editor)
 # 回归：未加载数据集就点勾选（_run_images 未经过 _ensure_boxes_loaded）不得崩溃
 panel._crop_check.setChecked(True)
 spec = panel._get_crop_spec()
-assert spec == {{"w": 640, "h": 640, "overlap": 54, "min_visible": 0.3, "square": True}}, spec
+assert spec == {{"w": 640, "h": 640, "overlap": 200, "min_visible": 0.3, "square": True}}, spec
 
 panel._path_edit.setText(r"{tmp_path.as_posix()}")
 panel._ensure_boxes_loaded()
 panel._crop_spec = None  # 重新按首图派生
 spec = panel._get_crop_spec()
-assert spec == {{"w": 640, "h": 640, "overlap": 8, "min_visible": 0.3, "square": True}}, spec
+assert spec == {{"w": 640, "h": 640, "overlap": 200, "min_visible": 0.3, "square": True}}, spec
 assert "640×640" in panel._crop_summary_lbl.text()
 panel._crop_check.setChecked(False)
 assert panel._get_crop_spec() is None
@@ -272,6 +297,79 @@ assert s["min_visible"] == 0.3 and s["w"] == dlg._w.value() and s["square"] is T
 print("OK_DIALOG")
 '''
     assert "OK_DIALOG" in _run_real_qt(script)
+
+
+def test_panel_crop_clamp_summary_and_path_reset(tmp_path):
+    script = f'''
+import os
+from PyQt5.QtGui import QImage
+from PyQt5.QtWidgets import QApplication
+app = QApplication.instance() or QApplication([])
+from pastelabel.ui.processing_panel import ProcessingPanel
+from pastelabel.engine.augmenter.crop import window_starts
+
+d = r"{tmp_path.as_posix()}"
+d2 = os.path.join(d, "other")
+os.makedirs(d2, exist_ok=True)
+QImage(10, 10, QImage.Format_RGB888).save(os.path.join(d, "t.png"))
+editor = type("E", (), {{"background_images": []}})()
+panel = ProcessingPanel(editor)
+
+# 钳制后摘要口径与引擎一致（10×10 图、4×4 窗、ov=10 → 7×7）
+panel._path_edit.setText(d)
+panel._ensure_boxes_loaded()
+panel._crop_check.setChecked(True)
+panel._crop_spec = {{"w": 4, "h": 4, "overlap": 10, "min_visible": 0.0, "square": True}}
+panel._update_crop_summary()
+assert "7×7" in panel._crop_summary_lbl.text(), panel._crop_summary_lbl.text()
+
+# 切换数据集目录清空裁剪配置与缓存
+assert panel._crop_spec is not None
+panel._path_edit.setText(d2)
+assert panel._crop_spec is None
+assert panel._run_images == []
+
+# 超大图默认重叠 ≤ size//2，单轴窗口数不爆炸
+panel._crop_ref_size = lambda: (20000, 20000)
+spec = panel._default_crop_spec()
+assert spec["overlap"] <= 320, spec
+assert len(window_starts(20000, 640, spec["overlap"])) < 1000
+print("OK_PANEL2")
+'''
+    assert "OK_PANEL2" in _run_real_qt(script)
+
+
+def test_crop_dialog_ov_cap_and_count_roundtrip(tmp_path):
+    script = f'''
+import os
+from PyQt5.QtGui import QImage
+from PyQt5.QtWidgets import QApplication
+app = QApplication.instance() or QApplication([])
+from pastelabel.ui.crop_dialog import CropConfigDialog
+from pastelabel.engine.augmenter.crop import size_for_count, window_starts
+
+d = r"{tmp_path.as_posix()}"
+src = os.path.join(d, "big.png")
+QImage(1920, 1080, QImage.Format_RGB888).save(src)
+dlg = CropConfigDialog([src], {{0: []}},
+                       {{"w": 640, "h": 640, "overlap": 64, "min_visible": 0.3, "square": True}})
+
+# 重叠上限 = 半窗
+assert dlg._ov.maximum() == 320, dlg._ov.maximum()
+
+# 数量→尺寸闭环：设定列数后实际窗口数 == 显示列数
+for req in (2, 3, 5, 7):
+    dlg._cols.setValue(req)
+    assert dlg._cols.value() == req, (req, dlg._cols.value())
+    assert len(window_starts(1920, dlg._w.value(), dlg._ov.value())) == req, req
+    assert dlg._rows.value() == len(window_starts(1080, dlg._h.value(), dlg._ov.value()))
+
+# 不可达数量钳到最近（50 长、ov=49 → 只能 1 窗）
+size = dlg._exact_size(50, size_for_count(50, 3, 49), 3, 49)
+assert size == 50 and len(window_starts(50, size, 49)) == 1
+print("OK_DIALOG2")
+'''
+    assert "OK_DIALOG2" in _run_real_qt(script)
 
 
 def test_augmenter_crop_random_mode_deterministic_crop_path(tmp_path):

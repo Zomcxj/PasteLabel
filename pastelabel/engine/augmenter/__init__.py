@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Tuple, Type
 from PyQt5.QtGui import QImage
 
 from .base import BaseTransform, get_all_transforms, register_transform
-from .crop import crop_boxes, window_starts
+from .crop import crop_boxes, normalized_window, window_starts
 
 from . import flipt, color, noise, translate, rotate, scale
 
@@ -202,9 +202,7 @@ class Augmenter:
     def _apply_crop(self, original_image, boxes, crop_spec, base, ext, results):
         """滑窗裁剪 1→N：产出全部非空窗口（空窗无条件丢弃）。返回产出数。"""
         iw, ih = original_image.width(), original_image.height()
-        cw = min(int(crop_spec["w"]), iw)
-        ch = min(int(crop_spec["h"]), ih)
-        ov = max(0, min(int(crop_spec["overlap"]), cw - 1, ch - 1))
+        cw, ch, ov = normalized_window(iw, ih, crop_spec)
         min_vis = float(crop_spec.get("min_visible", 0.3))
         made = 0
         for r, y0 in enumerate(window_starts(ih, ch, ov)):

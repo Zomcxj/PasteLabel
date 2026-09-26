@@ -11,7 +11,9 @@ from PyQt5.QtWidgets import (
 from .dwm import set_titlebar_dark
 from .i18n import t as tr
 from .theme import ThemeManager
-from ..engine.augmenter.crop import crop_boxes, size_for_count, window_starts
+from ..engine.augmenter.crop import (
+    crop_boxes, normalized_window, size_for_count, window_starts,
+)
 
 
 class _CropPreview(QWidget):
@@ -113,6 +115,7 @@ class CropConfigDialog(QDialog):
         self._square.setChecked(bool(spec.get("square")))
         for p in self._images[:100]:
             self._img.addItem(os.path.basename(p))
+        self._clamp_ov_max()
         self._sync_counts()
 
         self._w.valueChanged.connect(self._on_size)
@@ -192,13 +195,39 @@ class CropConfigDialog(QDialog):
 
     # ---- 双向联动 ----
 
+    def _clamp_ov_max(self):
+        """重叠上限 = 半窗：保证步长 ≥ 半窗，窗口数不爆炸。"""
+        self._ov.setMaximum(max(0, min(self._w.value(), self._h.value()) // 2))
+
+    def _axis_count(self, length, size, ov):
+        return len(window_starts(length, size, max(0, min(ov, size - 1))))
+
+    def _exact_size(self, length, size0, req, ov):
+        """窗口数对尺寸单调非增：返回使窗口数最接近 req 的尺寸（可精确则精确）。"""
+        if self._axis_count(length, size0, ov) == req:
+            return size0
+        lo = max(1, min(ov, length - 1) + 1)
+        a, b = lo, length
+        while a < b:
+            mid = (a + b) // 2
+            if self._axis_count(length, mid, ov) <= req:
+                b = mid
+            else:
+                a = mid + 1
+        if self._axis_count(length, a, ov) == req:
+            return a
+        if a > lo and abs(self._axis_count(length, a - 1, ov) - req) < \
+                abs(self._axis_count(length, a, ov) - req):
+            return a - 1
+        return a
+
     def _sync_counts(self):
         rw, rh = self._ref_size()
         if not rw:
             return
-        ov = self._ov.value()
-        self._set(self._rows, len(window_starts(rh, self._h.value(), ov)))
-        self._set(self._cols, len(window_starts(rw, self._w.value(), ov)))
+        cw, ch, ov = normalized_window(rw, rh, self.spec())
+        self._set(self._rows, len(window_starts(rh, ch, ov)))
+        self._set(self._cols, len(window_starts(rw, cw, ov)))
 
     def _on_size(self):
         if self._linking:
@@ -208,6 +237,7 @@ class CropConfigDialog(QDialog):
             v = min(self._w.value(), self._h.value())
             self._set(self._w, v)
             self._set(self._h, v)
+        self._clamp_ov_max()
         self._sync_counts()
         self._linking = False
         self._debounce.start()
@@ -233,11 +263,13 @@ class CropConfigDialog(QDialog):
             return
         self._linking = True
         ov = self._ov.value()
-        w = size_for_count(rw, self._cols.value(), ov)
+        req = self._cols.value()
+        w = self._exact_size(rw, size_for_count(rw, req, ov), req, ov)
         self._set(self._w, w)
         if self._square.isChecked():
             self._set(self._h, w)
-            self._set(self._rows, len(window_starts(rh, w, ov)))
+        self._clamp_ov_max()
+        self._sync_counts()  # 写回实际数量（不可达时钳到最近）
         self._linking = False
         self._debounce.start()
 
@@ -249,11 +281,13 @@ class CropConfigDialog(QDialog):
             return
         self._linking = True
         ov = self._ov.value()
-        h = size_for_count(rh, self._rows.value(), ov)
+        req = self._rows.value()
+        h = self._exact_size(rh, size_for_count(rh, req, ov), req, ov)
         self._set(self._h, h)
         if self._square.isChecked():
             self._set(self._w, h)
-            self._set(self._cols, len(window_starts(rw, h, ov)))
+        self._clamp_ov_max()
+        self._sync_counts()
         self._linking = False
         self._debounce.start()
 
@@ -265,6 +299,7 @@ class CropConfigDialog(QDialog):
             v = min(self._w.value(), self._h.value())
             self._set(self._w, v)
             self._set(self._h, v)
+            self._clamp_ov_max()
             self._sync_counts()
         self._linking = False
         self._debounce.start()
@@ -283,9 +318,7 @@ class CropConfigDialog(QDialog):
         if img.isNull():
             return
         iw, ih = img.width(), img.height()
-        cw = min(self._w.value(), iw)
-        ch = min(self._h.value(), ih)
-        ov = max(0, min(self._ov.value(), cw - 1, ch - 1))
+        cw, ch, ov = normalized_window(iw, ih, self.spec())
         boxes = self._boxes.get(self._img.currentIndex(), [])
         min_vis = self._vis.value() / 100.0
         rects = []

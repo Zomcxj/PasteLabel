@@ -71,9 +71,17 @@ def test_documentation_covers_dataset_health():
 
 def test_documentation_covers_health_source_switch():
     guide = (ROOT / "docs" / "user_guide.md").read_text(encoding="utf-8")
-    assert "点击表格切换" in guide
+    assert "切换标签页" in guide
     assert "数据源" in guide
     assert "配方" not in guide
+
+
+def test_documentation_covers_stats_v2():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    guide = (ROOT / "docs" / "user_guide.md").read_text(encoding="utf-8")
+    for text in (readme, guide):
+        assert "拖" in text
+        assert "整个数据集" in text
 
 
 def test_readme_no_recipe_bullet():

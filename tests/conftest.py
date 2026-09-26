@@ -99,6 +99,7 @@ class _MockQMainWindow(_MockQWidget):
     def setWindowIcon(self, *a): pass
     def addDockWidget(self, *a): pass
     def splitDockWidget(self, *a): pass
+    def resizeDocks(self, *a): pass
     def centralWidget(self): return None
     def setDockNestingEnabled(self, *a): pass
 
@@ -351,6 +352,7 @@ qtcore.Qt = type('Qt', (), {
     'AlignTop': 0x0020,
     'AlignBottom': 0x0040,
     'AlignHCenter': 0x0004,
+    'ElideRight': 2,
     'DotLine': 1,
     'NoPen': 0,
     'SolidLine': 1,
@@ -429,6 +431,11 @@ qtgui.QPainter = type('QPainter', (), {
     'fillRect': lambda self, *a: None,
     'end': lambda self: None,
     'font': lambda self: type('F', (), {'pointSize': lambda: 12})(),
+    'fontMetrics': lambda self: type('FM', (), {
+        'width': lambda s, *a: 50,
+        'height': lambda s: 16,
+        'elidedText': lambda s, text, *a: text,
+    })(),
 })
 qtgui.QPen = type('QPen', (), {
     '__init__': lambda self, *a: None,

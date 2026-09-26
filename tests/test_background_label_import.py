@@ -280,6 +280,49 @@ def test_restored_memory_stats_survive_a_later_scan():
     assert host.update_calls == 1
 
 
+def test_restored_memory_stats_merge_scan_tasks():
+    """旧记录 tasks 为 None 时用扫描缓存的 tasks 补齐（框类型列不再为空）。"""
+    from pastelabel.ui.mixins.memory_record import MemoryRecordMixin
+
+    class Host(MemoryRecordMixin):
+        def __init__(self):
+            self._cached_bg_label_stats = [
+                {"label": "SCar", "count": 161, "color": "", "tasks": ["det"]},
+                {"label": "BCar", "count": 84, "color": "",
+                 "tasks": ["det", "seg", "pose", "obb"]},
+            ]
+
+    host = Host()
+    merged = host._merge_restored_stats_with_scan([
+        {"label": "SCar", "count": 161, "color": "", "tasks": None},
+        {"label": "BCar", "count": 84, "color": "", "tasks": []},
+        {"label": "Rider", "count": 43, "color": "", "tasks": None},
+    ])
+
+    by_label = {m["label"]: m for m in merged}
+    assert by_label["SCar"]["tasks"] == ["det"]
+    assert by_label["BCar"]["tasks"] == ["det", "obb", "pose", "seg"]
+    assert by_label["Rider"]["tasks"] == []
+    assert by_label["SCar"]["count"] == 161
+
+
+def test_restored_memory_stats_keep_recorded_tasks():
+    """记录里已有 tasks 时以记录为准，不被扫描缓存覆盖。"""
+    from pastelabel.ui.mixins.memory_record import MemoryRecordMixin
+
+    class Host(MemoryRecordMixin):
+        def __init__(self):
+            self._cached_bg_label_stats = [
+                {"label": "a", "count": 5, "color": "", "tasks": ["det"]},
+            ]
+
+    host = Host()
+    merged = host._merge_restored_stats_with_scan([
+        {"label": "a", "count": 5, "color": "", "tasks": ["obb"]},
+    ])
+    assert merged[0]["tasks"] == ["obb"]
+
+
 def test_main_window_initializes_the_two_new_label_sets():
     source = (ROOT / "pastelabel" / "ui" / "main_window.py").read_text(encoding="utf-8")
     assert "self._scanned_background_labels = set()" in source

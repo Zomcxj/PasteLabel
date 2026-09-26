@@ -9,9 +9,6 @@ _PALETTE = (
     '#2196F3', '#4CAF50', '#FF9800', '#F44336', '#9C27B0',
     '#00BCD4', '#795548', '#607D8B', '#E91E63', '#3F51B5',
 )
-_LEFT_LABEL_W = 70
-_AXIS_H = 18
-_TOP_PAD = 16
 
 
 def _bar_label(value, total):
@@ -31,6 +28,31 @@ def _fmt_num(v):
     if abs(v) >= 1e3:
         return f"{v / 1e3:.1f}k"
     return str(int(round(v)))
+
+
+def _hist_header(ylabel, counts):
+    """直方图左上角文字：轴名 + 总数。
+
+    必须显示总和而不是峰值柱高：三个直方图的柱高口径不同
+    （IoU 图统计的是同类框配对数），只显示峰值会让人误以为框数不一致。
+    """
+    return f"{ylabel}: {_fmt_num(sum(counts or []))}"
+
+
+def _fmt_tick_series(values):
+    """一组刻度用同一单位显示，避免 222 与 245.3k 混排看不懂。"""
+    try:
+        nums = [float(v) for v in values]
+    except (TypeError, ValueError):
+        return ['0'] * len(list(values))
+    peak = max((abs(v) for v in nums), default=0.0)
+    if peak >= 1e6:
+        return [f"{v / 1e6:.1f}M" for v in nums]
+    if peak >= 1e3:
+        return [f"{v / 1e3:.1f}k" for v in nums]
+    if peak >= 100:
+        return [f"{v:.0f}" for v in nums]
+    return [f"{v:.1f}".rstrip('0').rstrip('.') or '0' for v in nums]
 
 
 class HealthBarChart(QWidget):
@@ -96,8 +118,16 @@ class HealthBarChart(QWidget):
         border = QColor(t['border_color'])
         text_pen = QPen(QColor(t['text_primary']))
         if self._horizontal:
-            row_h = max(8, h // max(1, len(self._items)))
-            bar_area_w = max(10, w - _LEFT_LABEL_W - 90)
+            fm = painter.fontMetrics()
+            text_h = max(12, fm.height())
+            row_h = max(text_h, h // max(1, len(self._items)))
+            labels = [str(i.get('label', '')) for i in self._items]
+            value_labels = [_bar_label(v, total) for v in values]
+            left_w = min(max([fm.width(s) for s in labels] + [0]) + 8,
+                         max(20, w // 3))
+            right_w = min(max([fm.width(s) for s in value_labels] + [0]) + 8,
+                          max(20, w // 3))
+            bar_area_w = max(10, w - left_w - right_w)
             for idx, item in enumerate(self._items):
                 y = idx * row_h
                 value = float(item.get('value', 0) or 0)
@@ -110,15 +140,16 @@ class HealthBarChart(QWidget):
                 else:
                     painter.setPen(QPen(border))
                 painter.setBrush(color)
-                painter.drawRect(_LEFT_LABEL_W, y + 2, bar_w, row_h - 4)
+                painter.drawRect(left_w, y + 2, bar_w, row_h - 4)
                 painter.setPen(text_pen)
-                painter.drawText(0, y, _LEFT_LABEL_W - 4, row_h,
-                                 Qt.AlignVCenter | Qt.AlignRight,
-                                 str(item.get('label', '')))
-                painter.drawText(_LEFT_LABEL_W + bar_w + 4, y,
-                                 w - _LEFT_LABEL_W - bar_w - 4, row_h,
+                label = fm.elidedText(labels[idx], Qt.ElideRight,
+                                      max(0, left_w - 4))
+                painter.drawText(0, y, left_w - 4, row_h,
+                                 Qt.AlignVCenter | Qt.AlignRight, label)
+                painter.drawText(left_w + bar_w + 4, y,
+                                 max(0, w - left_w - bar_w - 4), row_h,
                                  Qt.AlignVCenter | Qt.AlignLeft,
-                                 _bar_label(value, total))
+                                 value_labels[idx])
         else:
             col_w = max(4, w // max(1, len(self._items)))
             for idx, item in enumerate(self._items):
@@ -137,34 +168,42 @@ class HealthBarChart(QWidget):
         accent = QColor(t['accent'])
         border = QColor(t['border_color'])
         text_pen = QPen(QColor(t['text_primary']))
-        plot_h = max(10, h - _AXIS_H - 12 - _TOP_PAD)
+        fm = painter.fontMetrics()
+        line_h = max(12, fm.height())
+        # 文字分带：ylabel 独占顶部一行，柱顶计数在其下；xlabel 独占底部一行
+        top_pad = line_h + (line_h if self._ylabel else 0)
+        bottom_pad = line_h + (line_h if self._xlabel else 0)
+        plot_top = top_pad
+        plot_bottom = max(plot_top + 10, h - bottom_pad)
+        plot_h = plot_bottom - plot_top
         n = len(self._counts)
         col_w = max(2, w // max(1, n))
         for idx, count in enumerate(self._counts):
             x = idx * col_w
-            bar_h = int((count / peak) * max(1, plot_h - _TOP_PAD))
-            top = plot_h - bar_h
+            bar_h = int((count / peak) * max(1, plot_h - line_h))
+            top = plot_bottom - bar_h
             color = accent.lighter(100 + (idx % 5) * 6)
             painter.setPen(QPen(border))
             painter.setBrush(color)
             painter.drawRect(x + 1, top, col_w - 2, bar_h)
             if count > 0:
                 painter.setPen(text_pen)
-                painter.drawText(x, top - 14, col_w, 12,
+                painter.drawText(x, top - line_h, col_w, line_h,
                                  Qt.AlignHCenter | Qt.AlignBottom,
                                  _fmt_num(count))
         edges = self._edges
         if edges:
             painter.setPen(text_pen)
             ticks = [0, len(edges) // 2, len(edges) - 1]
-            for i in ticks:
-                painter.drawText(i * col_w - 30, plot_h + 2, 60, _AXIS_H - 4,
-                                 Qt.AlignHCenter | Qt.AlignTop,
-                                 _fmt_num(edges[i]))
+            tick_labels = _fmt_tick_series([edges[i] for i in ticks])
+            for i, label in zip(ticks, tick_labels):
+                tx = min(max(0, i * col_w - 30), max(0, w - 60))
+                painter.drawText(tx, plot_bottom + 2, 60, line_h - 4,
+                                 Qt.AlignHCenter | Qt.AlignTop, label)
         painter.setPen(text_pen)
         if self._ylabel:
-            painter.drawText(0, 0, w, 12, Qt.AlignLeft | Qt.AlignTop,
-                             f"{self._ylabel}: {_fmt_num(peak)}")
+            painter.drawText(0, 0, w, line_h, Qt.AlignLeft | Qt.AlignTop,
+                             _hist_header(self._ylabel, self._counts))
         if self._xlabel:
-            painter.drawText(0, plot_h + 2, w, _AXIS_H - 4,
+            painter.drawText(0, plot_bottom + line_h, w, line_h,
                              Qt.AlignRight | Qt.AlignTop, self._xlabel)

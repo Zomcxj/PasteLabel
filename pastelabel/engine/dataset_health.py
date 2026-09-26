@@ -224,23 +224,6 @@ def _histogram(values, buckets):
     return {'edges': edges, 'counts': counts}
 
 
-def _quantiles(values):
-    if not values:
-        return [0.0, 0.0, 0.0, 0.0]
-    ordered = sorted(values)
-    n = len(ordered)
-
-    def _at(p):
-        pos = (n - 1) * p
-        lo = int(math.floor(pos))
-        hi = int(math.ceil(pos))
-        if lo == hi:
-            return float(ordered[lo])
-        return float(ordered[lo] + (ordered[hi] - ordered[lo]) * (pos - lo))
-
-    return [_at(0.0), _at(0.25), _at(0.5), _at(0.75)]
-
-
 def _iou_counts(boxes):
     max_pairwise = QUALITY_LINT_CONFIG['max_boxes_pairwise']
     per_image = {}
@@ -275,9 +258,8 @@ def _iou_counts(boxes):
     return {'edges': edges, 'counts': counts, 'skipped_images': skipped}
 
 
-def compute_health(boxes, paste_boxes=None):
+def compute_health(boxes):
     boxes = [b for b in (boxes or []) if isinstance(b, dict)]
-    paste_boxes = [b for b in (paste_boxes or []) if isinstance(b, dict)]
 
     counts = {}
     for b in boxes:
@@ -288,18 +270,12 @@ def compute_health(boxes, paste_boxes=None):
 
     areas = [float(b.get('area', 0) or 0) for b in boxes]
     aspects = [float(b.get('aspect', 0) or 0) for b in boxes]
-    paste_areas = [float(b.get('area', 0) or 0) for b in paste_boxes]
 
     return {
         'class_dist': class_dist,
         'size_hist': _histogram(areas, _bucket_count(len(areas))),
         'aspect_hist': _histogram(aspects, _bucket_count(len(aspects))),
         'iou_hist': _iou_counts(boxes),
-        'paste_vs_annot': {
-            'annot_quantiles': _quantiles(areas),
-            'paste_quantiles': _quantiles(paste_areas),
-            'has_paste': bool(paste_boxes),
-        },
         'summary': {
             'total_boxes': len(boxes),
             'class_count': len(class_dist),
@@ -368,7 +344,7 @@ class DatasetHealthWorker(QThread):
                 is_interrupted=self.isInterruptionRequested)
             memory_paste = collect_paste_geometry(self._canvas_items_dict)
             paste = merge_paste_geometry(geo['paste_boxes'], memory_paste)
-            annot_stats = compute_health(geo['boxes'], paste_boxes=paste)
+            annot_stats = compute_health(geo['boxes'])
             payload = {
                 'annot': {'stats': annot_stats,
                           'advice': health_advice(annot_stats)},

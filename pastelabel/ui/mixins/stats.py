@@ -107,6 +107,7 @@ class StatsMixin:
         from ..dialog_helpers import center_on_parent
         from ..theme import ThemeManager
         from .. import i18n
+        from PyQt5.QtCore import QTimer
         tr = i18n.t
 
         class _StatsDialog(QDialog):
@@ -117,8 +118,8 @@ class StatsMixin:
         t = ThemeManager.get_theme()
         dialog = _StatsDialog(self)
         dialog.setWindowTitle(tr("标签统计"))
-        dialog.setMinimumSize(810, 600)
-        from PyQt5.QtCore import QTimer
+        dialog.setMinimumSize(1200, 640)
+        dialog.resize(1360, 760)
         def _sync():
             hwnd = int(dialog.winId())
             from ..dwm import set_titlebar_dark
@@ -135,9 +136,51 @@ class StatsMixin:
                 border: 1px solid {t['border_color']}; padding: 4px; font-weight: bold; }}
             QTableWidget QTableCornerButton::section {{ background-color: {t['panel_bg']};
                 border: 1px solid {t['border_color']}; }}
+            QTabWidget::pane {{ background-color: {t['widget_bg']};
+                border: 1px solid {t['border_color']}; }}
+            QTabBar::tab {{ background-color: {t['panel_bg']}; color: {t['text_primary']};
+                border: 1px solid {t['border_color']}; padding: 6px 18px; }}
+            QTabBar::tab:selected {{ background-color: {t['accent_light']}; color: {t['accent']}; }}
+            QTabBar::tab:hover {{ background-color: {t['list_hover']}; }}
+            QDockWidget {{ background-color: {t['widget_bg']}; color: {t['text_primary']}; }}
+            QDockWidget::title {{ background-color: {t['panel_bg']}; color: {t['text_primary']};
+                border: 1px solid {t['border_color']}; padding: 4px 8px; font-weight: bold; }}
         """)
         layout = QVBoxLayout(dialog)
-        host = QMainWindow()
+        from PyQt5.QtWidgets import QMainWindow
+
+        class _DockHost(QMainWindow):
+            """dock 容器：尺寸稳定后重新应用左右比例。
+
+            resizeEvent 触发时 QMainWindow 的 dock 布局尚未完成，直接
+            resizeDocks 会被随后的布局覆盖；排到事件循环下一轮再应用。
+            """
+
+            def resizeEvent(self, event):
+                parent_resize = getattr(super(), 'resizeEvent', None)
+                if parent_resize is not None:
+                    try:
+                        parent_resize(event)
+                    except Exception:
+                        pass
+                apply_ratio = getattr(self, '_ratio_fn', None)
+                if apply_ratio is None or getattr(self, '_ratio_pending', False):
+                    return
+                self._ratio_pending = True
+
+                def _run():
+                    self._ratio_pending = False
+                    try:
+                        apply_ratio()
+                    except Exception:
+                        pass
+
+                try:
+                    QTimer.singleShot(0, _run)
+                except Exception:
+                    _run()
+
+        host = _DockHost()
         host.setDockNestingEnabled(True)
         dialog._dock_host = host
         central = QWidget()
@@ -324,21 +367,18 @@ class StatsMixin:
                 pass
 
     def _build_health_section(self, dialog, layout):
-        """构建「数据集健康」区：5 个可拖拽 dock 面板 + 建议，切换标签页切换数据源。"""
+        """构建「数据集健康」区：4 个可拖拽 dock 面板 + 建议，切换标签页切换数据源。"""
         from PyQt5.QtCore import Qt
         from PyQt5.QtWidgets import (
-            QPushButton, QLabel, QWidget, QVBoxLayout, QDockWidget)
+            QLabel, QWidget, QVBoxLayout, QDockWidget)
         from ..i18n import t as tr
+        from ..theme import ThemeManager
         from ..widgets.health_charts import HealthBarChart
 
-        header = QPushButton(f"▼  {tr('数据集健康')}")
-        header.setFlat(True)
-        header.setCursor(Qt.PointingHandCursor)
-        header.setStyleSheet(
-            "border: none; text-align: left; font-weight: bold; "
-            "font-size: 13px; padding: 2px 0;")
-        header.setFixedHeight(24)
-        layout.addWidget(header)
+        title_label = QLabel(tr('数据集健康'))
+        title_label.setStyleSheet(
+            "font-weight: bold; font-size: 13px; padding: 2px 0;")
+        layout.addWidget(title_label)
 
         source_label = QLabel(tr('数据源：背景图标签（切换标签页）'))
         source_label.setStyleSheet("color: gray; font-size: 11px;")
@@ -348,20 +388,57 @@ class StatsMixin:
         size_chart = HealthBarChart()
         aspect_chart = HealthBarChart()
         iou_chart = HealthBarChart()
-        paste_chart = HealthBarChart()
         charts = {
             'class': class_chart, 'size': size_chart, 'aspect': aspect_chart,
-            'iou': iou_chart, 'paste': paste_chart,
+            'iou': iou_chart,
         }
         panels = (
             ('class', tr('类别分布'), tr('各类别占比应接近均衡；长尾类别建议多合成')),
             ('size', tr('尺寸分布'), tr('框尺寸应覆盖多种尺度，避免集中于单一范围')),
             ('aspect', tr('长宽比分布'), tr('长宽比多样化更贴近真实场景')),
             ('iou', tr('IoU 重叠分布'), tr('高 IoU 区间框多说明重复标注偏多')),
-            ('paste', tr('贴图 vs 标注'), tr('贴图尺寸中位数与标注接近时合成更自然')),
         )
         host = getattr(dialog, '_dock_host', None) or dialog
         dialog._health_docks = {}
+        _last_norm = {}
+
+        def _normalize_dock_sizes():
+            """同一行的 dock 等宽（1:1）：拖动重排或窗口变化后恢复均衡。"""
+            docks = list(dialog._health_docks.values())
+            if len(docks) < 2:
+                return
+            try:
+                items = [(dock, dock.geometry()) for dock in docks]
+            except Exception:
+                return
+            rows = []
+            for dock, g in items:
+                placed = False
+                for row in rows:
+                    g0 = row[0][1]
+                    v_overlap = min(g0.bottom(), g.bottom()) - max(g0.top(), g.top())
+                    x_disjoint = g.right() < g0.left() or g0.right() < g.left()
+                    if x_disjoint and v_overlap > min(g0.height(), g.height()) * 0.5:
+                        row.append((dock, g))
+                        placed = True
+                        break
+                if not placed:
+                    rows.append([(dock, g)])
+            for row in rows:
+                if len(row) < 2:
+                    continue
+                row.sort(key=lambda t: t[1].x())
+                widths = [g.width() for _, g in row]
+                if max(widths) - min(widths) <= 1:
+                    continue
+                width = int(sum(widths) / len(widths))
+                key = tuple(id(dock) for dock, _ in row)
+                if width <= 0 or _last_norm.get(key) == width:
+                    continue
+                _last_norm[key] = width
+                host.resizeDocks([dock for dock, _ in row],
+                                 [width] * len(row), Qt.Horizontal)
+
         if hasattr(host, 'addDockWidget'):
             for key, title, desc in panels:
                 panel = QWidget()
@@ -371,39 +448,95 @@ class StatsMixin:
                 desc_label.setWordWrap(True)
                 desc_label.setStyleSheet("color: gray; font-size: 11px;")
                 pl.addWidget(desc_label)
-                pl.addWidget(charts[key])
+                pl.addWidget(charts[key], 1)
                 dock = QDockWidget(title, host)
                 dock.setObjectName(f"health_{key}")
                 dock.setWidget(panel)
                 dock.setFeatures(QDockWidget.DockWidgetMovable)
                 dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-                host.addDockWidget(Qt.LeftDockWidgetArea, dock)
+                host.addDockWidget(Qt.RightDockWidgetArea, dock)
                 dialog._health_docks[key] = dock
                 charts[key].set_placeholder(tr('正在分析'))
-            # 两列布局：左列 class/size/aspect，右列 iou/paste；拖动后自动让位
+            # 2×2 布局（右侧）：左列 class/size，右列 iou/aspect；拖动后自动让位
             d = dialog._health_docks
             host.splitDockWidget(d['class'], d['iou'], Qt.Horizontal)
-            host.splitDockWidget(d['iou'], d['paste'], Qt.Vertical)
-            host.splitDockWidget(d['size'], d['aspect'], Qt.Vertical)
+            host.splitDockWidget(d['iou'], d['aspect'], Qt.Vertical)
             host.splitDockWidget(d['class'], d['size'], Qt.Vertical)
+
+            def _apply_dock_ratio():
+                """右侧图表区占窗口 2/3，左侧表格区占 1/3。
+
+                不能在此同步调用 _normalize_dock_sizes：resizeDocks 的结果
+                要等下一轮布局才反映到 dock.width()，此时读到的是旧宽度，
+                归一化会用旧平均值再次 resizeDocks，把刚设好的比例覆盖掉。
+                行内等宽由 dockLocationChanged 触发的防抖归一化负责。
+                """
+                total = host.width()
+                if total <= 0 or not dialog._health_docks:
+                    return
+                docks_w = int(total * 2 / 3)
+                host.resizeDocks(
+                    [d['class'], d['iou']],
+                    [docks_w // 2, docks_w - docks_w // 2], Qt.Horizontal)
+
+            dialog._apply_dock_ratio = _apply_dock_ratio
+            host._ratio_fn = _apply_dock_ratio
+
+            # 拖动重排后恢复行内 1:1（去抖；mock 下 QTimer 不可用时直接跳过）
+            try:
+                from PyQt5.QtCore import QTimer
+                norm_timer = QTimer(host)
+                norm_timer.setSingleShot(True)
+                norm_timer.setInterval(120)
+                norm_timer.timeout.connect(_normalize_dock_sizes)
+            except Exception:
+                norm_timer = None
+            dialog._dock_norm_timer = norm_timer
+
+            def _schedule_normalize(*_a):
+                if norm_timer is not None:
+                    norm_timer.start()
+                else:
+                    _normalize_dock_sizes()
+
+            for dock in dialog._health_docks.values():
+                signal = getattr(dock, 'dockLocationChanged', None)
+                if signal is not None:
+                    signal.connect(_schedule_normalize)
+
+            # dock 浮动时是独立顶层窗口，原生标题栏不受弹窗 QSS 控制。
+            # 拖动中 Qt 会重建顶层窗口（WinIdChange 多次触发），而
+            # topLevelChanged 只在最初触发一次且此时 winId 还是旧句柄，
+            # 所以监听 WinIdChange/Show，每次都用当前 winId 重设深色。
+            try:
+                from PyQt5.QtCore import QObject, QEvent
+
+                class _DockTitlebarFilter(QObject):
+                    def eventFilter(self, obj, event):
+                        try:
+                            if event.type() in (QEvent.WinIdChange, QEvent.Show):
+                                if getattr(obj, 'isFloating', lambda: False)():
+                                    from ..dwm import set_titlebar_dark
+                                    set_titlebar_dark(
+                                        int(obj.winId()),
+                                        ThemeManager.get_mode().value == "dark",
+                                        force_refresh=True)
+                        except Exception:
+                            pass
+                        return False
+
+                titlebar_filter = _DockTitlebarFilter(host)
+                for dock in dialog._health_docks.values():
+                    dock.installEventFilter(titlebar_filter)
+                dialog._dock_titlebar_filter = titlebar_filter
+            except Exception:
+                dialog._dock_titlebar_filter = None
         else:
             for key in charts:
                 charts[key].set_placeholder(tr('正在分析'))
         advice_label = QLabel(f"{tr('建议')}: {tr('正在分析')}")
         advice_label.setWordWrap(True)
         layout.addWidget(advice_label)
-
-        expanded = True
-        def _toggle():
-            nonlocal expanded
-            expanded = not expanded
-            for dock in dialog._health_docks.values():
-                dock.setVisible(expanded)
-            source_label.setVisible(expanded)
-            advice_label.setVisible(expanded)
-            header.setText(
-                f"{'▼' if expanded else '▶'}  {tr('数据集健康')}")
-        header.clicked.connect(_toggle)
 
         dialog._health_charts = charts
         dialog._health_advice_label = advice_label
@@ -429,7 +562,6 @@ class StatsMixin:
             if source == 'paste' and not stats:
                 for key in ('class', 'size', 'aspect', 'iou'):
                     charts[key].set_placeholder(tr('暂无贴图数据'))
-                charts['paste'].set_placeholder(tr('暂无贴图数据'))
                 advice_label.setText("")
                 return
             class_dist = stats.get('class_dist') or []
@@ -443,25 +575,15 @@ class StatsMixin:
                 charts['class'].set_placeholder(tr('未发现明显失衡'))
             size = stats.get('size_hist') or {}
             charts['size'].set_histogram(size.get('edges'), size.get('counts'),
-                                         xlabel=tr('面积'), ylabel=tr('框数'))
+                                         xlabel=tr('面积 (px²)'),
+                                         ylabel=tr('框数'))
             aspect = stats.get('aspect_hist') or {}
             charts['aspect'].set_histogram(aspect.get('edges'),
                                            aspect.get('counts'),
                                            xlabel=tr('长宽比'), ylabel=tr('框数'))
             iou = stats.get('iou_hist') or {}
             charts['iou'].set_histogram(iou.get('edges'), iou.get('counts'),
-                                        xlabel=tr('IoU'), ylabel=tr('框数'))
-            pva = (payload.get('annot') or {}).get('stats', {}).get(
-                'paste_vs_annot') or {}
-            if pva.get('has_paste'):
-                annot_q = pva.get('annot_quantiles') or [0, 0, 0, 0]
-                paste_q = pva.get('paste_quantiles') or [0, 0, 0, 0]
-                charts['paste'].set_data([
-                    {'label': tr('标注'), 'value': annot_q[2]},
-                    {'label': tr('贴图'), 'value': paste_q[2]},
-                ], horizontal=True)
-            else:
-                charts['paste'].set_placeholder(tr('暂无贴图数据'))
+                                        xlabel=tr('IoU'), ylabel=tr('框对数'))
             advice = section.get('advice') or [tr('未发现明显失衡')]
             advice_label.setText(f"{tr('建议')}: " + "；".join(advice))
 

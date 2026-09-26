@@ -196,15 +196,6 @@ def test_compute_health_iou_hist_same_label_only():
     assert stats['iou_hist']['counts'][-1] == 1
 
 
-def test_compute_health_paste_vs_annot_quantiles():
-    from pastelabel.engine.dataset_health import compute_health
-    annot = [_geo("a", w, 10) for w in (10, 20, 30, 40)]
-    paste = [_geo("p", 100, 10)]
-    stats = compute_health(annot, paste_boxes=paste)
-    assert stats['paste_vs_annot']['has_paste'] is True
-    assert stats['paste_vs_annot']['paste_quantiles'][2] == 1000.0  # 面积中位数
-
-
 def test_health_advice_rare_class():
     from pastelabel.engine.dataset_health import health_advice
     stats = {
@@ -213,7 +204,6 @@ def test_health_advice_rare_class():
         'aspect_hist': {'edges': [0, 1, 2, 3], 'counts': [800, 600, 600]},
         'iou_hist': {'edges': [0.0, 0.5, 1.0], 'counts': [1800, 200],
                      'skipped_images': 0},
-        'paste_vs_annot': {'has_paste': False},
         'summary': {'total_boxes': 2000, 'class_count': 2, 'images_scanned': 1},
     }
     advice = health_advice(stats)
@@ -229,7 +219,6 @@ def test_health_advice_no_issue():
         'iou_hist': {'edges': [i / 10 for i in range(11)],
                      'counts': [90, 0, 0, 0, 0, 0, 0, 0, 0, 10],
                      'skipped_images': 0},
-        'paste_vs_annot': {'has_paste': False},
         'summary': {'total_boxes': 100, 'class_count': 2, 'images_scanned': 1},
     }
     assert health_advice(stats) == ["未发现明显失衡"]
@@ -264,7 +253,7 @@ def test_i18n_health_terms():
     from pastelabel.ui.i18n import _strings
     for key in ("数据集健康", "正在分析", "暂无贴图数据", "请先加载数据集",
                 "类别分布", "尺寸分布", "长宽比分布", "IoU 重叠分布",
-                "贴图 vs 标注", "建议", "未发现明显失衡"):
+                "建议", "未发现明显失衡"):
         assert key in _strings["zh"], key
         assert key in _strings["en"], key
 
@@ -280,6 +269,15 @@ def test_stats_mixin_exposes_health_section_source():
     assert "worker.finished.connect(worker.deleteLater)" in src
     assert "requestInterruption" in src
     assert "worker.wait(" in src
+
+
+def test_stats_dialog_themes_tabs_and_dock_titles():
+    import inspect
+    from pastelabel.ui.mixins.stats import StatsMixin
+    src = inspect.getsource(StatsMixin._show_label_stats)
+    assert "QTabBar::tab" in src
+    assert "QDockWidget::title" in src
+    assert "QTabWidget::pane" in src
 
 
 class _FakeSignal:
@@ -363,6 +361,14 @@ def test_chart_accepts_colors_and_axis_labels():
     chart.paintEvent(None)
 
 
+def test_hist_header_shows_total_not_peak():
+    """顶部标签显示柱高总和：IoU 图口径是配对数，显示峰值会误以为框数不一致。"""
+    from pastelabel.ui.widgets.health_charts import _hist_header
+    assert _hist_header('框数', [5, 20, 10, 2]) == '框数: 37'
+    assert _hist_header('框对数', [30, 8, 1]) == '框对数: 39'
+    assert _hist_header('框数', []) == '框数: 0'
+
+
 def test_chart_paint_offscreen_real_qt(tmp_path):
     import os
     import subprocess
@@ -402,7 +408,7 @@ c3.resize(200, 140)
 c3.set_histogram([0.0, 1.0], [5, 1])
 c3.render(img2)
 dark = any(img2.pixelColor(x, y).lightness() < 128
-           for x in range(0, 200, 4) for y in range(0, 16, 2))
+           for x in range(0, 200, 4) for y in range(0, 48, 2))
 assert dark, "peak bar count label missing in top band"
 
 img3 = QImage(200, 140, QImage.Format_ARGB32)
@@ -763,8 +769,6 @@ def test_worker_paste_section_computed_with_paste():
     assert paste_stats['class_dist'] == [{'label': 'a', 'count': 2}]
     assert paste_stats['summary']['total_boxes'] == 2
     assert isinstance(captured['paste']['advice'], list)
-    # annot 侧仍带对比数据
-    assert captured['annot']['stats']['paste_vs_annot']['has_paste'] is True
 
 
 def test_i18n_stats_redesign_terms():
@@ -775,8 +779,7 @@ def test_i18n_stats_redesign_terms():
                 "框尺寸应覆盖多种尺度，避免集中于单一范围",
                 "长宽比多样化更贴近真实场景",
                 "高 IoU 区间框多说明重复标注偏多",
-                "贴图尺寸中位数与标注接近时合成更自然",
-                "面积", "长宽比", "框数",
+                "面积", "长宽比", "框数", "面积 (px²)", "框对数",
                 "背景图标签", "贴图标签"):
         assert key in _strings["zh"], key
         assert key in _strings["en"], key
@@ -837,9 +840,6 @@ payload = {
             "size_hist": {"edges": [0, 1], "counts": [9]},
             "aspect_hist": {"edges": [0, 1], "counts": [9]},
             "iou_hist": {"edges": [0.0, 1.0], "counts": [9]},
-            "paste_vs_annot": {"has_paste": True,
-                               "annot_quantiles": [0, 0, 111, 0],
-                               "paste_quantiles": [0, 0, 222, 0]},
         },
         "advice": ["annot advice"],
     },
@@ -849,10 +849,6 @@ payload = {
             "size_hist": {"edges": [0, 1], "counts": [4]},
             "aspect_hist": {"edges": [0, 1], "counts": [4]},
             "iou_hist": {"edges": [0.0, 1.0], "counts": [4]},
-            # 面板 5 必须固定读 annot：此处放不同的值以捕获路由回退
-            "paste_vs_annot": {"has_paste": True,
-                               "annot_quantiles": [0, 0, 333, 0],
-                               "paste_quantiles": [0, 0, 444, 0]},
         },
         "advice": ["paste advice"],
     },
@@ -872,12 +868,8 @@ assert charts["class"]._items[0]["label"] == "paste_cls", charts["class"]._items
 assert charts["class"]._items[0]["color"] == "#123456"
 assert charts["size"]._counts == [4], charts["size"]._counts
 assert dialog._health_source == "paste"
-# 面板 5 固定 annot 对比：贴图模式仍显示 annot 的 111/222
-assert charts["paste"]._mode == "bars", charts["paste"]._mode
-assert charts["paste"]._items[0]["value"] == 111, charts["paste"]._items
-assert charts["paste"]._items[1]["value"] == 222, charts["paste"]._items
 
-# paste 空 → 1-4 显示占位符
+# paste 空 → 全部显示占位符
 empty = dict(payload)
 empty["paste"] = {"stats": {}, "advice": []}
 dialog._health_payload = empty
@@ -889,21 +881,21 @@ assert charts["class"]._placeholder == "暂无贴图数据", charts["class"]._pl
 dialog._health_payload = {"error": True}
 dialog._set_health_source("annot")
 assert charts["class"]._placeholder == "分析失败", charts["class"]._placeholder
-assert charts["paste"]._placeholder == "分析失败", charts["paste"]._placeholder
+assert charts["iou"]._placeholder == "分析失败", charts["iou"]._placeholder
 
-# 折叠健康区：数据源与建议标签也要跟着隐藏，不能留下孤儿文字
+# 健康区不折叠：标题为普通 QLabel，数据源与建议始终可见
 dialog.show()
 app.processEvents()
-from PyQt5.QtWidgets import QPushButton
-header = next(b for b in dialog.findChildren(QPushButton)
-              if "数据集健康" in b.text())
-assert not dialog._health_source_label.isHidden()
-header.click()
-assert dialog._health_source_label.isHidden()
-assert dialog._health_advice_label.isHidden()
-header.click()
+from PyQt5.QtWidgets import QPushButton, QLabel
+assert dialog._health_source_label.text() != ""
+assert dialog._health_advice_label.text() != ""
 assert not dialog._health_source_label.isHidden()
 assert not dialog._health_advice_label.isHidden()
+# 标题不再是可点击折叠按钮
+assert not any("数据集健康" in b.text()
+               for b in dialog.findChildren(QPushButton))
+assert any("数据集健康" in lbl.text()
+           for lbl in dialog.findChildren(QLabel))
 
 editor._close_health_worker()
 print("OK")
@@ -918,7 +910,7 @@ def test_stats_dialog_min_width_810():
     import inspect
     from pastelabel.ui.main_window import ImageEditor
     src = inspect.getsource(ImageEditor._show_label_stats)
-    assert "dialog.setMinimumSize(810, 600)" in src
+    assert "dialog.setMinimumSize(1200, 640)" in src
 
 
 def test_stats_dialog_table_wiring_and_worker_payload_real_qt(tmp_path):
@@ -1002,9 +994,6 @@ payload = {
             "size_hist": {"edges": [0, 1], "counts": [9]},
             "aspect_hist": {"edges": [0, 1], "counts": [9]},
             "iou_hist": {"edges": [0.0, 1.0], "counts": [9]},
-            "paste_vs_annot": {"has_paste": True,
-                               "annot_quantiles": [0, 0, 111, 0],
-                               "paste_quantiles": [0, 0, 222, 0]},
         },
         "advice": ["annot advice"],
     },
@@ -1330,13 +1319,63 @@ assert dialog._health_source == "paste", dialog._health_source
 tabs.setCurrentIndex(0)
 assert dialog._health_source == "annot", dialog._health_source
 
-# 5 个统计面板为可拖拽 dock
+# 4 个统计面板为可拖拽 dock
 docks = dialog._health_docks
-assert sorted(docks) == ["aspect", "class", "iou", "paste", "size"], sorted(docks)
+assert sorted(docks) == ["aspect", "class", "iou", "size"], sorted(docks)
 for dock in docks.values():
     assert isinstance(dock, QDockWidget)
     assert dock.features() & QDockWidget.DockWidgetMovable
     assert not (dock.features() & QDockWidget.DockWidgetFloatable)
+
+# 右侧图表区 : 左侧表格区 ≈ 2:1（showEvent 延时到 dock 布局完成后应用）
+dialog.show()
+from PyQt5.QtTest import QTest
+QTest.qWait(120)
+for _ in range(5):
+    app.processEvents()
+docks_w = docks["class"].width() + docks["iou"].width()
+table_w = dialog._dock_host.centralWidget().width()
+assert docks_w > 0 and table_w > 0, (docks_w, table_w)
+assert 1.6 <= docks_w / table_w <= 2.4, (docks_w, table_w)
+
+# 表格在左、图表在右（同一坐标系：host）
+host = dialog._dock_host
+table_x = dialog._tabs.mapTo(host, dialog._tabs.rect().topLeft()).x()
+assert table_x < docks["class"].x(), (table_x, docks["class"].x())
+
+# 同一行 dock 等宽 1:1
+top_row = sorted([d for d in docks.values() if d.y() == 0], key=lambda d: d.x())
+assert len(top_row) == 2, [d.objectName() for d in top_row]
+assert abs(top_row[0].width() - top_row[1].width()) <= 2, (
+    top_row[0].width(), top_row[1].width())
+
+# 浮动 dock 的独立顶层窗口：原生标题栏需随主题设深色
+from pastelabel.ui import dwm as _dwm
+_dwm_calls = []
+_orig_dwm = _dwm.set_titlebar_dark
+
+
+def _trace_dwm(hwnd, dark, force_refresh=False):
+    _dwm_calls.append((hwnd, dark))
+    return True
+
+
+_dwm.set_titlebar_dark = _trace_dwm
+try:
+    docks["class"].setFloating(True)
+    app.processEvents()
+    QTest.qWait(150)
+    assert _dwm_calls, "floating dock titlebar not synced"
+    assert _dwm_calls[-1][0] == int(docks["class"].winId()), (
+        _dwm_calls[-1][0], int(docks["class"].winId()))
+    from pastelabel.ui.theme import ThemeManager
+    expected_dark = ThemeManager.get_mode().value == "dark"
+    assert _dwm_calls[-1][1] is expected_dark, (
+        _dwm_calls[-1][1], expected_dark)
+finally:
+    _dwm.set_titlebar_dark = _orig_dwm
+    docks["class"].setFloating(False)
+    app.processEvents()
 
 # 整库贴图：payload 到达后贴图表重建（磁盘贴图统计进表）
 payload = {

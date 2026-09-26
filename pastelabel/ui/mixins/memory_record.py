@@ -150,12 +150,41 @@ class MemoryRecordMixin:
 
         stats = record.get('bg_label_stats') or []
         if isinstance(stats, list):
-            self._cached_bg_label_stats = list(stats)
-            self._cached_bg_label_stats_path = bg_path or ''
             self._restore_bg_label_stats(stats)
+            merged = self._merge_restored_stats_with_scan(stats)
+            self._cached_bg_label_stats = merged
+            self._cached_bg_label_stats_path = bg_path or ''
 
         if missing and hasattr(self, 'status_label'):
             self.status_label.setText(f"{tr('路径不存在')}: {missing[0]}")
+
+    def _merge_restored_stats_with_scan(self, restored_stats):
+        """合并记忆记录统计与扫描缓存：count 以记录为准，tasks 缺失时用扫描值。
+
+        旧版记录没有 tasks 字段（None），直接覆盖会让「框类型」列在切图前
+        一直为空；扫描缓存里同一类别的 tasks 更可信，用来补齐。
+        """
+        scanned = {}
+        for item in getattr(self, '_cached_bg_label_stats', None) or []:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get('label', '') or '').strip()
+            if label:
+                scanned[label] = item
+        merged = []
+        for item in restored_stats or []:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get('label', '') or '').strip()
+            if not label:
+                continue
+            entry = dict(item)
+            entry['label'] = label
+            if not entry.get('tasks'):
+                entry['tasks'] = sorted(
+                    (scanned.get(label) or {}).get('tasks') or [])
+            merged.append(entry)
+        return merged
 
     def _restore_bg_label_stats(self, stats):
         """把记忆记录里的类别恢复成可用的标签集合。"""

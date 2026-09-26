@@ -55,7 +55,7 @@ def test_label_stats_dialog_centers_after_show_event():
     assert 'class _StatsDialog(QDialog):' in stats_block
     assert 'def showEvent(self, event):' in stats_block
     assert 'center_on_parent(self, self.parent())' in stats_block
-    assert 'dialog.setMinimumSize(810, 600)' in stats_block
+    assert 'dialog.setMinimumSize(1200, 640)' in stats_block
 
 
 def test_label_stats_aggregates_in_memory_pastes_from_other_images():

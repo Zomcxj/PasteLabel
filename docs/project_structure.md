@@ -44,6 +44,7 @@ PasteLabel/
 │   │   ├── coco_exporter.py
 │   │   ├── dataset_classifier.py
 │   │   ├── dataset_converter.py # 数据集格式转换（LabelMe/YOLO/COCO/VOC + 任务类型）
+│   │   ├── dataset_health.py   # 数据集健康统计（分布数据与建议，纯逻辑）
 │   │   ├── event_handler.py
 │   │   ├── image_loader/
 │   │   │   ├── __init__.py
@@ -52,6 +53,7 @@ PasteLabel/
 │   │   │   └── status.py
 │   │   ├── label_manager.py
 │   │   ├── paste_engine.py
+│   │   ├── quality_lint.py     # 标注质检扫描（越界/超小/重复/重叠/近似名/分组，纯逻辑）
 │   │   ├── save_manager.py
 │   │   ├── shape_io.py         # 形状编解码与 YOLO 行生成（矩形/多边形/关键点/旋转框）
 │   │   ├── splitter.py
@@ -81,6 +83,7 @@ PasteLabel/
 │   │   ├── main_window.py     # ImageEditor 协调器
 │   │   ├── memory_dialog.py
 │   │   ├── processing_panel.py # ProcessingPanel 执行与日志逻辑
+│   │   ├── quality_lint_dialog.py # 标注质检结果窗口
 │   │   ├── segmented_control.py
 │   │   ├── settings_dialog.py
 │   │   ├── theme.py
@@ -89,12 +92,14 @@ PasteLabel/
 │   │       ├── background_list.py
 │   │       ├── cache_menu.py
 │   │       ├── dataset_classifier.py
+│   │       ├── dataset_tools.py
 │   │       ├── label_cache_slot.py
 │   │       ├── lists.py
 │   │       ├── memory_record.py
 │   │       ├── options_popup.py
 │   │       ├── panels.py
 │   │       ├── processing_panel_builder.py
+│   │       ├── quality_lint.py
 │   │       ├── stats.py
 │   │       ├── theme.py
 │   │       ├── toolbar.py
@@ -105,7 +110,8 @@ PasteLabel/
 │       ├── hover_menu.py
 │       ├── hover_popup.py
 │       ├── processing.py      # 扫描提示、Worker 与折叠区控件
-│       └── spinner.py
+│       ├── spinner.py
+│       └── task_badge.py      # 标签行任务徽标（det / seg / pose / obb）
 ├── tests/                     # pytest 回归测试
 │   ├── __init__.py
 │   ├── conftest.py
@@ -129,6 +135,9 @@ PasteLabel/
 │   ├── test_exporters.py             # YOLO/VOC/COCO 导出
 │   ├── test_augmenter.py             # 数据增强（含形状保真）
 │   ├── test_augmenter_crop.py        # 滑窗裁剪（网格公式/标注过滤/面板与小窗联动）
+│   ├── test_dataset_health.py        # 数据集健康统计
+│   ├── test_quality_lint.py          # 标注质检扫描与结果窗口
+│   ├── test_label_manager_rename.py  # 标签改名级联（含子串误匹配回归）
 │   ├── test_theme_style_consolidation.py
 │   ├── test_silent_interaction_theme.py
 │   ├── test_ui_layout_regressions.py

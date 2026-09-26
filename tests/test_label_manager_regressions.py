@@ -996,6 +996,41 @@ def test_rename_paste_label_rewrite_disk_updates_output_sidecar(tmp_path):
     assert shapes[1]["label"] == "cat"
 
 
+def test_rename_paste_label_rewrite_disk_updates_prefixed_output_sidecar(tmp_path):
+    """默认前缀开启时贴图落在 paste_{stem}.json，改名必须覆盖该文件。"""
+    import json
+    import os
+    from pastelabel.core.utils import PathUtils
+    img = tmp_path / "r.png"
+    img.write_bytes(b"x")
+    out_dir = PathUtils.get_output_dir(str(img))
+    os.makedirs(out_dir, exist_ok=True)
+    out_sidecar = os.path.join(out_dir, "paste_r.json")
+    with open(out_sidecar, "w", encoding="utf-8") as f:
+        json.dump({"shapes": [
+            {"label": "logo", "points": [[0, 0], [1, 0], [1, 1], [0, 1]],
+             "shape_type": "rectangle", "flags": {"paste": True}},
+        ]}, f)
+
+    class PasteList:
+        def count(self): return 0
+        def item(self, i): return None
+
+    editor = FakeEditor()
+    editor.background_images = [str(img)]
+    editor.paste_label_list = PasteList()
+    editor.canvas_items = []
+    editor.canvas_items_dict = {}
+    editor.label_color_map = {}
+    manager = LabelManager(editor)
+    manager.data_changed = FakeSignal()
+
+    assert manager.rename_paste_label("logo", "badge", rewrite_disk=True) is True
+    with open(out_sidecar, encoding="utf-8") as f:
+        shapes = json.load(f)["shapes"]
+    assert shapes[0]["label"] == "badge"
+
+
 def test_modify_paste_label_rewrites_disk(tmp_path, monkeypatch):
     """列表右键改名（modify_paste_label）也要落盘，否则重启后统计回到旧名。"""
     import json

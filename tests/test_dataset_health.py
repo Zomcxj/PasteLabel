@@ -30,6 +30,65 @@ def _box(label="cat", x=0, y=0, w=100, h=50, shape_type=None):
     return b
 
 
+class _SaveRect:
+    def __init__(self, x, y, w, h):
+        self._x, self._y, self._w, self._h = x, y, w, h
+
+    def x(self): return self._x
+    def y(self): return self._y
+    def width(self): return self._w
+    def height(self): return self._h
+
+
+class _Toggle:
+    def __init__(self, checked):
+        self._checked = checked
+
+    def isChecked(self):
+        return self._checked
+
+
+class _TextInput:
+    def __init__(self, text):
+        self._text = text
+
+    def text(self):
+        return self._text
+
+
+def _real_save(img_path, prefix_checked=True, prefix="paste"):
+    """走真实 SaveManager：默认前缀 paste 落盘 {prefix}_{stem}.json。"""
+    from pastelabel.engine.save_manager import SaveManager
+
+    class _Bg:
+        def width(self): return 100
+        def height(self): return 80
+
+    class Editor:
+        _is_delete_view = False
+        edit_mode = "paste"
+        current_background = _Bg()
+        current_background_index = 0
+        background_images = [img_path]
+        canvas_items = [(None, _SaveRect(5, 5, 10, 10), "logo")]
+        detection_boxes_dict = {0: []}
+        detection_boxes = []
+        prefix_checkbox = _Toggle(prefix_checked)
+        prefix_input = _TextInput(prefix)
+        _dataset_stats_dirty = False
+
+    mgr = SaveManager(Editor())
+    mgr.save_json(*mgr.get_save_info())
+
+
+def _image_in_subdir(tmp_path, name="cat.png"):
+    img_dir = tmp_path / "images"
+    img_dir.mkdir(exist_ok=True)
+    img = img_dir / name
+    img.write_bytes(b"x")
+    return str(img)
+
+
 def test_collect_shape_geometry_basic(tmp_path):
     from pastelabel.engine.dataset_health import collect_shape_geometry
     img = _write(tmp_path, "a", [
@@ -406,7 +465,10 @@ def test_collect_shape_geometry_memory_paste_boxes_routed(tmp_path):
 
 
 def test_collect_shape_geometry_reads_output_dir_paste_sidecar(tmp_path):
-    """贴图只写在输出目录 sidecar：原始 sidecar 无贴图也必须采到。"""
+    """贴图只写在输出目录 sidecar：原始 sidecar 无贴图也必须采到。
+
+    输出 sidecar 的非贴图框是保存时的副本，不能作为来源（见 FIX B）。
+    """
     from pastelabel.engine.dataset_health import collect_shape_geometry
     img = _write(tmp_path, "out_paste", [_box("cat", w=100, h=50)])
     _write_output_sidecar(tmp_path, img, [
@@ -414,9 +476,116 @@ def test_collect_shape_geometry_reads_output_dir_paste_sidecar(tmp_path):
         _box("cat2", x=200, y=200, w=20, h=20),
     ])
     out = collect_shape_geometry([img])
-    assert sorted(b["label"] for b in out["boxes"]) == ["cat", "cat2"]
+    assert sorted(b["label"] for b in out["boxes"]) == ["cat"]
     assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
     assert out["images_scanned"] == 1
+
+
+def test_collect_shape_geometry_reads_prefixed_output_sidecar_from_real_save(tmp_path):
+    """默认前缀开启时真实保存为 paste_cat.json，统计必须看到贴图。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    from pastelabel.core.utils import PathUtils
+    img = _image_in_subdir(tmp_path)
+    _real_save(img)
+
+    sidecar = os.path.join(PathUtils.get_output_dir(img), "paste_cat.json")
+    assert os.path.isfile(sidecar), "真实保存路径变了，测试前提失效"
+
+    out = collect_shape_geometry([img])
+    assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
+    assert out["paste_boxes"][0]["image_index"] == 0
+    assert out["boxes"] == []
+    assert out["images_scanned"] == 1
+
+
+def test_collect_shape_geometry_reads_custom_prefix_output_sidecar(tmp_path):
+    """前缀是用户自由输入的，不能硬编码 paste_。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = _image_in_subdir(tmp_path)
+    _real_save(img, prefix="sess2")
+
+    out = collect_shape_geometry([img])
+    assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
+
+
+def test_collect_shape_geometry_reads_output_sidecar_without_prefix(tmp_path):
+    """关闭前缀时保存为 cat.json，同样要能采到。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = _image_in_subdir(tmp_path)
+    _real_save(img, prefix_checked=False)
+
+    out = collect_shape_geometry([img])
+    assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
+
+
+def test_collect_shape_geometry_scans_image_with_only_prefixed_output_sidecar(tmp_path):
+    """原图未标注、只有带前缀的输出 sidecar 时也要计入扫描数。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    from pastelabel.core.utils import PathUtils
+    img = _image_in_subdir(tmp_path)
+    _real_save(img)
+    assert not os.path.exists(os.path.splitext(img)[0] + ".json")
+    assert os.path.isdir(PathUtils.get_output_dir(img))
+
+    out = collect_shape_geometry([img])
+    assert out["images_scanned"] == 1
+
+
+def test_collect_shape_geometry_does_not_resurrect_deleted_output_boxes(tmp_path):
+    """已加载图以内存为准：输出 sidecar 的非贴图框不能复活。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = _write(tmp_path, "resurrect", [])
+    _write_output_sidecar(tmp_path, img, [
+        _box("cat", w=100, h=50),
+        dict(_box("logo", w=10, h=10), flags={"paste": True}),
+    ])
+    out = collect_shape_geometry([img], memory_boxes={0: []})
+    assert out["boxes"] == []
+    assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
+    assert out["images_scanned"] == 1
+
+
+def test_collect_shape_geometry_output_non_paste_not_counted_when_original_missing(tmp_path):
+    """原目录无 sidecar 时，输出 sidecar 的非贴图框也不能单独算数。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = tmp_path / "only_out2.png"
+    img.write_bytes(b"x")
+    _write_output_sidecar(tmp_path, str(img), [
+        _box("cat2", x=200, y=200, w=20, h=20),
+    ])
+    out = collect_shape_geometry([str(img)])
+    assert out["boxes"] == []
+    assert out["images_scanned"] == 1
+
+
+def test_collect_shape_geometry_counts_memory_box_and_output_paste_once(tmp_path):
+    """内存检测框与输出 sidecar 的同几何副本只计一次，贴图另计。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = _write(tmp_path, "move_case", [])
+    shape = _box("cat", w=100, h=50)
+    _write_output_sidecar(tmp_path, img, [
+        shape,
+        dict(_box("logo", w=10, h=10), flags={"paste": True}),
+    ])
+    memory = {0: [dict(shape)]}
+    out = collect_shape_geometry([img], memory_boxes=memory)
+    assert [b["label"] for b in out["boxes"]] == ["cat"]
+    assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
+
+
+def test_collect_shape_geometry_dedupes_paste_across_memory_and_output(tmp_path):
+    """内存贴图（is_paste）与磁盘贴图（flags.paste）同几何只能计一次。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = _write(tmp_path, "paste_dup", [])
+    _write_output_sidecar(tmp_path, img, [
+        {"label": "logo", "points": [[5, 5], [15, 5], [15, 15], [5, 15]],
+         "shape_type": "rectangle", "flags": {"paste": True}},
+    ])
+    memory = {0: [{"label": "logo", "x": 5, "y": 5, "width": 10, "height": 10,
+                   "is_paste": True}]}
+    out = collect_shape_geometry([img], memory_boxes=memory)
+    assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
+    assert out["boxes"] == []
 
 
 def test_close_health_worker_disconnects_signal_before_drop():
@@ -482,7 +651,7 @@ def test_collect_shape_geometry_abandons_pending_reads_on_interrupt(tmp_path, mo
 
 
 def test_collect_shape_geometry_output_sidecar_only(tmp_path):
-    """只有输出目录 sidecar（原图未标注）时，检测框与贴图都要采到。"""
+    """只有输出目录 sidecar（原图未标注）时，贴图要采到，非贴图不算。"""
     from pastelabel.engine.dataset_health import collect_shape_geometry
     img = tmp_path / "only_out.png"
     img.write_bytes(b"x")
@@ -491,7 +660,7 @@ def test_collect_shape_geometry_output_sidecar_only(tmp_path):
         _box("cat2", x=200, y=200, w=20, h=20),
     ])
     out = collect_shape_geometry([str(img)])
-    assert sorted(b["label"] for b in out["boxes"]) == ["cat2"]
+    assert out["boxes"] == []
     assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
     assert out["images_scanned"] == 1
 

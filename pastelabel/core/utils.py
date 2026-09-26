@@ -127,6 +127,28 @@ class PathUtils:
         return (file_path, base_name, prefix)
 
 
+def output_sidecar_paths(image_path, output_dir):
+    """输出目录中属于该图片的 sidecar 路径（前缀可变，按文件名 stem 匹配）。
+
+    保存名是 `{prefix}_{stem}.json`（前缀由用户自由输入，可为空），不能
+    硬编码 `{stem}.json`；按 stem 完全相等或以 `_{stem}` 结尾匹配。
+    每图一次 listdir：超大输出目录可改为按 output_dir 缓存目录清单。
+    """
+    stem = os.path.splitext(os.path.basename(image_path))[0]
+    found = []
+    try:
+        names = os.listdir(output_dir)
+    except OSError:
+        return found
+    for name in names:
+        if not name.lower().endswith('.json'):
+            continue
+        base = name[:-5]
+        if base == stem or base.endswith(f"_{stem}"):
+            found.append(os.path.join(output_dir, name))
+    return found
+
+
 def natural_sort_key(s):
     """
     自然排序键函数，用于正确处理数字和字母的混合排序

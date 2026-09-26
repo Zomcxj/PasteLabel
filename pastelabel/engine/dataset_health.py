@@ -9,7 +9,7 @@ import os
 import concurrent.futures
 
 from .quality_lint import _bbox
-from ..core.utils import calculate_iou, PathUtils
+from ..core.utils import calculate_iou, output_sidecar_paths, PathUtils
 from ..core.config import QUALITY_LINT_CONFIG
 
 
@@ -50,7 +50,8 @@ def _shape_dedupe_key(shape):
     """跨两份 sidecar 的去重键：类别 + 几何 + paste 标志。
 
     save_json 会把当前图的检测框同时写进原目录与输出目录 sidecar，
-    不按内容去重会把同一个框计两次。
+    不按内容去重会把同一个框计两次。内存框用 is_paste、磁盘 shape 用
+    flags.paste，两者必须视为同一标志，否则同几何贴图会计两次。
     """
     try:
         rect = _bbox(shape)
@@ -62,14 +63,27 @@ def _shape_dedupe_key(shape):
         geom = tuple(round(float(v), 3) for v in rect)
     except (TypeError, ValueError):
         return None
-    return (str(shape.get('label', '') or ''), geom, _shape_is_paste(shape))
+    is_paste = _shape_is_paste(shape) or bool(shape.get('is_paste'))
+    return (str(shape.get('label', '') or ''), geom, is_paste)
 
 
 def _read_output_sidecar(path):
-    """输出目录 sidecar（贴图实际落盘处）：{background_dir}_paste_output/{stem}.json。"""
+    """输出目录 sidecar（贴图实际落盘处）里的贴图 shapes。
+
+    保存名是 `{prefix}_{stem}.json`（前缀用户可自由输入），按文件名匹配；
+    非贴图框是保存时的副本，不作为来源，避免复活已删除/移动的框。
+    无匹配文件或全部损坏时返回 None（未加载分支据此判定图片未被标注）。
+    """
     output_dir = PathUtils.get_output_dir(path)
-    stem = os.path.splitext(os.path.basename(path))[0]
-    return _read_json_shapes(os.path.join(output_dir, stem + ".json"))
+    found = None
+    for sidecar in output_sidecar_paths(path, output_dir):
+        loaded = _read_json_shapes(sidecar)
+        if loaded is None:
+            continue
+        if found is None:
+            found = []
+        found.extend(s for s in loaded if isinstance(s, dict) and _shape_is_paste(s))
+    return found
 
 
 def _merge_shapes(primary, secondary):

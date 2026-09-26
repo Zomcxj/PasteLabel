@@ -944,19 +944,17 @@ class LabelManager(QObject):
     def _rewrite_paste_label_on_disk(self, old_label, new_label):
         """把所有 sidecar JSON 里 flags.paste 的 shape 改名（不动检测框）。
 
-        贴图实际保存在输出目录 `{background_dir}_paste_output/`，原目录
-        sidecar 也要覆盖（annotate 模式检测框写原目录，save_json 两份都写）。
+        贴图实际保存在输出目录 `{background_dir}_paste_output/`，保存名是
+        `{prefix}_{stem}.json`（前缀用户可自由输入），按文件名匹配全部候选；
+        原目录 sidecar 也要覆盖（annotate 模式检测框写原目录，save_json 两份都写）。
         """
-        import json
         import os
-        from ..core.utils import PathUtils
+        from ..core.utils import PathUtils, output_sidecar_paths
         seen_paths = set()
         for image_path in list(getattr(self.editor, 'background_images', []) or []):
-            stem = os.path.splitext(os.path.basename(image_path))[0]
-            json_paths = [
-                f"{os.path.splitext(image_path)[0]}.json",
-                os.path.join(PathUtils.get_output_dir(image_path), stem + ".json"),
-            ]
+            json_paths = [f"{os.path.splitext(image_path)[0]}.json"]
+            json_paths.extend(output_sidecar_paths(
+                image_path, PathUtils.get_output_dir(image_path)))
             for json_path in json_paths:
                 if json_path in seen_paths or not os.path.isfile(json_path):
                     continue

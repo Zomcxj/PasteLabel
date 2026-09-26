@@ -62,6 +62,7 @@ PasteLabel/
 │   │       ├── __init__.py
 │   │       ├── base.py
 │   │       ├── color.py
+│   │       ├── crop.py         # 滑窗裁剪纯函数（窗口起点/数量反推/跨窗标注过滤）
 │   │       ├── flipt.py
 │   │       ├── noise.py
 │   │       ├── rotate.py
@@ -71,6 +72,7 @@ PasteLabel/
 │   │   ├── __init__.py
 │   │   ├── dataset_classifier_dialog.py # KMeans 数据集分类窗口
 │   │   ├── dataset_tools_dialog.py      # 数据集格式转换窗口
+│   │   ├── crop_dialog.py     # 滑窗裁剪参数配置窗口（尺寸/重叠/预览）
 │   │   ├── dialog_helpers.py
 │   │   ├── dialogs.py
 │   │   ├── dwm.py
@@ -126,6 +128,7 @@ PasteLabel/
 │   ├── test_annotation_shortcuts.py  # 标注快捷键与分组对话框
 │   ├── test_exporters.py             # YOLO/VOC/COCO 导出
 │   ├── test_augmenter.py             # 数据增强（含形状保真）
+│   ├── test_augmenter_crop.py        # 滑窗裁剪（网格公式/标注过滤/面板与小窗联动）
 │   ├── test_theme_style_consolidation.py
 │   ├── test_silent_interaction_theme.py
 │   ├── test_ui_layout_regressions.py

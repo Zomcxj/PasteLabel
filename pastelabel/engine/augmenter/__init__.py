@@ -7,6 +7,7 @@ from typing import Callable, Dict, List, Tuple, Type
 from PyQt5.QtGui import QImage
 
 from .base import BaseTransform, get_all_transforms, register_transform
+from .crop import crop_boxes, window_starts
 
 from . import flipt, color, noise, translate, rotate, scale
 
@@ -32,6 +33,7 @@ class Augmenter:
         mode: str = "all",
         include_original: bool = False,
         skip_empty: bool = True,
+        crop_spec: dict = None,
     ) -> List[dict]:
         os.makedirs(self.output_dir, exist_ok=True)
         total = len(background_images)
@@ -51,14 +53,17 @@ class Augmenter:
 
         if mode == "random":
             results = self._run_random(background_images, detection_boxes_dict,
-                                       transform_specs, image_ratio, total, results, skip_empty)
+                                       transform_specs, image_ratio, total, results, skip_empty,
+                                       crop_spec)
         else:
             results = self._run_all(background_images, detection_boxes_dict,
-                                    transform_specs, image_ratio, total, results, skip_empty)
+                                    transform_specs, image_ratio, total, results, skip_empty,
+                                    crop_spec)
         return results
 
     def _run_all(self, background_images, detection_boxes_dict,
-                 transform_specs, image_ratio, total, results=None, skip_empty=True):
+                 transform_specs, image_ratio, total, results=None, skip_empty=True,
+                 crop_spec=None):
         if results is None:
             results = []
         for cls, ranges in transform_specs:
@@ -106,10 +111,36 @@ class Augmenter:
                 })
                 if self.on_transform_progress:
                     self.on_transform_progress(t_name, idx + 1, total)
+        if crop_spec:
+            t_name = "crop"
+            if self.on_transform_progress:
+                self.on_transform_progress(t_name, 0, total)
+            for idx in range(total):
+                if self.is_interrupted():
+                    break
+                img_path = background_images[idx]
+                base = os.path.splitext(os.path.basename(img_path))[0]
+                ext = os.path.splitext(img_path)[1].lower()
+                if ext not in ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'):
+                    ext = '.jpg'
+                boxes = detection_boxes_dict.get(idx, [])
+                if skip_empty and not boxes:
+                    if self.on_transform_progress:
+                        self.on_transform_progress(t_name, idx + 1, total)
+                    continue
+                if self._rng.random() >= image_ratio:
+                    if self.on_transform_progress:
+                        self.on_transform_progress(t_name, idx + 1, total)
+                    continue
+                original_image = QImage(img_path)
+                self._apply_crop(original_image, boxes, crop_spec, base, ext, results)
+                if self.on_transform_progress:
+                    self.on_transform_progress(t_name, idx + 1, total)
         return results
 
     def _run_random(self, background_images, detection_boxes_dict,
-                    transform_specs, image_ratio, total, results=None, skip_empty=True):
+                    transform_specs, image_ratio, total, results=None, skip_empty=True,
+                    crop_spec=None):
         if results is None:
             results = []
         for idx in range(total):
@@ -129,10 +160,19 @@ class Augmenter:
             original_boxes = copy.deepcopy(boxes)
             iw = original_image.width()
             ih = original_image.height()
-            n = self._rng.randint(1, len(transform_specs))
-            active = self._rng.sample(transform_specs, n)
+            pool = list(transform_specs)
+            if crop_spec:
+                pool.append(("__crop__", crop_spec))
+            n = self._rng.randint(1, len(pool))
+            active = self._rng.sample(pool, n)
             any_applied = False
             for cls, ranges in active:
+                if cls == "__crop__":
+                    if self._rng.random() >= image_ratio:
+                        continue
+                    if self._apply_crop(original_image, boxes, ranges, base, ext, results):
+                        any_applied = True
+                    continue
                 if self._rng.random() >= image_ratio:
                     continue
                 any_applied = True
@@ -158,6 +198,37 @@ class Augmenter:
             if self.on_progress:
                 self.on_progress(idx + 1, total)
         return results
+
+    def _apply_crop(self, original_image, boxes, crop_spec, base, ext, results):
+        """滑窗裁剪 1→N：产出全部非空窗口（空窗无条件丢弃）。返回产出数。"""
+        iw, ih = original_image.width(), original_image.height()
+        cw = min(int(crop_spec["w"]), iw)
+        ch = min(int(crop_spec["h"]), ih)
+        ov = max(0, min(int(crop_spec["overlap"]), cw - 1, ch - 1))
+        min_vis = float(crop_spec.get("min_visible", 0.3))
+        made = 0
+        for r, y0 in enumerate(window_starts(ih, ch, ov)):
+            for c, x0 in enumerate(window_starts(iw, cw, ov)):
+                if self.is_interrupted():
+                    return made
+                win_boxes = crop_boxes(boxes, x0, y0, cw, ch, min_vis)
+                if not win_boxes:
+                    continue
+                win_img = original_image.copy(x0, y0, cw, ch)
+                suffix = f"_crop_r{r + 1}c{c + 1}"
+                out_name = base + suffix + ext
+                win_img.save(os.path.join(self.output_dir, out_name))
+                self._save_labelme_json(
+                    os.path.join(self.output_dir, base + suffix + ".json"),
+                    out_name, win_boxes, win_img.width(), win_img.height()
+                )
+                results.append({
+                    "image": win_img, "boxes": win_boxes,
+                    "width": win_img.width(), "height": win_img.height(),
+                    "stem": base + suffix
+                })
+                made += 1
+        return made
 
     def _build_kwargs(self, cls, ranges, mode):
         kwargs = {}

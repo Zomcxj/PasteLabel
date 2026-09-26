@@ -6,7 +6,7 @@ from typing import List
 
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
-    QApplication, QCheckBox, QDoubleSpinBox, QFileDialog,
+    QApplication, QCheckBox, QDialog, QDoubleSpinBox, QFileDialog,
     QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QSpinBox, QTextEdit, QVBoxLayout, QWidget,
 )
@@ -56,6 +56,9 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         self._log_area.setObjectName("logArea")
         main_layout.addWidget(self._log_area, 1)
         self._augment_result = None
+        self._crop_spec = None
+        self._run_images = []
+        self._run_boxes = {}
         self._pipe_mode = False
         self._pipe_steps = []
         self._pipe_idx = 0
@@ -255,6 +258,9 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         self._aug_btn.setText(tr("增强"))
         self._aug_skip_empty.setText(tr("跳过空标签"))
         self._aug_clear_btn.setText(tr("清空"))
+        self._crop_check.setText(tr("滑窗裁剪"))
+        self._crop_config_btn.setText(tr("配置…"))
+        self._update_crop_summary()
         self._exp_section.set_title(tr("标签导出"))
         self._exp_fmt_label.setText(tr("格式:"))
         self._exp_label_title.setText(tr("类别:"))
@@ -539,6 +545,54 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
             specs.append((cls, ranges))
         return specs
 
+    def _crop_ref_size(self):
+        if self._run_images:
+            w, h = self._get_image_size(self._run_images[0])
+            if w and h:
+                return w, h
+        return 0, 0
+
+    def _default_crop_spec(self):
+        W, H = self._crop_ref_size()
+        if not W or not H:
+            W, H = 960, 540
+        ov = min(round(min(W, H) * 0.1), 639)
+        return {"w": 640, "h": 640, "overlap": max(0, ov),
+                "min_visible": 0.3, "square": True}
+
+    def _get_crop_spec(self):
+        if not self._crop_check.isChecked():
+            return None
+        if self._crop_spec is None:
+            self._crop_spec = self._default_crop_spec()
+        return self._crop_spec
+
+    def _update_crop_summary(self):
+        if not self._crop_check.isChecked():
+            self._crop_summary_lbl.setText(tr("未配置"))
+            return
+        spec = self._crop_spec or self._default_crop_spec()
+        rows = cols = "?"
+        W, H = self._crop_ref_size()
+        if W and H:
+            from ..engine.augmenter.crop import window_starts
+            cols = len(window_starts(W, spec["w"], spec["overlap"]))
+            rows = len(window_starts(H, spec["h"], spec["overlap"]))
+        self._crop_summary_lbl.setText(tr("crop_summary").format(
+            w=spec["w"], h=spec["h"], ov=spec["overlap"], rows=rows, cols=cols))
+
+    def _open_crop_config(self):
+        self._ensure_boxes_loaded()
+        if not self._run_images:
+            self._log(tr("log_no_images"))
+            return
+        from .crop_dialog import CropConfigDialog
+        dlg = CropConfigDialog(self._run_images, self._run_boxes,
+                               self._get_crop_spec() or self._default_crop_spec(), self)
+        if dlg.exec_() == QDialog.Accepted:
+            self._crop_spec = dlg.spec()
+            self._update_crop_summary()
+
     def _run_augment(self):
         self._ensure_boxes_loaded()
         if not self._run_images:
@@ -546,7 +600,8 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
             self._pipe_finish(True)
             return
         specs = self._get_transform_specs()
-        if not specs:
+        crop_spec = self._get_crop_spec()
+        if not specs and not crop_spec:
             self._pipe_finish(True)
             return
         ratio = self._aug_ratio.value()
@@ -556,6 +611,8 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
         output_dir = self._get_output_dir()
         transform_names = [name for name, (cb, _, _) in self._aug_widgets.items()
                           if cb.isChecked() and not name.startswith("__")]
+        if crop_spec:
+            transform_names.append(tr("滑窗裁剪"))
         self._log(tr("log_aug_start").format(
             count=len(self._run_images),
             transforms=", ".join(transform_names) if transform_names else tr("原图"),
@@ -576,7 +633,8 @@ class ProcessingPanel(ProcessingPanelBuilderMixin, QWidget):
                 on_transform_progress=_on_transform_progress,
             )
             return aug.run(self._run_images, self._run_boxes, specs, ratio, mode,
-                          include_original=include_original, skip_empty=skip_empty)
+                          include_original=include_original, skip_empty=skip_empty,
+                          crop_spec=crop_spec)
 
         def _on_finished(result):
             if self._interrupted:

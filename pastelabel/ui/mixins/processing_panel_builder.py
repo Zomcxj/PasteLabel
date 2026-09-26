@@ -21,6 +21,7 @@ TRANSFORM_META = {
     "trans":       ("随机平移", [("offset", QSpinBox, 0, 100, 10, 30)]),
     "rotate":      ("随机旋转", [("angle", QSpinBox, 0, 45, 5, 25)]),
     "scale":       ("随机缩放", [("scale", QDoubleSpinBox, 0.5, 1.5, 0.8, 1.2)]),
+    "crop":        ("滑窗裁剪", []),
 }
 
 _TRANSFORM_ORDER = ["fliph", "flipv", "bright", "trans", "rotate", "scale",
@@ -74,6 +75,23 @@ class ProcessingPanelBuilderMixin:
                 param_spins[pname] = (spin_min, spin_max)
             grid.addWidget(cell, row, col)
             self._aug_widgets[name] = (cb, param_spins, display_name)
+        crop_cell = QWidget()
+        crop_cell.setMinimumWidth(140)
+        crop_cl = QHBoxLayout(crop_cell)
+        crop_cl.setContentsMargins(2, 1, 2, 1)
+        crop_cl.setSpacing(2)
+        self._crop_check = QCheckBox(tr("滑窗裁剪"))
+        self._crop_check.toggled.connect(lambda _checked: self._update_crop_summary())
+        crop_cl.addWidget(self._crop_check)
+        crop_cl.addSpacing(6)
+        self._crop_config_btn = QPushButton(tr("配置…"))
+        self._crop_config_btn.setFixedWidth(56)
+        self._crop_config_btn.clicked.connect(self._open_crop_config)
+        crop_cl.addWidget(self._crop_config_btn)
+        self._crop_summary_lbl = QLabel()
+        crop_cl.addWidget(self._crop_summary_lbl, 1)
+        crop_row_idx, crop_col_idx = divmod(len(order) + 1, 3)
+        grid.addWidget(crop_cell, crop_row_idx, crop_col_idx, 1, 2)
         for c in range(3):
             grid.setColumnStretch(c, 1)
         layout.addLayout(grid)

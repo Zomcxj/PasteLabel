@@ -307,6 +307,7 @@ class StatsMixin:
         dialog._paste_table = paste_table
         tabs = QTabWidget()
         tabs.setDocumentMode(True)
+        tabs.tabBar().setDrawBase(False)
         bg_tab = QWidget()
         bg_tl = QVBoxLayout(bg_tab)
         bg_tl.setContentsMargins(0, 0, 0, 0)

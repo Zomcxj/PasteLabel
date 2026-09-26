@@ -202,12 +202,13 @@ def test_health_advice_rare_class():
         'class_dist': [{'label': 'a', 'count': 1950}, {'label': 'b', 'count': 50}],
         'size_hist': {'edges': [0, 1, 2], 'counts': [1000, 1000]},
         'aspect_hist': {'edges': [0, 1, 2, 3], 'counts': [800, 600, 600]},
-        'iou_hist': {'edges': [0.0, 0.5, 1.0], 'counts': [1800, 200],
-                     'skipped_images': 0},
+        'iou_hist': {'edges': [0.0, 0.5, 1.0], 'counts': [1800, 200]},
         'summary': {'total_boxes': 2000, 'class_count': 2, 'images_scanned': 1},
     }
     advice = health_advice(stats)
-    assert any("b" in a for a in advice)
+    assert all(isinstance(a, dict) and 'key' in a and 'params' in a
+               for a in advice)
+    assert any('b' in a['params'].get('label', '') for a in advice)
 
 
 def test_health_advice_no_issue():
@@ -217,11 +218,10 @@ def test_health_advice_no_issue():
         'size_hist': {'edges': [0, 1, 2], 'counts': [50, 50]},
         'aspect_hist': {'edges': [0, 1, 2, 3], 'counts': [40, 30, 30]},
         'iou_hist': {'edges': [i / 10 for i in range(11)],
-                     'counts': [90, 0, 0, 0, 0, 0, 0, 0, 0, 10],
-                     'skipped_images': 0},
+                     'counts': [90, 0, 0, 0, 0, 0, 0, 0, 0, 10]},
         'summary': {'total_boxes': 100, 'class_count': 2, 'images_scanned': 1},
     }
-    assert health_advice(stats) == ["未发现明显失衡"]
+    assert health_advice(stats) == [{'key': "未发现明显失衡", 'params': {}}]
 
 
 def test_worker_signals_and_run_source():
@@ -698,6 +698,91 @@ def test_collect_shape_geometry_skips_malformed_shape(tmp_path):
     assert out["images_scanned"] == 1
 
 
+def test_collect_shape_geometry_skips_non_finite_coords(tmp_path):
+    """NaN/Inf 坐标（json 允许 NaN/Infinity 字面量）跳过，不能整库分析失败。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = _write(tmp_path, "nonfinite", [
+        {"label": "nan", "points": [[float("nan"), 0], [10, 0],
+                                    [10, 10], [float("nan"), 10]]},
+        {"label": "inf", "x": float("inf"), "y": 0, "width": 10, "height": 10},
+        _box("ok", w=10, h=10),
+    ])
+    out = collect_shape_geometry([img])
+    assert [b["label"] for b in out["boxes"]] == ["ok"]
+    assert out["images_scanned"] == 1
+
+
+def test_worker_survives_nan_in_sidecar(tmp_path):
+    """含 NaN 的 sidecar 不能让 worker 落到 error 分支。"""
+    img = _write(tmp_path, "nan_worker", [
+        {"label": "nan", "points": [[float("nan"), 0], [10, 0],
+                                    [10, 10], [float("nan"), 10]]},
+        _box("ok", w=10, h=10),
+    ])
+    captured = _run_health_worker(image_paths=[img])
+    assert not captured.get("error")
+    assert captured["annot"]["stats"]["class_dist"] == [
+        {"label": "ok", "count": 1}]
+
+
+def test_compute_health_survives_non_finite_values():
+    """聚合入口的防御：坏 area/aspect/IoU 值跳过，好框照常计数。"""
+    from pastelabel.engine.dataset_health import compute_health
+    boxes = [
+        {"label": "a", "x": 0, "y": 0, "width": float("nan"),
+         "height": 10, "area": float("nan"), "aspect": float("inf"),
+         "image_index": 0},
+        {"label": "a", "x": 0, "y": 0, "width": 10, "height": 10,
+         "area": 100.0, "aspect": 1.0, "image_index": 0},
+    ]
+    stats = compute_health(boxes)
+    assert stats["summary"]["total_boxes"] == 2
+    assert sum(stats["size_hist"]["counts"]) == 1
+    assert sum(stats["aspect_hist"]["counts"]) == 1
+
+
+def test_merge_shapes_keeps_primary_duplicates(tmp_path):
+    """primary（原始 sidecar）内部重复框必须保留：IoU 直方图靠它暴露重复。"""
+    from pastelabel.engine.dataset_health import _merge_shapes
+    shape = _box("cat", w=100, h=50)
+    assert len(_merge_shapes([shape, dict(shape)], None)) == 2
+
+
+def test_merge_shapes_dedupes_only_secondary():
+    """secondary（输出 sidecar）与 primary 同几何只追加一次，primary 全保留。"""
+    from pastelabel.engine.dataset_health import _merge_shapes
+    shape = _box("cat", w=100, h=50)
+    merged = _merge_shapes([shape], [dict(shape), _box("dog", w=1, h=1)])
+    assert [s["label"] for s in merged] == ["cat", "dog"]
+
+
+def test_health_advice_items_are_i18n_keys():
+    """建议项为 {key, params}，zh 键为 identity，en 键可 format 渲染。"""
+    from pastelabel.engine.dataset_health import health_advice
+    from pastelabel.ui.i18n import _strings
+    stats = {
+        'class_dist': [{'label': '类别A', 'count': 20},
+                       {'label': 'b', 'count': 980}],
+        'size_hist': {'edges': [0, 1], 'counts': [1000]},
+        'aspect_hist': {'edges': [0, 1], 'counts': [1000]},
+        'iou_hist': {'edges': [0.0, 1.0], 'counts': [1000]},
+        'summary': {'total_boxes': 1000, 'class_count': 2},
+    }
+    advice = health_advice(stats)
+    rare = next(a for a in advice if a['params'].get('label') == '类别A')
+    for lang in ('zh', 'en'):
+        assert rare['key'] in _strings[lang], rare['key']
+        rendered = _strings[lang][rare['key']].format(**rare['params'])
+        assert '类别A' in rendered, rendered
+    assert rare['key'] == _strings['zh'][rare['key']]
+
+
+def test_iou_hist_payload_has_no_dead_skipped_images():
+    from pastelabel.engine.dataset_health import compute_health
+    stats = compute_health([_geo("a", 10, 10)])
+    assert 'skipped_images' not in stats['iou_hist']
+
+
 def test_collect_shape_geometry_survives_geometry_exception(tmp_path, monkeypatch):
     """_geometry_of 抛异常时跳过该 shape，不能中断整库扫描。"""
     from pastelabel.engine import dataset_health
@@ -841,7 +926,8 @@ payload = {
             "aspect_hist": {"edges": [0, 1], "counts": [9]},
             "iou_hist": {"edges": [0.0, 1.0], "counts": [9]},
         },
-        "advice": ["annot advice"],
+        "advice": [{"key": "类别 {label} 样本偏少（{count} 个，占比 {share}%），建议多合成",
+                    "params": {"label": "annot_cls", "count": 3, "share": "4"}}],
     },
     "paste": {
         "stats": {
@@ -850,7 +936,7 @@ payload = {
             "aspect_hist": {"edges": [0, 1], "counts": [4]},
             "iou_hist": {"edges": [0.0, 1.0], "counts": [4]},
         },
-        "advice": ["paste advice"],
+        "advice": ["paste advice"],  # 旧字符串格式兼容
     },
     "images_scanned": 1,
 }
@@ -862,12 +948,14 @@ assert charts["class"]._items[0]["label"] == "annot_cls", charts["class"]._items
 assert charts["class"]._items[0]["color"] == "#123456"
 assert charts["size"]._xlabel != ""
 assert charts["size"]._counts == [9], charts["size"]._counts
+assert "annot_cls" in dialog._health_advice_label.text()  # 字典格式经 tr().format() 渲染
 
 dialog._set_health_source("paste")
 assert charts["class"]._items[0]["label"] == "paste_cls", charts["class"]._items
 assert charts["class"]._items[0]["color"] == "#123456"
 assert charts["size"]._counts == [4], charts["size"]._counts
 assert dialog._health_source == "paste"
+assert "paste advice" in dialog._health_advice_label.text()
 
 # paste 空 → 全部显示占位符
 empty = dict(payload)
@@ -1376,6 +1464,22 @@ finally:
     _dwm.set_titlebar_dark = _orig_dwm
     docks["class"].setFloating(False)
     app.processEvents()
+
+# 单列布局：拖动重排成单列后高度自动 1:1
+from PyQt5.QtCore import Qt
+host.splitDockWidget(docks['class'], docks['size'], Qt.Vertical)
+host.splitDockWidget(docks['size'], docks['aspect'], Qt.Vertical)
+host.splitDockWidget(docks['aspect'], docks['iou'], Qt.Vertical)
+app.processEvents()
+QTest.qWait(150)
+host.resizeDocks([docks['class'], docks['size']], [300, 80], Qt.Vertical)
+app.processEvents()
+assert dialog._dock_norm_timer is not None
+dialog._dock_norm_timer.start()
+QTest.qWait(250)
+col = sorted(docks.values(), key=lambda d: d.y())
+hs = [d.height() for d in col]
+assert max(hs) - min(hs) <= 3, hs
 
 # 整库贴图：payload 到达后贴图表重建（磁盘贴图统计进表）
 payload = {

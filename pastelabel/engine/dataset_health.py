@@ -13,10 +13,21 @@ from ..core.utils import calculate_iou, output_sidecar_paths, PathUtils
 from ..core.config import QUALITY_LINT_CONFIG
 
 
+def _finite_float(value):
+    """转 float；非数值或非有限值（NaN/Inf）返回 None，调用方跳过该框。"""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
+
+
 def _geometry_of(label, rect):
-    x1, y1, x2, y2 = rect
-    w = float(x2 - x1)
-    h = float(y2 - y1)
+    x1, y1, x2, y2 = (_finite_float(v) for v in rect)
+    if None in (x1, y1, x2, y2):
+        return None
+    w = x2 - x1
+    h = y2 - y1
     if w <= 0 or h <= 0:
         return None
     return {
@@ -87,17 +98,26 @@ def _read_output_sidecar(path):
 
 
 def _merge_shapes(primary, secondary):
-    """原始 sidecar 在前，输出目录 sidecar 去重追加。"""
+    """原始 sidecar 全量保留；输出目录 sidecar 按主侧内容去重后追加。
+
+    primary 内部不去重：同侧 sidecar 的重复框是真实标注数据，IoU 直方图
+    正是要暴露这类重复；去重只用于消除同一框在两份 sidecar 的副本。
+    """
     merged = []
     seen = set()
-    for shape in list(primary or []) + list(secondary or []):
+    for shape in primary or []:
         if not isinstance(shape, dict):
             continue
         key = _shape_dedupe_key(shape)
         if key is not None:
-            if key in seen:
-                continue
             seen.add(key)
+        merged.append(shape)
+    for shape in secondary or []:
+        if not isinstance(shape, dict):
+            continue
+        key = _shape_dedupe_key(shape)
+        if key is not None and key in seen:
+            continue
         merged.append(shape)
     return merged
 
@@ -168,13 +188,13 @@ def collect_paste_geometry(canvas_items_dict):
                 continue
             _pixmap, rect, label = entry[0], entry[1], entry[2]
             try:
-                x = float(rect.x())
-                y = float(rect.y())
-                w = float(rect.width())
-                h = float(rect.height())
+                x = _finite_float(rect.x())
+                y = _finite_float(rect.y())
+                w = _finite_float(rect.width())
+                h = _finite_float(rect.height())
             except Exception:
                 continue
-            if w <= 0 or h <= 0:
+            if None in (x, y, w, h) or w <= 0 or h <= 0:
                 continue
             boxes.append({
                 'label': str(label or ''),
@@ -208,6 +228,9 @@ def _bucket_count(n):
 
 
 def _histogram(values, buckets):
+    # 防御：NaN/Inf 参与 min/max 会让桶索引转换抛 ValueError，直接剔除
+    values = [v for v in (_finite_float(v) for v in (values or []))
+              if v is not None]
     if not values:
         return {'edges': [0.0, 1.0], 'counts': [0]}
     lo, hi = min(values), max(values)
@@ -233,29 +256,33 @@ def _iou_counts(boxes):
             continue
         per_image.setdefault(idx, []).append(b)
     counts = [0] * 10
-    skipped = 0
     for _idx, group in per_image.items():
         if len(group) > max_pairwise:
-            skipped += 1
             continue
         for i in range(len(group)):
             for j in range(i + 1, len(group)):
                 a, b = group[i], group[j]
-                if a['label'] != b['label']:
+                if a.get('label') != b.get('label'):
                     continue
-                ax1 = a.get('x', 0.0)
-                ay1 = a.get('y', 0.0)
-                ax2 = ax1 + a['width']
-                ay2 = ay1 + a['height']
-                bx1 = b.get('x', 0.0)
-                by1 = b.get('y', 0.0)
-                bx2 = bx1 + b['width']
-                by2 = by1 + b['height']
-                iou = calculate_iou((ax1, ay1, ax2, ay2), (bx1, by1, bx2, by2))
-                idx_bucket = min(9, int(float(iou) * 10))
+                ax1 = _finite_float(a.get('x', 0.0))
+                ay1 = _finite_float(a.get('y', 0.0))
+                aw = _finite_float(a.get('width'))
+                ah = _finite_float(a.get('height'))
+                bx1 = _finite_float(b.get('x', 0.0))
+                by1 = _finite_float(b.get('y', 0.0))
+                bw = _finite_float(b.get('width'))
+                bh = _finite_float(b.get('height'))
+                if None in (ax1, ay1, aw, ah, bx1, by1, bw, bh):
+                    continue
+                iou = _finite_float(calculate_iou(
+                    (ax1, ay1, ax1 + aw, ay1 + ah),
+                    (bx1, by1, bx1 + bw, by1 + bh)))
+                if iou is None:
+                    continue
+                idx_bucket = min(9, int(iou * 10))
                 counts[idx_bucket] += 1
     edges = [i / 10 for i in range(11)]
-    return {'edges': edges, 'counts': counts, 'skipped_images': skipped}
+    return {'edges': edges, 'counts': counts}
 
 
 def compute_health(boxes):
@@ -268,8 +295,11 @@ def compute_health(boxes):
     class_dist = [{'label': k, 'count': v}
                   for k, v in sorted(counts.items(), key=lambda x: (-x[1], x[0]))]
 
-    areas = [float(b.get('area', 0) or 0) for b in boxes]
-    aspects = [float(b.get('aspect', 0) or 0) for b in boxes]
+    # 防御：单个坏框（NaN/Inf/非数值）不能让整库扫描失败
+    areas = [v for v in (_finite_float(b.get('area') or 0) for b in boxes)
+             if v is not None]
+    aspects = [v for v in (_finite_float(b.get('aspect') or 0) for b in boxes)
+               if v is not None]
 
     return {
         'class_dist': class_dist,
@@ -285,6 +315,11 @@ def compute_health(boxes):
     }
 
 
+def _advice_item(key, **params):
+    """建议项：{key, params}，由 UI 端 tr(key).format(**params) 渲染。"""
+    return {'key': key, 'params': params}
+
+
 def health_advice(stats):
     advice = []
     class_dist = stats.get('class_dist') or []
@@ -292,16 +327,20 @@ def health_advice(stats):
     if class_dist and total:
         for entry in class_dist:
             share = entry['count'] / total
+            # count>=20 是噪声护栏：<20 个样本占比低属正常长尾，不宜报警
             if entry['count'] >= 20 and share < 0.05:
-                advice.append(
-                    f"类别 {entry['label']} 样本偏少（{entry['count']} 个，"
-                    f"占比 {share * 100:.0f}%），建议多合成")
+                advice.append(_advice_item(
+                    "类别 {label} 样本偏少（{count} 个，占比 {share}%），建议多合成",
+                    label=entry['label'], count=entry['count'],
+                    share=f"{share * 100:.0f}"))
         if len(class_dist) >= 2:
             top, bottom = class_dist[0]['count'], class_dist[-1]['count']
             if bottom > 0 and top / bottom >= 10:
-                advice.append(
-                    f"类别分布失衡（{class_dist[0]['label']}:"
-                    f"{class_dist[-1]['label']} = {top}:{bottom}）")
+                advice.append(_advice_item(
+                    "类别分布失衡（{top_label}:{bottom_label} = {top}:{bottom}）",
+                    top_label=class_dist[0]['label'],
+                    bottom_label=class_dist[-1]['label'],
+                    top=top, bottom=bottom))
 
     aspect = stats.get('aspect_hist') or {}
     counts = aspect.get('counts') or []
@@ -311,16 +350,18 @@ def health_advice(stats):
             edges = aspect.get('edges') or []
             i = counts.index(max(counts))
             rng = f"{edges[i]:.2f}~{edges[i + 1]:.2f}" if len(edges) > i + 1 else "?"
-            advice.append(f"长宽比单一（集中于 {rng}），多样性不足")
+            advice.append(_advice_item(
+                "长宽比单一（集中于 {rng}），多样性不足", rng=rng))
 
     iou = stats.get('iou_hist') or {}
     iou_counts = iou.get('counts') or []
     if iou_counts and sum(iou_counts) > 0:
         high = sum(iou_counts[-2:]) / sum(iou_counts)
         if high >= 0.2:
-            advice.append(f"重复/高度重叠框偏多（{high * 100:.0f}%）")
+            advice.append(_advice_item(
+                "重复/高度重叠框偏多（{high}%）", high=f"{high * 100:.0f}"))
 
-    return advice or ["未发现明显失衡"]
+    return advice or [_advice_item("未发现明显失衡")]
 
 
 from PyQt5.QtCore import QThread, pyqtSignal

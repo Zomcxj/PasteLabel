@@ -36,7 +36,10 @@ class QualityLintMixin:
         if not getattr(self, 'background_images', None):
             self.status_label.setText(tr("请先加载数据集"))
             return
-        self._cleanup_lint_worker()
+        # 已开过质检弹窗先关掉，避免重复弹窗（旧弹窗结果过期仍可跳图/删除）
+        self._close_lint_dialog()
+        self._lint_refresh_pending = set()
+        self._lint_refresh_full = False
         from ...engine.quality_lint import QualityLintWorker
         from ..quality_lint_dialog import QualityLintDialog
 
@@ -162,9 +165,11 @@ class QualityLintMixin:
             pending = set()
             self._lint_refresh_pending = pending
         if len(pending) > _LINT_REFRESH_MAX_IMAGES:
+            # 积压过多（如整库标签重命名）：不丢事件，改为整库重扫一次
             pending.clear()
-            return
-        pending.add(index)
+            self._lint_refresh_full = True
+        else:
+            pending.add(index)
         timer = getattr(self, '_lint_refresh_timer', None)
         if timer is None:
             try:
@@ -182,24 +187,36 @@ class QualityLintMixin:
             self._flush_lint_refresh()
 
     def _flush_lint_refresh(self):
-        """对去抖收集到的图做单图重扫并刷新弹窗。"""
+        """对去抖收集到的图做单图重扫并刷新弹窗；积压过多时整库重扫一次。"""
         pending = getattr(self, '_lint_refresh_pending', None)
-        if not pending:
+        full = getattr(self, '_lint_refresh_full', False)
+        if not pending and not full:
             return
         self._lint_refresh_pending = set()
+        self._lint_refresh_full = False
         dialog = getattr(self, '_lint_dialog', None)
         if dialog is None:
             return
         check = getattr(dialog, 'isVisible', None)
         if callable(check) and not check():
             return
-        if len(pending) > _LINT_REFRESH_MAX_IMAGES:
-            return
-        from ...engine.quality_lint import lint_single_image, filter_ignored_issues
         images = list(getattr(self, 'background_images', None) or [])
         boxes_dict = getattr(self, 'detection_boxes_dict', None) or {}
         current = getattr(self, 'current_background_index', -1)
         rules = self._get_lint_ignored_rules()
+        if full:
+            from ...engine.quality_lint import lint_dataset, filter_ignored_issues
+            memory = {idx: list(boxes) for idx, boxes in boxes_dict.items()} \
+                if isinstance(boxes_dict, dict) else {}
+            if isinstance(current, int) and 0 <= current < len(images):
+                memory[current] = list(getattr(self, 'detection_boxes', None) or [])
+            result = lint_dataset(images, memory_boxes=memory)
+            issues = filter_ignored_issues(result.get('issues') or [], rules)
+            indexes = set(range(len(images)))
+            dialog.refresh_issues_for_images(indexes, issues)
+            self._maybe_advance_lint_issue(dialog, indexes)
+            return
+        from ...engine.quality_lint import lint_single_image, filter_ignored_issues
         refreshed = []
         for index in sorted(pending):
             if not (0 <= index < len(images)):
@@ -289,6 +306,7 @@ class QualityLintMixin:
             return False
         self._delete_worker = None
         self._busy = False
+        self._lint_removal_busy = False
         return True
 
     def _delete_cross_label_overlaps(self, dialog, selected, target_label):
@@ -332,9 +350,13 @@ class QualityLintMixin:
             (getattr(self, 'detection_boxes_dict', None) or {}).items()
             if idx in {i.get('image_index') for i in selected}
         }
+        # worker 按涉及图片数报进度（非问题条数），进度条上限必须一致
+        image_count = len({i.get('image_index') for i in selected
+                           if i.get('image_index') is not None})
         progress = ProgressDialogFactory.create_progress_dialog(
             self, tr("删除进度"),
-            f"{tr('正在删除')} '{target_label}' {tr('重叠框...')}", len(selected))
+            f"{tr('正在删除')} '{target_label}' {tr('重叠框...')}",
+            max(1, image_count))
         progress.show()
         worker = CrossLabelDeleteWorker(
             selected, target_label, images, memory_boxes, self)
@@ -347,9 +369,12 @@ class QualityLintMixin:
         self._delete_worker = worker
         self._delete_progress = progress
         self._busy = True
+        # 删除 worker 后台改写 sidecar：期间主线程保存/切图一律拒绝，避免并发写坏 JSON
+        self._lint_removal_busy = True
         worker.start()
 
     def _update_delete_progress(self, progress, done, total):
+        progress.setMaximum(max(1, total))
         progress.setValue(done)
         progress.setLabelText(f"{tr('正在删除')} {done}/{total}")
 
@@ -363,6 +388,7 @@ class QualityLintMixin:
             self._delete_worker = None
         self._delete_progress = None
         self._busy = False
+        self._lint_removal_busy = False
         removed_boxes = dict(result.get('removed_boxes') or {})
         if removed_boxes:
             self._sync_boxes_after_delete(removed_boxes)
@@ -445,7 +471,9 @@ class QualityLintMixin:
             self.update_file_count()
 
     def _jump_to_lint_issue(self, issue):
-        """双击问题行：切图并选中问题框。"""
+        """双击问题行：切图并选中问题框（删除 worker 改写 sidecar 期间禁止切图）。"""
+        if getattr(self, '_lint_removal_busy', False):
+            return
         index = issue.get('image_index')
         if index is None or not (0 <= index < len(self.background_images)):
             return

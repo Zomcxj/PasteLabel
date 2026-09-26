@@ -346,6 +346,11 @@ class SaveManager(QObject):
         """生成并保存 JSON 文件"""
         if self.editor._is_delete_view:
             return
+        if getattr(self.editor, '_lint_removal_busy', False):
+            # 质检删除 worker 正在后台改写同一 sidecar：主线程写入会导致 JSON 交错损坏
+            from ..core.exception_hook import _write_log
+            _write_log(f"质检删除进行中，跳过保存 JSON: {image_path}")
+            return
         if hasattr(self.editor, '_dataset_stats_dirty'):
             self.editor._dataset_stats_dirty = True
         json_path = os.path.splitext(image_path)[0] + '.json'
@@ -409,12 +414,20 @@ class SaveManager(QObject):
                 json_data["shapes"].append(labelme_shape_from_box(box))
         
         os.makedirs(os.path.dirname(json_path), exist_ok=True)
+        # 先写临时文件再原子替换：中断/异常不会留下被截断的 JSON
+        tmp_path = f"{json_path}.tmp"
         try:
-            with open(json_path, 'w', encoding='utf-8') as f:
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, json_path)
             refresh = getattr(self.editor, '_refresh_background_item_status', None)
             if callable(refresh):
                 refresh(index_to_use, image_path)
         except Exception as e:
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except OSError:
+                pass
             from ..core.exception_hook import _write_log
             _write_log(f"保存 JSON 失败: {json_path}, 错误: {e}")

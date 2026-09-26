@@ -1672,3 +1672,206 @@ def test_label_manager_notifies_lint_on_rename_and_delete():
     from pastelabel.engine import label_manager
     src = inspect.getsource(label_manager.LabelManager)
     assert src.count("_notify_lint_boxes_changed") >= 5
+
+
+# --------------------------------------------------------------------------
+# 审计修复回归：删除 worker 并发写盘 / 重复弹窗 / 刷新积压 / 进度上限 / i18n
+# --------------------------------------------------------------------------
+def _save_editor(busy=False):
+    editor = type("Editor", (), {})()
+    editor._is_delete_view = False
+    editor._lint_removal_busy = busy
+    editor._dataset_stats_dirty = False
+    editor.canvas_items = []
+    editor.current_background = None
+    editor.current_background_index = 0
+    editor.detection_boxes_dict = {0: []}
+    editor.detection_boxes = []
+    return editor
+
+
+def test_save_json_rejected_while_lint_removal_busy(tmp_path):
+    """删除 worker 改写 sidecar 期间主线程保存必须被拒绝（防并发截断）。"""
+    from pastelabel.engine.save_manager import SaveManager
+
+    img = tmp_path / "busy.png"
+    img.write_bytes(b"x")
+    manager = SaveManager(_save_editor(busy=True))
+
+    manager.save_json(str(img), "busy.png", "", image_width=10, image_height=10,
+                      current_index=0)
+
+    assert not (tmp_path / "busy.json").exists()
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_save_json_atomic_replace_leaves_no_tmp(tmp_path):
+    """sidecar 写入先 tmp 后 os.replace：成功后无 .tmp 残留且 JSON 完整。"""
+    from pastelabel.engine.save_manager import SaveManager
+
+    img = tmp_path / "atomic.png"
+    img.write_bytes(b"x")
+    manager = SaveManager(_save_editor())
+
+    manager.save_json(str(img), "atomic.png", "", image_width=10, image_height=10,
+                      current_index=0)
+
+    assert (tmp_path / "atomic.json").exists()
+    assert not list(tmp_path.glob("*.tmp"))
+    json.loads((tmp_path / "atomic.json").read_text(encoding="utf-8"))
+
+
+def test_delete_worker_sets_lint_removal_busy_and_image_progress_max(monkeypatch):
+    """启动删除 worker：置忙标记；进度条上限按涉及图片数而非问题条数。"""
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+    from pastelabel.ui import dialogs as dialogs_mod
+    from pastelabel.engine import quality_lint as ql
+
+    captured = {}
+
+    class Progress:
+        canceled = type("S", (), {"connect": lambda self, fn: None})()
+
+        def show(self):
+            pass
+
+        def setValue(self, v):
+            pass
+
+        def setLabelText(self, text):
+            pass
+
+    def fake_create(parent, title, label_text, maximum):
+        captured["max"] = maximum
+        return Progress()
+
+    class Signal:
+        def connect(self, fn):
+            pass
+
+    class FakeWorker:
+        def __init__(self, *a, **kw):
+            self.delete_progress = Signal()
+            self.delete_finished = Signal()
+
+        def start(self):
+            captured["started"] = True
+
+        def requestInterruption(self):
+            pass
+
+        def isRunning(self):
+            return False
+
+    monkeypatch.setattr(dialogs_mod.ProgressDialogFactory,
+                        "create_progress_dialog", staticmethod(fake_create))
+    monkeypatch.setattr(ql, "CrossLabelDeleteWorker", FakeWorker)
+
+    editor = type("Editor", (QualityLintMixin,), {})()
+    editor.background_images = ["a.png", "b.png"]
+    editor.detection_boxes_dict = {}
+    editor.detection_boxes = []
+    editor.current_background_index = -1
+    editor.status_label = type("L", (), {"setText": lambda self, text: None})()
+    selected = [
+        _cross_issue(0, 0, "Truck", 1, "ZTruck", "a.png"),
+        _cross_issue(0, 2, "Truck", 3, "ZTruck", "a.png"),
+        _cross_issue(1, 0, "Car", 1, "SUV", "b.png"),
+    ]
+
+    editor._start_cross_label_delete(None, selected, "Truck", ["a.png", "b.png"])
+
+    assert captured["started"] is True
+    assert captured["max"] == 2
+    assert editor._lint_removal_busy is True
+
+
+def test_delete_finished_clears_lint_removal_busy():
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+
+    class Progress:
+        def close(self):
+            pass
+
+    worker = object()
+    editor = type("Editor", (QualityLintMixin,), {})()
+    editor._delete_worker = worker
+    editor._delete_progress = None
+    editor._busy = True
+    editor._lint_removal_busy = True
+    editor._lint_dialog = object()
+    editor.detection_boxes_dict = {}
+    editor.detection_boxes = []
+    editor.current_background_index = -1
+    editor.status_label = type("L", (), {"setText": lambda self, text: None})()
+
+    editor._on_cross_label_delete_finished(
+        None, Progress(), worker, "Truck",
+        {"removed": 0, "images_changed": 0, "failed": []})
+
+    assert editor._lint_removal_busy is False
+    assert editor._busy is False
+
+
+def test_jump_blocked_while_lint_removal_busy():
+    """删除 worker 运行中双击问题行不得切图（切图会触发 sidecar 保存）。"""
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+
+    editor = type("Editor", (QualityLintMixin,), {})()
+    editor.background_images = ["a.png", "b.png"]
+    editor.current_background_index = 0
+    editor._lint_removal_busy = True
+    editor.switch_background_to_index = lambda idx: (_ for _ in ()).throw(
+        AssertionError("删除进行中不应切图"))
+
+    editor._jump_to_lint_issue({"image_index": 1, "box_index": None})
+
+
+def test_open_quality_lint_closes_existing_dialog_source():
+    """重复点质检必须复用/关闭旧弹窗，不能叠加过期弹窗（回归 C2）。"""
+    import inspect
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+    src = inspect.getsource(QualityLintMixin._open_quality_lint)
+    assert "_close_lint_dialog" in src
+
+
+def test_refresh_overflow_triggers_full_rescan(tmp_path):
+    """刷新事件积压超过上限时整库重扫一次，而不是全部丢弃（回归 C3）。"""
+    from pastelabel.ui.mixins.quality_lint import QualityLintMixin
+
+    calls = []
+
+    class Dialog:
+        def isVisible(self):
+            return True
+
+        def refresh_issues_for_images(self, indexes, issues):
+            calls.append(set(indexes))
+
+    class Timer:
+        def start(self):
+            pass
+
+    img0 = _write_image_and_json(tmp_path, "full0", [])
+    img1 = _write_image_and_json(tmp_path, "full1", [])
+    editor = type("Editor", (QualityLintMixin,), {})()
+    editor._lint_dialog = Dialog()
+    editor._lint_refresh_timer = Timer()
+    editor.background_images = [img0, img1]
+    editor.detection_boxes_dict = {0: [], 1: []}
+    editor.current_background_index = 0
+    editor.detection_boxes = []
+
+    for i in range(66):
+        editor._notify_lint_boxes_changed(i)
+
+    assert editor._lint_refresh_full is True
+    editor._flush_lint_refresh()
+
+    assert calls and calls[0] == {0, 1}
+
+
+def test_i18n_scanned_images_key_has_en_translation():
+    from pastelabel.ui.i18n import _strings
+    assert _strings["zh"]["扫描图片"] == "扫描图片"
+    assert _strings["en"]["扫描图片"] == "Scanned images"

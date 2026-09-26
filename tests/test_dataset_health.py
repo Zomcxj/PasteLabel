@@ -1,5 +1,17 @@
 """数据集健康仪表盘纯逻辑测试。"""
 import json
+import os
+
+
+def _write_output_sidecar(tmp_path, image_path, shapes):
+    """贴图实际保存在输出目录 sidecar：{background_dir}_paste_output/{stem}.json。"""
+    from pastelabel.core.utils import PathUtils
+    out_dir = PathUtils.get_output_dir(image_path)
+    os.makedirs(out_dir, exist_ok=True)
+    json_path = os.path.join(out_dir, os.path.splitext(os.path.basename(image_path))[0] + ".json")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump({"shapes": shapes}, f, ensure_ascii=False)
+    return json_path
 
 
 def _write(tmp_path, stem, shapes, size=(200, 200)):
@@ -393,6 +405,49 @@ def test_collect_shape_geometry_memory_paste_boxes_routed(tmp_path):
     assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
 
 
+def test_collect_shape_geometry_reads_output_dir_paste_sidecar(tmp_path):
+    """贴图只写在输出目录 sidecar：原始 sidecar 无贴图也必须采到。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = _write(tmp_path, "out_paste", [_box("cat", w=100, h=50)])
+    _write_output_sidecar(tmp_path, img, [
+        dict(_box("logo", w=10, h=10), flags={"paste": True}),
+        _box("cat2", x=200, y=200, w=20, h=20),
+    ])
+    out = collect_shape_geometry([img])
+    assert sorted(b["label"] for b in out["boxes"]) == ["cat", "cat2"]
+    assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
+    assert out["images_scanned"] == 1
+
+
+def test_collect_shape_geometry_output_sidecar_only(tmp_path):
+    """只有输出目录 sidecar（原图未标注）时，检测框与贴图都要采到。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    img = tmp_path / "only_out.png"
+    img.write_bytes(b"x")
+    _write_output_sidecar(tmp_path, str(img), [
+        dict(_box("logo", w=10, h=10), flags={"paste": True}),
+        _box("cat2", x=200, y=200, w=20, h=20),
+    ])
+    out = collect_shape_geometry([str(img)])
+    assert sorted(b["label"] for b in out["boxes"]) == ["cat2"]
+    assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
+    assert out["images_scanned"] == 1
+
+
+def test_collect_shape_geometry_dedupes_shapes_in_both_sidecars(tmp_path):
+    """save_json 把当前图检测框同时写进两份 sidecar：同一形状只能计一次。"""
+    from pastelabel.engine.dataset_health import collect_shape_geometry
+    shape = _box("cat", w=100, h=50)
+    img = _write(tmp_path, "dup_side", [shape])
+    _write_output_sidecar(tmp_path, img, [
+        dict(_box("logo", w=10, h=10), flags={"paste": True}),
+        shape,
+    ])
+    out = collect_shape_geometry([img])
+    assert [b["label"] for b in out["boxes"]] == ["cat"]
+    assert [b["label"] for b in out["paste_boxes"]] == ["logo"]
+
+
 def test_merge_paste_geometry_prefers_memory_and_dedupes():
     from pastelabel.engine.dataset_health import merge_paste_geometry
     disk = [{"label": "old", "x": 1.0, "y": 2.0, "width": 10.0, "height": 10.0,
@@ -415,6 +470,17 @@ def test_worker_paste_section_includes_disk_paste(tmp_path):
         {"label": "logo", "count": 1}]
     assert captured["annot"]["stats"]["class_dist"] == [
         {"label": "cat", "count": 1}]
+
+
+def test_worker_paste_section_includes_output_dir_paste(tmp_path):
+    """worker 也必须读到输出目录 sidecar 里的贴图。"""
+    img = _write(tmp_path, "worker_out", [_box("cat", w=100, h=50)])
+    _write_output_sidecar(tmp_path, img, [
+        dict(_box("logo", w=10, h=10), flags={"paste": True}),
+    ])
+    captured = _run_health_worker(image_paths=[img])
+    assert captured["paste"]["stats"]["class_dist"] == [
+        {"label": "logo", "count": 1}]
 
 
 def test_worker_paste_section_computed_with_paste():

@@ -9,7 +9,7 @@ import os
 import concurrent.futures
 
 from .quality_lint import _bbox
-from ..core.utils import calculate_iou
+from ..core.utils import calculate_iou, PathUtils
 from ..core.config import QUALITY_LINT_CONFIG
 
 
@@ -46,6 +46,45 @@ def _shape_is_paste(shape):
     return bool(isinstance(flags, dict) and flags.get("paste"))
 
 
+def _shape_dedupe_key(shape):
+    """跨两份 sidecar 的去重键：类别 + 几何 + paste 标志。
+
+    save_json 会把当前图的检测框同时写进原目录与输出目录 sidecar，
+    不按内容去重会把同一个框计两次。
+    """
+    rect = _bbox(shape)
+    if rect is None:
+        return None
+    try:
+        geom = tuple(round(float(v), 3) for v in rect)
+    except (TypeError, ValueError):
+        return None
+    return (str(shape.get('label', '') or ''), geom, _shape_is_paste(shape))
+
+
+def _read_output_sidecar(path):
+    """输出目录 sidecar（贴图实际落盘处）：{background_dir}_paste_output/{stem}.json。"""
+    output_dir = PathUtils.get_output_dir(path)
+    stem = os.path.splitext(os.path.basename(path))[0]
+    return _read_json_shapes(os.path.join(output_dir, stem + ".json"))
+
+
+def _merge_shapes(primary, secondary):
+    """原始 sidecar 在前，输出目录 sidecar 去重追加。"""
+    merged = []
+    seen = set()
+    for shape in list(primary or []) + list(secondary or []):
+        if not isinstance(shape, dict):
+            continue
+        key = _shape_dedupe_key(shape)
+        if key is not None:
+            if key in seen:
+                continue
+            seen.add(key)
+        merged.append(shape)
+    return merged
+
+
 def collect_shape_geometry(image_paths, memory_boxes=None, is_interrupted=None):
     """采集逐框几何。已加载图以内存为准（空内存槽回读磁盘）；贴图单独归类。"""
     image_paths = list(image_paths or [])
@@ -57,13 +96,15 @@ def collect_shape_geometry(image_paths, memory_boxes=None, is_interrupted=None):
     def _one(index, path):
         json_path = f"{os.path.splitext(path)[0]}.json"
         loaded = index in memory_boxes
-        if loaded:
-            shapes = list(memory_boxes.get(index) or [])
-            if shapes:
-                return index, shapes
-            # 空内存槽只代表"未加载"，不代表"已清空"：磁盘有就回读
-            return index, _read_json_shapes(json_path)
-        return index, _read_json_shapes(json_path)
+        memory_shapes = list(memory_boxes.get(index) or []) if loaded else None
+        if memory_shapes:
+            return index, _merge_shapes(memory_shapes, _read_output_sidecar(path))
+        # 空内存槽只代表"未加载"，不代表"已清空"：磁盘有就回读
+        original = _read_json_shapes(json_path)
+        output = _read_output_sidecar(path)
+        if original is None and output is None:
+            return index, None
+        return index, _merge_shapes(original, output)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         futures = [pool.submit(_one, i, p) for i, p in enumerate(image_paths)]
@@ -79,10 +120,13 @@ def collect_shape_geometry(image_paths, memory_boxes=None, is_interrupted=None):
                     continue
                 if (shape.get('shape_type') or 'rectangle') == 'point':
                     continue
-                rect = _bbox(shape)
-                if rect is None:
+                try:
+                    rect = _bbox(shape)
+                    if rect is None:
+                        continue
+                    geo = _geometry_of(shape.get('label', ''), rect)
+                except Exception:
                     continue
-                geo = _geometry_of(shape.get('label', ''), rect)
                 if geo is None:
                     continue
                 geo['image_index'] = index

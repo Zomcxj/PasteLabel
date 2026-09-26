@@ -521,6 +521,19 @@ def test_wheel_region_blocked_when_fixed():
     assert region['height'] == 100.0
 
 
+def test_wheel_region_can_fill_background():
+    """区域可以放大到铺满背景，不能被 90% 的假上限夹住。"""
+    canvas = Canvas(regions=[{'x': 190.0, 'y': 140.0, 'width': 20.0, 'height': 20.0}])
+    canvas.mouse_pos = Point(200, 150)
+
+    for _ in range(90):
+        canvas.wheelEvent(WheelEvent(120))
+
+    region = canvas._editor.region_boxes[0]
+    assert region['width'] == 400.0
+    assert region['height'] == 300.0
+
+
 def test_wheel_scales_selected_box_not_region_in_annotate_mode():
     """回归：标注模式下悬停区域不得吞掉滚轮，选中的检测框仍要缩放。"""
     canvas = Canvas(regions=[{'x': 100.0, 'y': 100.0, 'width': 100.0, 'height': 100.0}])

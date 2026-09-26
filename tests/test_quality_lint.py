@@ -483,7 +483,7 @@ def test_options_popup_has_lint_button_source():
 
 def test_quality_lint_mixin_contract():
     from pastelabel.ui.mixins.quality_lint import QualityLintMixin
-    for name in ("_open_quality_lint", "_on_lint_finished",
+    for name in ("_open_quality_lint",
                  "_jump_to_lint_issue", "_cleanup_lint_worker"):
         assert hasattr(QualityLintMixin, name), name
 

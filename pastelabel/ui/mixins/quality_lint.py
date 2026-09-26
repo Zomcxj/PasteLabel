@@ -37,7 +37,7 @@ class QualityLintMixin:
             self.status_label.setText(tr("请先加载数据集"))
             return
         self._cleanup_lint_worker()
-        from ...engine.quality_lint import QualityLintWorker, filter_ignored_issues
+        from ...engine.quality_lint import QualityLintWorker
         from ..quality_lint_dialog import QualityLintDialog
 
         memory_boxes = {
@@ -116,12 +116,6 @@ class QualityLintMixin:
         if self._maybe_advance_lint_issue(dialog, set_status=False):
             text += f" · {tr('已跳到下一张问题图')}"
         self.status_label.setText(text)
-
-    def _on_lint_finished(self, dialog, result):
-        if dialog is not getattr(self, '_lint_dialog', None):
-            return
-        dialog.set_result(result)
-        self._cleanup_lint_worker(getattr(self, '_lint_worker', None))
 
     def _cleanup_lint_worker(self, worker=None):
         worker = worker or getattr(self, '_lint_worker', None)

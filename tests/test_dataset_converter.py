@@ -1130,6 +1130,25 @@ def test_labelme_preserves_rotation_roundtrip(tmp_path):
     assert len(data["shapes"][0]["points"]) == 4
 
 
+def test_labelme_labelme_keeps_paste_flags(tmp_path):
+    """贴图靠 flags.paste 区分，LabelMe->LabelMe 转换不能把它丢掉。"""
+    src = _labelme_dir_with_shapes(tmp_path, [
+        {"label": "logo", "shape_type": "rectangle",
+         "points": [[10, 10], [40, 30]],
+         "group_id": None, "flags": {"paste": True}},
+        {"label": "car", "shape_type": "rectangle",
+         "points": [[50, 50], [80, 80]],
+         "group_id": None, "flags": {}},
+    ])
+    out = tmp_path / "out"
+    ST.convert_paths("labelme", src, src, "labelme", str(out),
+                     overwrite=True, task="auto")
+    shapes = json.loads((out / "a.json").read_text(encoding="utf-8"))["shapes"]
+    by_label = {s["label"]: s for s in shapes}
+    assert by_label["logo"]["flags"] == {"paste": True}
+    assert by_label["car"]["flags"] == {}
+
+
 def test_labelme_rotation_to_yolo_obb(tmp_path):
     src = _labelme_dir_with_shapes(tmp_path, [{
         "label": "car", "shape_type": "rotation",

@@ -95,6 +95,8 @@ class Detections:
     points_list: List[Optional[List[Tuple[float, float]]]] = field(default_factory=list)
     #: pose 分组用；None 表示无分组。
     group_ids: List[Optional[int]] = field(default_factory=list)
+    #: 与 class_id 等长的 LabelMe flags（贴图 flags.paste 等）；缺失为 {}。
+    flags_list: List[dict] = field(default_factory=list)
 
     def __len__(self) -> int:
         return len(self.class_id)
@@ -120,6 +122,11 @@ class Detections:
         if index < len(self.group_ids):
             return self.group_ids[index]
         return None
+
+    def flags_of(self, index: int) -> dict:
+        if index < len(self.flags_list) and isinstance(self.flags_list[index], dict):
+            return dict(self.flags_list[index])
+        return {}
 
     @property
     def mask(self):
@@ -445,7 +452,7 @@ def _empty_detections() -> Detections:
 
 def _append_detection(det: "Detections", class_id, box_xyxy, *,
                       shape_type="rectangle", points=None, group_id=None,
-                      mask=None):
+                      mask=None, flags=None):
     """统一追加一个标注，保证各并行列表长度一致。"""
     det.class_id.append(class_id)
     det.box_xyxy.append(box_xyxy)
@@ -453,6 +460,7 @@ def _append_detection(det: "Detections", class_id, box_xyxy, *,
     det.shape_types.append(shape_type)
     det.points_list.append(points)
     det.group_ids.append(group_id)
+    det.flags_list.append(flags if isinstance(flags, dict) else {})
 
 
 def _bounding_box(points) -> Tuple[float, float, float, float]:
@@ -858,7 +866,9 @@ def _read_labelme(images_dir: str, annotations_dir: str) -> Dataset:
                 group_id = int(group_id) if group_id is not None else None
             except (TypeError, ValueError):
                 group_id = None
-            shapes.append((label, shape_type, coords, polygon, box, group_id))
+            flags = shape.get("flags")
+            flags = flags if isinstance(flags, dict) else {}
+            shapes.append((label, shape_type, coords, polygon, box, group_id, flags))
             if label not in class_index:
                 class_index[label] = len(classes)
                 classes.append(label)
@@ -871,12 +881,13 @@ def _read_labelme(images_dir: str, annotations_dir: str) -> Dataset:
         if size:
             dataset.image_sizes[path] = size
         annotations = _empty_detections()
-        for label, shape_type, coords, polygon, box, group_id in shapes:
+        for label, shape_type, coords, polygon, box, group_id, flags in shapes:
             index = class_index.get(label)
             if index is None:
                 continue
             _append_detection(annotations, index, box, shape_type=shape_type,
-                              points=coords, group_id=group_id, mask=polygon)
+                              points=coords, group_id=group_id, mask=polygon,
+                              flags=flags)
         dataset.annotations[path] = annotations
     return dataset
 
@@ -1072,7 +1083,7 @@ def _write_labelme(dataset: Dataset, layout: dict) -> None:
                          "points": [[round(float(x1), 6), round(float(y1), 6)],
                                     [round(float(x2), 6), round(float(y2), 6)]]}
             shape.update({"label": dataset.classes[class_id],
-                          "group_id": group_id, "flags": {}})
+                          "group_id": group_id, "flags": detections.flags_of(i)})
             shapes.append(shape)
         payload = {
             "version": "5.3.1",

@@ -399,12 +399,15 @@ class StatsMixin:
             expanded = not expanded
             for dock in dialog._health_docks.values():
                 dock.setVisible(expanded)
+            source_label.setVisible(expanded)
+            advice_label.setVisible(expanded)
             header.setText(
                 f"{'▼' if expanded else '▶'}  {tr('数据集健康')}")
         header.clicked.connect(_toggle)
 
         dialog._health_charts = charts
         dialog._health_advice_label = advice_label
+        dialog._health_source_label = source_label
         dialog._health_source = 'annot'
         dialog._health_payload = None
 

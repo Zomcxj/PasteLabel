@@ -722,6 +722,20 @@ dialog._set_health_source("annot")
 assert charts["class"]._placeholder == "分析失败", charts["class"]._placeholder
 assert charts["paste"]._placeholder == "分析失败", charts["paste"]._placeholder
 
+# 折叠健康区：数据源与建议标签也要跟着隐藏，不能留下孤儿文字
+dialog.show()
+app.processEvents()
+from PyQt5.QtWidgets import QPushButton
+header = next(b for b in dialog.findChildren(QPushButton)
+              if "数据集健康" in b.text())
+assert not dialog._health_source_label.isHidden()
+header.click()
+assert dialog._health_source_label.isHidden()
+assert dialog._health_advice_label.isHidden()
+header.click()
+assert not dialog._health_source_label.isHidden()
+assert not dialog._health_advice_label.isHidden()
+
 editor._close_health_worker()
 print("OK")
 '''

@@ -10,7 +10,6 @@ _PALETTE = (
     '#00BCD4', '#795548', '#607D8B', '#E91E63', '#3F51B5',
 )
 _LEFT_LABEL_W = 70
-_RIGHT_PAD = 8
 _AXIS_H = 18
 _TOP_PAD = 16
 

@@ -1296,10 +1296,8 @@ class CanvasInteractionMixin(CanvasDrawingMixin, CanvasMenuMixin):
 
         bg = self._editor.current_background
         if bg is not None:
-            max_w = min(bg.width(), bg.width() * 0.9)
-            max_h = min(bg.height(), bg.height() * 0.9)
-            new_w = min(new_w, max_w)
-            new_h = min(new_h, max_h)
+            new_w = min(new_w, bg.width())
+            new_h = min(new_h, bg.height())
 
         nx = cx - new_w / 2
         ny = cy - new_h / 2

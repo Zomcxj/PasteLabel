@@ -233,6 +233,7 @@ class StatsMixin:
                 return
             if self.label_manager.rename_detection_label(old_label, new_label):
                 item.setData(QtCore.UserRole, new_label)
+                self._health_scan_generation = getattr(self, '_health_scan_generation', 0) + 1
                 self._reload_stats_bg_table(bg_table, dialog)
                 if hasattr(self, 'update_label_list'):
                     self.update_label_list()
@@ -289,6 +290,7 @@ class StatsMixin:
                 return
             if self.label_manager.rename_paste_label(old_label, new_label, rewrite_disk=True):
                 item.setData(QtCore.UserRole, new_label)
+                self._health_scan_generation = getattr(self, '_health_scan_generation', 0) + 1
                 color_btn = paste_table.cellWidget(item.row(), 2)
                 if color_btn is not None:
                     try:
@@ -440,6 +442,31 @@ class StatsMixin:
                 host.resizeDocks([dock for dock, _ in row],
                                  [width] * len(row), Qt.Horizontal)
 
+            # 单列（全部竖向堆叠）→ 高度自动 1:1
+            columns = []
+            for dock, g in items:
+                placed = False
+                for col in columns:
+                    g0 = col[0][1]
+                    h_overlap = min(g0.right(), g.right()) - max(g0.left(), g.left())
+                    y_disjoint = g.bottom() < g0.top() or g0.bottom() < g.top()
+                    if y_disjoint and h_overlap > min(g0.width(), g.width()) * 0.5:
+                        col.append((dock, g))
+                        placed = True
+                        break
+                if not placed:
+                    columns.append([(dock, g)])
+            if len(columns) == 1 and len(columns[0]) >= 2:
+                col = sorted(columns[0], key=lambda t: t[1].y())
+                heights = [g.height() for _, g in col]
+                if max(heights) - min(heights) > 1:
+                    height = int(sum(heights) / len(heights))
+                    key = tuple(id(dock) for dock, _ in col) + ("v",)
+                    if height > 0 and _last_norm.get(key) != height:
+                        _last_norm[key] = height
+                        host.resizeDocks([dock for dock, _ in col],
+                                         [height] * len(col), Qt.Vertical)
+
         if hasattr(host, 'addDockWidget'):
             for key, title, desc in panels:
                 panel = QWidget()
@@ -586,7 +613,9 @@ class StatsMixin:
             charts['iou'].set_histogram(iou.get('edges'), iou.get('counts'),
                                         xlabel=tr('IoU'), ylabel=tr('框对数'))
             advice = section.get('advice') or [tr('未发现明显失衡')]
-            advice_label.setText(f"{tr('建议')}: " + "；".join(advice))
+            advice_label.setText(f"{tr('建议')}: " + "；".join(
+                tr(a['key']).format(**a['params']) if isinstance(a, dict) else a
+                for a in advice))
 
         def _set_health_source(source):
             _render_source(source)
@@ -605,6 +634,9 @@ class StatsMixin:
 
         from ...engine.dataset_health import DatasetHealthWorker
         self._close_health_worker()
+        # 扫描期间弹窗内改名/改色会推进 _health_scan_generation，
+        # 迟到的过期 payload 直接丢弃（见 _on_payload 守卫）。
+        gen = getattr(self, '_health_scan_generation', 0)
         memory_boxes = {
             idx: list(boxes) for idx, boxes in
             (getattr(self, 'detection_boxes_dict', None) or {}).items()}
@@ -617,6 +649,8 @@ class StatsMixin:
         worker.finished.connect(worker.deleteLater)
 
         def _on_payload(payload):
+            if getattr(self, '_health_scan_generation', 0) != gen:
+                return
             dialog._health_payload = payload
             paste_class = ((payload.get('paste') or {}).get('stats') or {}).get(
                 'class_dist') or []
@@ -717,6 +751,7 @@ class StatsMixin:
             return
         self.label_color_map[label] = color.name()
         config_manager.save_all(label_colors=self.label_colors, label_color_map=self.label_color_map)
+        self._health_scan_generation = getattr(self, '_health_scan_generation', 0) + 1
         cached = getattr(self, '_cached_bg_label_stats', None)
         if isinstance(cached, list):
             for item in cached:

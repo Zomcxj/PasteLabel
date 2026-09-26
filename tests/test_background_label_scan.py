@@ -524,3 +524,105 @@ def test_cleanup_background_label_scan_worker_interrupts_without_waiting_finishe
     assert worker.interrupted
     assert worker.wait_calls == []
     assert editor._background_label_scan_worker is None
+
+
+def test_stats_health_payload_discarded_after_rename_bump_real_qt():
+    """D1：弹窗内改名/改色推进扫描代数后，迟到的 payload 必须被丢弃——
+    不覆盖 _health_payload、不按旧类名重建贴图表；代数一致的新扫描仍正常应用。"""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = '''
+from PyQt5.QtCore import QObject, Qt
+from PyQt5.QtWidgets import (QApplication, QDialog, QVBoxLayout, QLabel,
+                             QTableWidget, QTableWidgetItem)
+from pastelabel.ui.mixins.stats import StatsMixin
+
+app = QApplication.instance() or QApplication([])
+
+
+class FakeLabelManager:
+    def rename_detection_label(self, old, new):
+        return False
+
+    def rename_paste_label(self, old, new, rewrite_disk=False):
+        return False
+
+
+class FakeEditor(StatsMixin, QObject):
+    def __init__(self):
+        super().__init__()
+        self.background_images = ["x.png"]
+        self.detection_boxes_dict = {}
+        self.canvas_items_dict = {}
+        self.canvas_items = []
+        self.current_background_index = -1
+        self._health_worker = None
+        self._cached_bg_label_stats = None
+        self._memory_background_path = "x.png"
+        self.label_color_map = {}
+        self.global_labels = set()
+        self.background_dataset_labels = set()
+        self.label_manager = FakeLabelManager()
+        self._dataset_stats_dirty = False
+        self._background_label_scan_completed = True
+
+    def get_label_color(self, label):
+        return "#123456"
+
+
+def payload_with(label):
+    return {
+        "annot": {"stats": {}, "advice": []},
+        "paste": {"stats": {
+            "class_dist": [{"label": label, "count": 4}],
+            "size_hist": {"edges": [0, 1], "counts": [4]},
+            "aspect_hist": {"edges": [0, 1], "counts": [4]},
+            "iou_hist": {"edges": [0.0, 1.0], "counts": [9]},
+        }, "advice": ["a"]},
+        "images_scanned": 1,
+    }
+
+
+def make_dialog(editor):
+    dialog = QDialog()
+    layout = QVBoxLayout(dialog)
+    editor._build_health_section(dialog, layout)
+    editor._close_health_worker()  # 无事件循环，queued payload 不会投递
+    table = QTableWidget(1, 3)
+    item = QTableWidgetItem("new_name")
+    item.setData(Qt.UserRole, "new_name")
+    table.setItem(0, 0, item)
+    dialog._paste_table = table
+    dialog._total_label = QLabel()
+    return dialog
+
+
+editor = FakeEditor()
+editor._health_scan_generation = 0
+
+# 改名推进代数后，迟到的 payload 被丢弃
+dialog = make_dialog(editor)
+assert editor._health_scan_generation == 0
+editor._health_scan_generation += 1  # 模拟弹窗内改名/改色
+dialog._on_health_payload(payload_with("old_name"))
+assert dialog._health_payload is None
+assert dialog._paste_table.item(0, 0).text() == "new_name"
+
+# 代数一致的新扫描 payload 正常应用（防过度丢弃）
+dialog2 = make_dialog(editor)
+assert editor._health_scan_generation == 1
+dialog2._on_health_payload(payload_with("fresh_name"))
+assert dialog2._health_payload is not None
+assert dialog2._paste_table.item(0, 0).text() == "fresh_name"
+
+editor._close_health_worker()
+print("OK")
+'''
+    env = os.environ | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(root)}
+    result = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
+                            text=True, capture_output=True, timeout=120)
+    assert result.returncode == 0, result.stderr

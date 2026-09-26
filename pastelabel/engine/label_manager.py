@@ -804,7 +804,6 @@ class LabelManager(QObject):
 
     def rename_detection_label(self, old_label, new_label, rewrite_disk=True):
         """Rename a detection/background label in memory and optionally all sidecar JSONs."""
-        import json
         import os
 
         old_label = (old_label or "").strip()
@@ -858,33 +857,8 @@ class LabelManager(QObject):
         if rewrite_disk:
             for image_path in list(getattr(self.editor, 'background_images', []) or []):
                 json_path = f"{os.path.splitext(image_path)[0]}.json"
-                if not os.path.isfile(json_path):
-                    continue
-                try:
-                    with open(json_path, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                except Exception as e:
-                    from ..core.exception_hook import _write_log
-                    _write_log(f"读取标注 JSON 失败 {json_path}: {e}")
-                    continue
-                if not isinstance(data, dict):
-                    continue
-                shapes = data.get('shapes')
-                if not isinstance(shapes, list):
-                    continue
-                changed = False
-                for shape in shapes:
-                    if isinstance(shape, dict) and shape.get('label') == old_label:
-                        shape['label'] = new_label
-                        changed = True
-                if not changed:
-                    continue
-                try:
-                    with open(json_path, 'w', encoding='utf-8') as f:
-                        json.dump(data, f, ensure_ascii=False, indent=2)
-                except Exception as e:
-                    from ..core.exception_hook import _write_log
-                    _write_log(f"写入标注 JSON 失败 {json_path}: {e}")
+                if os.path.isfile(json_path):
+                    self._rename_shapes_in_file(json_path, old_label, new_label)
 
         self.label_list_changed.emit()
         self.data_changed.emit()
@@ -947,22 +921,47 @@ class LabelManager(QObject):
         贴图实际保存在输出目录 `{background_dir}_paste_output/`，保存名是
         `{prefix}_{stem}.json`（前缀用户可自由输入），按文件名匹配全部候选；
         原目录 sidecar 也要覆盖（annotate 模式检测框写原目录，save_json 两份都写）。
+        输出目录清单按目录缓存（整库改名只 listdir 一次），匹配规则与
+        `core.utils.output_sidecar_paths` 保持一致。
         """
-        import os
-        from ..core.utils import PathUtils, output_sidecar_paths
+        from ..core.utils import PathUtils
+        dir_names = {}
+
+        def _sidecar_paths(image_path):
+            output_dir = PathUtils.get_output_dir(image_path)
+            names = dir_names.get(output_dir)
+            if names is None:
+                try:
+                    names = os.listdir(output_dir)
+                except OSError:
+                    names = []
+                dir_names[output_dir] = names
+            stem = os.path.splitext(os.path.basename(image_path))[0]
+            exact = [os.path.join(output_dir, n) for n in names
+                     if n.lower().endswith('.json') and n[:-5] == stem]
+            suffix = [os.path.join(output_dir, n) for n in names
+                      if n.lower().endswith('.json') and n[:-5].endswith(f"_{stem}")]
+            return exact or suffix
+
         seen_paths = set()
         for image_path in list(getattr(self.editor, 'background_images', []) or []):
             json_paths = [f"{os.path.splitext(image_path)[0]}.json"]
-            json_paths.extend(output_sidecar_paths(
-                image_path, PathUtils.get_output_dir(image_path)))
+            json_paths.extend(_sidecar_paths(image_path))
             for json_path in json_paths:
                 if json_path in seen_paths or not os.path.isfile(json_path):
                     continue
                 seen_paths.add(json_path)
-                self._rewrite_paste_label_in_file(json_path, old_label, new_label)
+                self._rename_shapes_in_file(
+                    json_path, old_label, new_label,
+                    lambda shape: isinstance(shape.get('flags'), dict)
+                    and shape['flags'].get('paste'))
 
     @staticmethod
-    def _rewrite_paste_label_in_file(json_path, old_label, new_label):
+    def _rename_shapes_in_file(json_path, old_label, new_label, match=None):
+        """改写单个 sidecar：label==old 且 match(shape) 的 shape 改名，有变化才写回。
+
+        match 缺省匹配全部 shape（背景标签改名）；贴图改名传入 flags.paste 过滤。
+        """
         import json
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
@@ -976,14 +975,12 @@ class LabelManager(QObject):
         shapes = data.get('shapes')
         if not isinstance(shapes, list):
             return
+        if match is None:
+            match = lambda shape: True  # noqa: E731
         changed = False
         for shape in shapes:
-            if not isinstance(shape, dict):
-                continue
-            flags = shape.get('flags')
-            if not (isinstance(flags, dict) and flags.get('paste')):
-                continue
-            if shape.get('label') == old_label:
+            if (isinstance(shape, dict) and shape.get('label') == old_label
+                    and match(shape)):
                 shape['label'] = new_label
                 changed = True
         if not changed:

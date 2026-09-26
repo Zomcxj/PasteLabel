@@ -135,18 +135,23 @@ def output_sidecar_paths(image_path, output_dir):
     每图一次 listdir：超大输出目录可改为按 output_dir 缓存目录清单。
     """
     stem = os.path.splitext(os.path.basename(image_path))[0]
-    found = []
+    exact = []
+    suffix = []
     try:
         names = os.listdir(output_dir)
     except OSError:
-        return found
+        return exact
     for name in names:
         if not name.lower().endswith('.json'):
             continue
         base = name[:-5]
-        if base == stem or base.endswith(f"_{stem}"):
-            found.append(os.path.join(output_dir, name))
-    return found
+        if base == stem:
+            exact.append(os.path.join(output_dir, name))
+        elif base.endswith(f"_{stem}"):
+            suffix.append(os.path.join(output_dir, name))
+    # 精确匹配优先：`big_cat.json` 不该被 `cat.png` 当成自己的 sidecar
+    # （残留：无精确匹配时 `_{stem}` 后缀仍可能撞名，前缀由用户自由输入，无法完全消除）
+    return exact or suffix
 
 
 def natural_sort_key(s):

@@ -166,3 +166,32 @@ class TestPathUtils:
 
     def test_get_path_separator(self):
         assert _utils.PathUtils.get_path_separator() == os.sep
+
+
+class TestOutputSidecarPaths:
+    """output_sidecar_paths：前缀可变，精确匹配优先于 `_{stem}` 后缀匹配。"""
+
+    def test_exact_stem_wins_over_suffix_collision(self, tmp_path):
+        image = str(tmp_path / "cat.png")
+        (tmp_path / "cat.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "paste_big_cat.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "paste_cat.json").write_text("{}", encoding="utf-8")
+
+        found = [os.path.basename(p)
+                 for p in _utils.output_sidecar_paths(image, str(tmp_path))]
+
+        assert found == ["cat.json"]
+
+    def test_suffix_match_used_when_no_exact_match(self, tmp_path):
+        image = str(tmp_path / "cat.png")
+        (tmp_path / "paste_cat.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "sess2_cat.json").write_text("{}", encoding="utf-8")
+
+        found = sorted(os.path.basename(p)
+                       for p in _utils.output_sidecar_paths(image, str(tmp_path)))
+
+        assert found == ["paste_cat.json", "sess2_cat.json"]
+
+    def test_missing_output_dir_returns_empty(self, tmp_path):
+        assert _utils.output_sidecar_paths(
+            str(tmp_path / "cat.png"), str(tmp_path / "nope")) == []

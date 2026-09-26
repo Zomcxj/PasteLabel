@@ -70,46 +70,29 @@ class LabelManager(QObject):
             self.editor.paste_label_list.addItem(label_name)
     
     def modify_paste_label(self):
-        """修改贴图标签"""
+        """修改贴图标签（内存 + 磁盘 sidecar 同步改名）"""
         selected_items = self.editor.paste_label_list.selectedItems()
         if not selected_items:
             return
-        
+
         old_label = selected_items[0].text()
         new_label, ok = dialog_helpers.get_text(
             self.editor, "修改贴图标签", "请输入新的贴图标签名称:", text=old_label
         )
-        
+
         if ok and new_label.strip():
             new_label = new_label.strip()
-            
+
             existing_labels = set()
             for i in range(self.editor.paste_label_list.count()):
                 existing_labels.add(self.editor.paste_label_list.item(i).text())
-            
+
             if new_label in existing_labels and new_label != old_label:
                 dialog_helpers.warning(self.editor, "警告", tr("标签名称已存在，请输入不同的名称"))
                 return
-            
-            selected_items[0].setText(new_label)
-            
-            # 更新所有使用该标签的贴图
-            for i in range(len(self.editor.canvas_items)):
-                pixmap, rect, label = self.editor.canvas_items[i]
-                if label == old_label:
-                    self.editor.canvas_items[i] = (pixmap, rect, new_label)
-            
-            for i in range(len(self.editor.background_images)):
-                if i in self.editor.canvas_items_dict:
-                    updated_items = []
-                    for item in self.editor.canvas_items_dict[i]:
-                        if item[2] == old_label:
-                            updated_items.append((item[0], item[1], new_label))
-                        else:
-                            updated_items.append(item)
-                    self.editor.canvas_items_dict[i] = updated_items
-            
-            self.data_changed.emit()
+
+            # 复用统一改名逻辑：内存列表/画布/检测框 + 磁盘 sidecar
+            self.rename_paste_label(old_label, new_label, rewrite_disk=True)
     
     def delete_paste_label(self):
         """删除贴图标签"""
@@ -925,13 +908,30 @@ class LabelManager(QObject):
                 if item and item.text() == old_label:
                     item.setText(new_label)
 
-        for item in getattr(self.editor, 'canvas_items', []) or []:
-            if isinstance(item, dict) and item.get('label') == old_label:
-                item['label'] = new_label
+        canvas_items = getattr(self.editor, 'canvas_items', None) or []
+        for i in range(len(canvas_items)):
+            pixmap, rect, label = canvas_items[i]
+            if label == old_label:
+                canvas_items[i] = (pixmap, rect, new_label)
+
         for index, items in list(getattr(self.editor, 'canvas_items_dict', {}).items()):
+            updated_items = []
             for item in items or []:
-                if isinstance(item, dict) and item.get('label') == old_label:
-                    item['label'] = new_label
+                if item and len(item) >= 3 and item[2] == old_label:
+                    updated_items.append((item[0], item[1], new_label))
+                else:
+                    updated_items.append(item)
+            self.editor.canvas_items_dict[index] = updated_items
+
+        # 磁盘载入的贴图在内存里是 is_paste 检测框；不同步改名的话，
+        # 下次保存（从 detection_boxes_dict 写盘）会把磁盘改名悄悄改回旧名。
+        for box in getattr(self.editor, 'detection_boxes', None) or []:
+            if isinstance(box, dict) and box.get('is_paste') and box.get('label') == old_label:
+                box['label'] = new_label
+        for boxes in (getattr(self.editor, 'detection_boxes_dict', None) or {}).values():
+            for box in boxes or []:
+                if isinstance(box, dict) and box.get('is_paste') and box.get('label') == old_label:
+                    box['label'] = new_label
 
         if rewrite_disk:
             self._rewrite_paste_label_on_disk(old_label, new_label)
@@ -942,43 +942,60 @@ class LabelManager(QObject):
         return True
 
     def _rewrite_paste_label_on_disk(self, old_label, new_label):
-        """把所有 sidecar JSON 里 flags.paste 的 shape 改名（不动检测框）。"""
+        """把所有 sidecar JSON 里 flags.paste 的 shape 改名（不动检测框）。
+
+        贴图实际保存在输出目录 `{background_dir}_paste_output/`，原目录
+        sidecar 也要覆盖（annotate 模式检测框写原目录，save_json 两份都写）。
+        """
         import json
         import os
+        from ..core.utils import PathUtils
+        seen_paths = set()
         for image_path in list(getattr(self.editor, 'background_images', []) or []):
-            json_path = f"{os.path.splitext(image_path)[0]}.json"
-            if not os.path.isfile(json_path):
-                continue
-            try:
-                with open(json_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-            except Exception as e:
-                from ..core.exception_hook import _write_log
-                _write_log(f"读取标注 JSON 失败 {json_path}: {e}")
-                continue
-            if not isinstance(data, dict):
-                continue
-            shapes = data.get('shapes')
-            if not isinstance(shapes, list):
-                continue
-            changed = False
-            for shape in shapes:
-                if not isinstance(shape, dict):
+            stem = os.path.splitext(os.path.basename(image_path))[0]
+            json_paths = [
+                f"{os.path.splitext(image_path)[0]}.json",
+                os.path.join(PathUtils.get_output_dir(image_path), stem + ".json"),
+            ]
+            for json_path in json_paths:
+                if json_path in seen_paths or not os.path.isfile(json_path):
                     continue
-                flags = shape.get('flags')
-                if not (isinstance(flags, dict) and flags.get('paste')):
-                    continue
-                if shape.get('label') == old_label:
-                    shape['label'] = new_label
-                    changed = True
-            if not changed:
+                seen_paths.add(json_path)
+                self._rewrite_paste_label_in_file(json_path, old_label, new_label)
+
+    @staticmethod
+    def _rewrite_paste_label_in_file(json_path, old_label, new_label):
+        import json
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception as e:
+            from ..core.exception_hook import _write_log
+            _write_log(f"读取标注 JSON 失败 {json_path}: {e}")
+            return
+        if not isinstance(data, dict):
+            return
+        shapes = data.get('shapes')
+        if not isinstance(shapes, list):
+            return
+        changed = False
+        for shape in shapes:
+            if not isinstance(shape, dict):
                 continue
-            try:
-                with open(json_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-            except Exception as e:
-                from ..core.exception_hook import _write_log
-                _write_log(f"写入标注 JSON 失败 {json_path}: {e}")
+            flags = shape.get('flags')
+            if not (isinstance(flags, dict) and flags.get('paste')):
+                continue
+            if shape.get('label') == old_label:
+                shape['label'] = new_label
+                changed = True
+        if not changed:
+            return
+        try:
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            from ..core.exception_hook import _write_log
+            _write_log(f"写入标注 JSON 失败 {json_path}: {e}")
 
     def update_global_labels(self):
         """更新全局标签集合"""

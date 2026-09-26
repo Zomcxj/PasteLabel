@@ -790,17 +790,48 @@ def test_rename_paste_label_updates_list_and_canvas_items():
 
     editor = FakeEditor()
     editor.paste_label_list = PasteList([MutableItem("paste"), MutableItem("logo")])
-    editor.canvas_items = [{"label": "logo"}]
-    editor.canvas_items_dict = {0: [{"label": "logo"}]}
+    # 真实 canvas_items 是 (pixmap, rect, label) 三元组
+    editor.canvas_items = [(None, object(), "logo")]
+    editor.canvas_items_dict = {0: [(None, object(), "logo")]}
     editor.label_color_map = {"logo": "#123"}
     manager = LabelManager(editor)
     manager.data_changed = FakeSignal()
 
     assert manager.rename_paste_label("logo", "badge") is True
     assert editor.paste_label_list.item(1).text() == "badge"
-    assert editor.canvas_items[0]["label"] == "badge"
-    assert editor.canvas_items_dict[0][0]["label"] == "badge"
+    assert editor.canvas_items[0][2] == "badge"
+    assert editor.canvas_items_dict[0][0][2] == "badge"
     assert editor.label_color_map == {"badge": "#123"}
+
+
+def test_rename_paste_label_renames_paste_boxes_only():
+    """磁盘载入的贴图在 detection_boxes_dict 里带 is_paste，必须同步改名；
+    普通检测框（无 is_paste）不能被动。"""
+    class PasteList:
+        def count(self):
+            return 0
+
+        def item(self, i):
+            return None
+
+    editor = FakeEditor()
+    editor.paste_label_list = PasteList()
+    editor.canvas_items = []
+    editor.canvas_items_dict = {}
+    editor.label_color_map = {"logo": "#123"}
+    paste_box = {"label": "logo", "x": 0, "y": 0, "width": 10, "height": 10,
+                 "is_paste": True}
+    det_box = {"label": "logo", "x": 50, "y": 50, "width": 10, "height": 10}
+    editor.detection_boxes = [paste_box, det_box]
+    editor.detection_boxes_dict = {0: [paste_box, det_box]}
+    manager = LabelManager(editor)
+    manager.data_changed = FakeSignal()
+
+    assert manager.rename_paste_label("logo", "badge") is True
+    assert editor.detection_boxes[0]["label"] == "badge"
+    assert editor.detection_boxes[1]["label"] == "logo"
+    assert editor.detection_boxes_dict[0][0]["label"] == "badge"
+    assert editor.detection_boxes_dict[0][1]["label"] == "logo"
 
 
 def test_update_label_list_all_mode_hides_filtered_out_boxes(monkeypatch):
@@ -925,3 +956,101 @@ def test_rename_paste_label_rewrite_disk_updates_flagged_shapes(tmp_path):
     shapes = json.loads(sidecar.read_text(encoding="utf-8"))["shapes"]
     assert shapes[0]["label"] == "badge"
     assert shapes[1]["label"] == "logo"
+
+
+def test_rename_paste_label_rewrite_disk_updates_output_sidecar(tmp_path):
+    """贴图实际保存在输出目录 sidecar，磁盘改名必须覆盖那里。"""
+    import json
+    import os
+    from pastelabel.core.utils import PathUtils
+    img = tmp_path / "q.png"
+    img.write_bytes(b"x")
+    out_dir = PathUtils.get_output_dir(str(img))
+    os.makedirs(out_dir, exist_ok=True)
+    out_sidecar = os.path.join(out_dir, "q.json")
+    with open(out_sidecar, "w", encoding="utf-8") as f:
+        json.dump({"shapes": [
+            {"label": "logo", "points": [[0, 0], [1, 0], [1, 1], [0, 1]],
+             "shape_type": "rectangle", "flags": {"paste": True}},
+            {"label": "cat", "points": [[2, 2], [3, 2], [3, 3], [2, 3]],
+             "shape_type": "rectangle", "flags": {}},
+        ]}, f)
+
+    class PasteList:
+        def count(self): return 0
+        def item(self, i): return None
+
+    editor = FakeEditor()
+    editor.background_images = [str(img)]
+    editor.paste_label_list = PasteList()
+    editor.canvas_items = []
+    editor.canvas_items_dict = {}
+    editor.label_color_map = {}
+    manager = LabelManager(editor)
+    manager.data_changed = FakeSignal()
+
+    assert manager.rename_paste_label("logo", "badge", rewrite_disk=True) is True
+    with open(out_sidecar, encoding="utf-8") as f:
+        shapes = json.load(f)["shapes"]
+    assert shapes[0]["label"] == "badge"
+    assert shapes[1]["label"] == "cat"
+
+
+def test_modify_paste_label_rewrites_disk(tmp_path, monkeypatch):
+    """列表右键改名（modify_paste_label）也要落盘，否则重启后统计回到旧名。"""
+    import json
+    import os
+    from pastelabel.core.utils import PathUtils
+    from pastelabel.engine import label_manager as lm
+    img = tmp_path / "m.png"
+    img.write_bytes(b"x")
+    out_dir = PathUtils.get_output_dir(str(img))
+    os.makedirs(out_dir, exist_ok=True)
+    out_sidecar = os.path.join(out_dir, "m.json")
+    with open(out_sidecar, "w", encoding="utf-8") as f:
+        json.dump({"shapes": [
+            {"label": "logo", "points": [[0, 0], [1, 0], [1, 1], [0, 1]],
+             "shape_type": "rectangle", "flags": {"paste": True}},
+        ]}, f)
+
+    class MutableItem:
+        def __init__(self, text):
+            self._text = text
+
+        def text(self):
+            return self._text
+
+        def setText(self, text):
+            self._text = text
+
+    class PasteList:
+        def __init__(self, selected):
+            self._selected = selected
+
+        def selectedItems(self):
+            return self._selected
+
+        def count(self):
+            return len(self._selected)
+
+        def item(self, i):
+            return self._selected[i]
+
+    item = MutableItem("logo")
+    editor = FakeEditor()
+    editor.background_images = [str(img)]
+    editor.paste_label_list = PasteList([item])
+    editor.canvas_items = [(None, object(), "logo")]
+    editor.canvas_items_dict = {}
+    editor.label_color_map = {}
+    manager = LabelManager(editor)
+    manager.data_changed = FakeSignal()
+    monkeypatch.setattr(lm.dialog_helpers, "get_text", lambda *a, **kw: ("badge", True))
+
+    manager.modify_paste_label()
+
+    assert item.text() == "badge"
+    assert editor.canvas_items[0][2] == "badge"
+    with open(out_sidecar, encoding="utf-8") as f:
+        shapes = json.load(f)["shapes"]
+    assert shapes[0]["label"] == "badge"

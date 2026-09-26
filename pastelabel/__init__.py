@@ -4,6 +4,6 @@
 
 from .ui.main_window import ImageEditor, main
 
-__version__ = "1.4.2"
+__version__ = "1.5.0"
 __author__ = "PasteLabel"
 __all__ = ['ImageEditor', 'main']

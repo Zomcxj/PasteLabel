@@ -247,6 +247,57 @@ def test_malformed_shape_does_not_abort_scan(tmp_path):
     assert results['summary']['scanned_images'] == 2
 
 
+def test_grouped_point_with_string_coords_does_not_abort_scan(tmp_path):
+    """分组关键点坐标是字符串时不能 TypeError 中断扫描。"""
+    from pastelabel.engine.quality_lint import lint_dataset
+    img = _write_image_and_json(tmp_path, "strpt", [
+        {"label": "car", "x": -50, "y": 0, "width": 100, "height": 100,
+         "group_id": 1},
+        {"label": "kp", "shape_type": "point", "points": [["x", "y"]],
+         "x": "x", "y": "y", "width": 0, "height": 0, "group_id": 1},
+    ])
+
+    results = lint_dataset([img])
+
+    assert results['summary']['out_of_bounds'] == 1
+    assert 'error' not in results
+
+
+def test_unhashable_group_id_does_not_abort_scan(tmp_path):
+    """group_id 是 list 时集合构造不能 TypeError 中断扫描。"""
+    from pastelabel.engine.quality_lint import lint_dataset
+    img = _write_image_and_json(tmp_path, "badgid", [
+        {"label": "cat", "x": -50, "y": 0, "width": 100, "height": 100,
+         "group_id": []},
+    ])
+
+    results = lint_dataset([img])
+
+    assert results['summary']['out_of_bounds'] == 1
+    assert 'error' not in results
+
+
+def test_lint_worker_does_not_report_error_for_malformed_group_data(tmp_path):
+    """以上坏数据不能让 worker 报 error=True（UI 会误显示扫描失败）。"""
+    from pastelabel.engine.quality_lint import QualityLintWorker
+    img = _write_image_and_json(tmp_path, "worker_bad", [
+        {"label": "cat", "x": -50, "y": 0, "width": 100, "height": 100,
+         "group_id": []},
+        {"label": "kp", "shape_type": "point", "points": [["x", "y"]],
+         "x": "x", "y": "y", "width": 0, "height": 0, "group_id": 1},
+    ])
+    worker = QualityLintWorker((img,))
+    emitted = []
+    worker.lint_finished = type("S", (), {
+        "emit": staticmethod(lambda payload: emitted.append(payload))})()
+    worker.isInterruptionRequested = lambda: False
+
+    worker.run()
+
+    assert emitted and not emitted[0].get('error')
+    assert emitted[0]['summary']['out_of_bounds'] == 1
+
+
 def test_read_json_shapes_tolerates_non_numeric_size(tmp_path):
     from pastelabel.engine.quality_lint import _read_json_shapes
     img = tmp_path / "weird.png"

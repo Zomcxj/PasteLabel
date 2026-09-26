@@ -112,8 +112,14 @@ def point_warning(point_box, all_boxes):
     if not candidates:
         return "无同组框"
     points = point_box.get("points") or []
-    px = points[0][0] if points else point_box.get("x", 0)
-    py = points[0][1] if points else point_box.get("y", 0)
+    try:
+        if points:
+            px, py = float(points[0][0]), float(points[0][1])
+        else:
+            px, py = float(point_box.get("x", 0)), float(point_box.get("y", 0))
+    except (TypeError, ValueError, IndexError, KeyError):
+        # 坏数据（非数值坐标）：不能中断 lint/列表渲染，按"不在框内"处理
+        return "不在框内"
     for box in candidates:
         if point_in_box(px, py, box):
             return None
@@ -121,14 +127,27 @@ def point_warning(point_box, all_boxes):
 
 
 def point_in_box(x, y, box):
-    """(x, y) 是否落在框内。矩形用 bbox，多边形/旋转框有 points 时用多边形判定。"""
+    """(x, y) 是否落在框内。矩形用 bbox，多边形/旋转框有 points 时用多边形判定。
+
+    坏数据（非数值坐标）返回 False，不能中断整库扫描/列表渲染。
+    """
     if not isinstance(box, dict):
+        return False
+    try:
+        x, y = float(x), float(y)
+    except (TypeError, ValueError):
         return False
     points = box.get("points")
     if points and (box.get("shape_type") or "rectangle") != "rectangle":
-        return point_in_polygon(x, y, points)
-    bx, by = box.get("x", 0), box.get("y", 0)
-    bw, bh = box.get("width", 0), box.get("height", 0)
+        try:
+            return point_in_polygon(x, y, points)
+        except (TypeError, ValueError, IndexError):
+            return False
+    try:
+        bx, by = float(box.get("x", 0)), float(box.get("y", 0))
+        bw, bh = float(box.get("width", 0)), float(box.get("height", 0))
+    except (TypeError, ValueError):
+        return False
     return bx <= x <= bx + bw and by <= y <= by + bh
 
 

@@ -193,9 +193,10 @@ def _group_issues(shapes):
                     'kind': 'group_mismatch', 'label': box.get('label', ''),
                     'box_index': i, 'detail': warning,
                 })
+    # 只收集标量 group_id：坏数据里的 list/dict 不可哈希，会让集合构造 TypeError
     group_ids = {
         b.get('group_id') for _, b in non_points
-        if b.get('group_id') is not None
+        if isinstance(b.get('group_id'), (int, str))
     }
     for gid in group_ids:
         has_point = any(

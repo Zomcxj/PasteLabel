@@ -6,20 +6,48 @@ from pathlib import Path
 
 import pytest
 
-from pastelabel.core import config as config_module
-from pastelabel.core import config_manager
-from pastelabel.ui import i18n
-from pastelabel.ui.main_window import _parse_args
+from labelforge.core import config as config_module
+from labelforge.core import config_manager
+from labelforge.ui import i18n
+from labelforge.ui.main_window import _parse_args
 
 ROOT = Path(__file__).resolve().parents[1]
-SETTINGS_SRC = ROOT / "pastelabel" / "ui" / "settings_dialog.py"
-MAIN_WINDOW_SRC = ROOT / "pastelabel" / "ui" / "main_window.py"
-MAIN_SRC = ROOT / "pastelabel" / "main.py"
+SETTINGS_SRC = ROOT / "labelforge" / "ui" / "settings_dialog.py"
+MAIN_WINDOW_SRC = ROOT / "labelforge" / "ui" / "main_window.py"
+MAIN_SRC = ROOT / "labelforge" / "main.py"
+
+_GUARD = """
+import os, sys
+sys.stdout.flush()
+os._exit(0)
+"""
+
+
+def _run_real_qt(script):
+    """在真 Qt offscreen 子进程里跑脚本：控件几何/文本断言必须走真 Qt。
+
+    进程内的假 PySide6 没有布局与真实几何，`mapTo` 之类的比较没有意义。
+    """
+    import os
+    import subprocess
+
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", PYTHONPATH=str(ROOT))
+    result = subprocess.run(
+        [sys.executable, "-c", script + _GUARD],
+        cwd=ROOT, env=env, text=True, capture_output=True,
+        encoding="utf-8", errors="replace",
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
+
+
+def _lines(out):
+    return [ln.strip() for ln in out.strip().splitlines() if ln.strip()]
 
 
 @pytest.fixture
 def temp_config(tmp_path, monkeypatch):
-    path = tmp_path / "pastelabel.json"
+    path = tmp_path / "labelforge.json"
     monkeypatch.setattr(config_manager, "CONFIG_PATH", str(path))
     yield path
 
@@ -120,14 +148,24 @@ def test_reset_button_uses_the_danger_style():
     assert 'setObjectName("dangerBtn")' in block
 
 
-def test_reset_button_is_placed_at_the_bottom_left_of_the_dialog():
-    """按钮必须在底部按钮行里、且排在保存/取消之前（左下角）。"""
+def test_reset_button_sits_immediately_left_of_save():
+    """「恢复默认设置」必须紧邻「保存」左边（用户要求挪过去）。
+
+    布局：`[版本号] ←stretch→ [恢复默认设置] [保存] [取消]`。
+    顺序断言要同时看「在保存之前」和「中间不夹 stretch」——只看前者的话，
+    把它留在左下角（stretch 之后、保存之前）也会过。
+    """
     source = SETTINGS_SRC.read_text(encoding="utf-8")
     block = source[source.index("btn_layout = QHBoxLayout()"):source.index("layout.addLayout(btn_layout)")]
-    assert "btn_layout.addWidget(self.reset_all_btn)" in block
-    assert block.index("btn_layout.addWidget(self.reset_all_btn)") < block.index('QPushButton(tr("保存"))')
-    # 重置按钮后紧跟 stretch，才会贴左边
-    assert block.index("btn_layout.addWidget(self.reset_all_btn)") < block.index("btn_layout.addStretch()")
+    reset_at = block.index("btn_layout.addWidget(self.reset_all_btn)")
+    save_at = block.index("btn_layout.addWidget(save_btn)")
+    stretch_at = block.index("btn_layout.addStretch()")
+    assert reset_at < save_at, "恢复默认设置要在保存左边"
+    assert stretch_at < reset_at, "stretch 必须在两者之前，否则按钮还在左下角"
+    # 版本号仍在左下角（stretch 之前）
+    assert block.index("left_col.addWidget(self.version_label)") < stretch_at
+    # 它已不再属于「左下角竖列」
+    assert "left_col.addWidget(self.reset_all_btn)" not in block
 
 
 def test_settings_pages_align_their_first_row():
@@ -140,14 +178,14 @@ def test_settings_pages_align_their_first_row():
 
 
 def test_editor_exposes_reset_settings_to_default():
-    from pastelabel.ui.main_window import ImageEditor
+    from labelforge.ui.main_window import ImageEditor
     assert hasattr(ImageEditor, "reset_settings_to_default")
 
 
 def test_reset_settings_to_default_reloads_and_refreshes(temp_config, monkeypatch):
     """reset 后必须重新加载设置并刷新界面，不能只删文件。"""
     source = inspect.getsource(
-        __import__("pastelabel.ui.main_window", fromlist=["ImageEditor"]).ImageEditor.reset_settings_to_default
+        __import__("labelforge.ui.main_window", fromlist=["ImageEditor"]).ImageEditor.reset_settings_to_default
     )
     assert "config_manager.reset_all()" in source
     assert "self._load_settings()" in source
@@ -193,7 +231,7 @@ def test_cli_rejects_unknown_option():
 
 
 def test_main_window_applies_startup_args():
-    from pastelabel.ui.main_window import ImageEditor
+    from labelforge.ui.main_window import ImageEditor
     source = inspect.getsource(ImageEditor.apply_startup_args)
     assert "load_background_folder" in source
     assert "load_background_label_file" in source
@@ -214,7 +252,7 @@ def test_apply_startup_args_ignores_missing_paths():
         def load_background_label_file(self, p):
             self.label_calls.append(p)
 
-    from pastelabel.ui.main_window import ImageEditor
+    from labelforge.ui.main_window import ImageEditor
 
     editor = Editor()
     ImageEditor.apply_startup_args(editor, "Z:/definitely/missing/dir", "Z:/missing.txt")
@@ -242,7 +280,7 @@ def test_apply_startup_args_loads_existing_paths(tmp_path):
         def load_background_label_file(self, p):
             self.label_calls.append(p)
 
-    from pastelabel.ui.main_window import ImageEditor
+    from labelforge.ui.main_window import ImageEditor
 
     editor = Editor()
     ImageEditor.apply_startup_args(editor, str(folder), str(labels))
@@ -261,12 +299,77 @@ def test_main_entry_point_parses_args_before_creating_qapplication():
 
 def test_main_module_still_delegates_to_ui_main():
     source = MAIN_SRC.read_text(encoding="utf-8")
-    assert "from pastelabel.ui.main_window import main" in source
+    assert "from labelforge.ui.main_window import main" in source
 
 
 def test_cli_help_text_is_not_empty():
     import argparse
-    from pastelabel.ui.main_window import _parse_args
+    from labelforge.ui.main_window import _parse_args
     parser_source = inspect.getsource(_parse_args)
     assert "argparse" in parser_source
     assert "--labels" in parser_source
+
+
+# ---------- 版本号展示（左下角）与底部按钮顺序 ----------
+
+def test_real_settings_dialog_shows_version_at_bottom_left():
+    """真实控件：左下角显示 `LabelForge v<版本>`；重置按钮紧邻保存左边。
+
+    不断言具体版本号：那会让每次发版都红一条测试。版本串的正确性由
+    `test_real_settings_dialog_version_tracks_package_constant` 保证
+    （它比对的就是包常量），这里只管「位置与格式」。
+    """
+    out = _run_real_qt("""
+from PySide6.QtWidgets import QApplication
+from labelforge.ui.main_window import ImageEditor
+from labelforge.ui.settings_dialog import SettingsDialog
+from labelforge import __version__
+
+app = QApplication.instance() or QApplication([])
+# 用真 ImageEditor 当宿主：SettingsDialog 的构造会读宿主的快捷方式输入框
+# （prefix_input 等），裸 QWidget 不够。
+window = ImageEditor()
+d = SettingsDialog(window)
+# 必须 show()：不显示时 Qt 不做布局，mapTo 拿到的坐标没有意义。
+d.show()
+app.processEvents()
+label = d.version_label
+# 不比对具体版本号（发版时会变），只比对「格式」与「取自包常量」
+print(label.text().startswith("v"))
+print(label.text() == f"v{__version__}")
+# 版本号贴对话框左边缘（仍在左下角，没被挪走）
+label_tl = label.mapTo(d, label.rect().topLeft())
+print(label_tl.x() <= 12)
+# 「恢复默认设置」紧邻「保存」左边：右边界不超过保存的左边界
+reset_tl = d.reset_all_btn.mapTo(d, d.reset_all_btn.rect().topLeft())
+save_btn = d.findChild(type(d.reset_all_btn), "successBtn")
+save_tl = save_btn.mapTo(d, save_btn.rect().topLeft())
+print(reset_tl.x() + d.reset_all_btn.width() <= save_tl.x())
+# 且确实在保存左边（单独看一眼，防「顺序对了但被 stretch 顶到右边」）
+print(reset_tl.x() < save_tl.x())
+""")
+    lines = _lines(out)
+    assert lines[0] == "True", lines[0]
+    assert lines[1] == "True", lines[1]
+    assert lines[2] == "True", lines[2]
+    assert lines[3] == "True", lines[3]
+    assert lines[4] == "True", lines[4]
+
+
+def test_real_settings_dialog_version_tracks_package_constant():
+    """版本号的唯一来源是 `labelforge.__version__`：改常量即改显示。"""
+    out = _run_real_qt("""
+import labelforge
+from PySide6.QtWidgets import QApplication
+from labelforge.ui import settings_dialog
+
+app = QApplication([])
+original = labelforge.__version__
+try:
+    labelforge.__version__ = '9.9.9-test'
+    d = settings_dialog.SettingsDialog(None)
+    print(d.version_label.text())
+finally:
+    labelforge.__version__ = original
+""")
+    assert _lines(out)[0] == "v9.9.9-test", out

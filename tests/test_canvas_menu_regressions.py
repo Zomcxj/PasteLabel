@@ -1,5 +1,5 @@
 """画布右键菜单回归测试。"""
-from pastelabel.canvas.canvas_menu import CanvasMenuMixin
+from labelforge.canvas.canvas_menu import CanvasMenuMixin
 
 
 class FakeCheckbox:
@@ -161,7 +161,7 @@ def test_collect_dataset_labels_includes_bg_and_global():
 
 def test_draw_label_choices_use_dataset_when_label_list_empty():
     """Annotate draw on empty image must offer dataset labels, not only label_list."""
-    from pastelabel.canvas.canvas_drawing import CanvasDrawingMixin
+    from labelforge.canvas.canvas_drawing import CanvasDrawingMixin
 
     class FakeList:
         def count(self):
@@ -186,9 +186,15 @@ def test_draw_label_choices_use_dataset_when_label_list_empty():
 
 
 def test_canvas_modify_box_label_updates_stats_like_label_manager(monkeypatch):
-    """Canvas '修改标签' must update stats cache same as 标签管理 rename."""
-    from pastelabel.engine.label_manager import LabelManager
-    from pastelabel.ui.main_window import ImageEditor
+    """Canvas「修改标签」只改**右键的那一个框**，统计缓存按 delta=1 修正。
+
+    这条原先断言的是「按标签名全局改名」的旧语义（三个 cat 一起变 kitty、
+    `kitty` 计数 3）。用户明确要求画布右键「我只是改一个」，所以现在是
+    「只改这一个」：当前图那一个 cat 变 kitty，另外两个 cat 保持不动。
+    想整类改名请走背景图标签列表的「修改标签」。
+    """
+    from labelforge.engine.label_manager import LabelManager
+    from labelforge.ui.main_window import ImageEditor
 
     class FakeSignal:
         def emit(self):
@@ -239,11 +245,11 @@ def test_canvas_modify_box_label_updates_stats_like_label_manager(monkeypatch):
             pass
 
     monkeypatch.setattr(
-        "pastelabel.core.config_manager.save_all",
+        "labelforge.core.config_manager.save_all",
         lambda **kwargs: None,
     )
     monkeypatch.setattr(
-        "pastelabel.ui.dialogs.LabelSelectionDialog.select_label",
+        "labelforge.ui.dialogs.LabelSelectionDialog.select_label",
         staticmethod(lambda *a, **k: "kitty"),
     )
     editor = Editor()
@@ -255,9 +261,13 @@ def test_canvas_modify_box_label_updates_stats_like_label_manager(monkeypatch):
     Canvas(editor)._modify_box_label(0)
 
     stats = ImageEditor._collect_bg_stats_for_dialog(editor)
-    assert stats.get("kitty") == 3
-    assert "cat" not in stats or stats.get("cat", 0) == 0
+    # 只有当前图那一个框改了：cat 3 -> 2，新增 kitty 1
+    assert stats.get("kitty") == 1
+    assert stats.get("cat") == 2
     assert stats.get("dog") == 1
+    # 别的图片里的框不能被殃及
+    assert [b.get("label") for b in editor.detection_boxes_dict[1]] == \
+        ["cat", "cat", "dog"]
 
 
 def test_change_box_label_syncs_stats_cache_and_keeps_target_color(monkeypatch):
@@ -271,19 +281,19 @@ def test_change_box_label_syncs_stats_cache_and_keeps_target_color(monkeypatch):
             self.saved.append(index)
 
         def _label_already_exists(self, label):
-            from pastelabel.engine.label_manager import LabelManager
+            from labelforge.engine.label_manager import LabelManager
             return LabelManager._label_already_exists(self, label)
 
         def _apply_rename_color(self, *a, **kw):
-            from pastelabel.engine.label_manager import LabelManager
+            from labelforge.engine.label_manager import LabelManager
             return LabelManager._apply_rename_color(self, *a, **kw)
 
         def _sync_cached_stats_label_rename(self, *a, **kw):
-            from pastelabel.engine.label_manager import LabelManager
+            from labelforge.engine.label_manager import LabelManager
             return LabelManager._sync_cached_stats_label_rename(self, *a, **kw)
 
         def _seed_stats_cache_from_disk_and_memory(self, *a, **kw):
-            from pastelabel.engine.label_manager import LabelManager
+            from labelforge.engine.label_manager import LabelManager
             return LabelManager._seed_stats_cache_from_disk_and_memory(self, *a, **kw)
 
     class Editor:
@@ -324,7 +334,7 @@ def test_change_box_label_syncs_stats_cache_and_keeps_target_color(monkeypatch):
             self.updated = True
 
     monkeypatch.setattr(
-        "pastelabel.core.config_manager.save_all",
+        "labelforge.core.config_manager.save_all",
         lambda **kwargs: None,
     )
     canvas = Canvas()
@@ -343,8 +353,8 @@ def test_change_box_label_syncs_stats_cache_and_keeps_target_color(monkeypatch):
 def test_canvas_change_box_stats_include_unloaded_images(tmp_path, monkeypatch):
     """Canvas single-box change must not drop counts for images only on disk."""
     import json
-    from pastelabel.engine.label_manager import LabelManager
-    from pastelabel.ui.main_window import ImageEditor
+    from labelforge.engine.label_manager import LabelManager
+    from labelforge.ui.main_window import ImageEditor
 
     img0 = tmp_path / "a.png"
     img1 = tmp_path / "b.png"
@@ -416,7 +426,7 @@ def test_canvas_change_box_stats_include_unloaded_images(tmp_path, monkeypatch):
             pass
 
     monkeypatch.setattr(
-        "pastelabel.core.config_manager.save_all",
+        "labelforge.core.config_manager.save_all",
         lambda **kwargs: None,
     )
     editor = Editor()
@@ -472,7 +482,7 @@ def test_delete_current_label_file_removes_json_and_clears_boxes(tmp_path, monke
         def update(self):
             self.updated = True
 
-    from pastelabel.canvas import canvas_menu as cm
+    from labelforge.canvas import canvas_menu as cm
     monkeypatch.setattr(
         cm.dialog_helpers,
         "question",

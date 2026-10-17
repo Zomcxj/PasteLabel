@@ -1,6 +1,6 @@
-# PasteLabel
+# LabelForge
 
-PasteLabel 是一个基于 PyQt5 的图像标注工具，支持**贴图合成**和**多类型标注**（水平框 / 分割多边形 / 关键点 / 旋转框，LabelMe 格式），有效解决样本采集困难的问题。
+LabelForge 是一个基于 PySide6 的图像标注工具，支持**贴图合成**和**多类型标注**（水平框 / 分割多边形 / 关键点 / 旋转框，LabelMe 格式）。
 
 | 界面展示 | 数据处理 |
 |:---:|:---:|
@@ -14,15 +14,21 @@ PasteLabel 是一个基于 PyQt5 的图像标注工具，支持**贴图合成**�
 
 ## 支持平台
 
-**Windows 10+** · **Linux (x86_64)**
+**Windows 10+** · **Linux (x86_64, Ubuntu 20.04+ / glibc 2.31+)**
+
+Linux 发行包需要 glibc 2.31 及以上（Ubuntu 20.04、Debian 11、RHEL 9 或更新），另需系统提供 `libxcb-cursor0`（Ubuntu 20.04 起在 `universe` 源内，`sudo apt install libxcb-cursor0`）。
 
 ## 功能特性
 
 ### 核心标注
 - **贴图合成** — 单张/批量放置贴图，支持随机避让算法放置
-- **语义区域放置** — 在画布上绘制语义区域（矩形/多边形），随机贴图时贴图完整落在区域内，使合成样本符合画面语义
-- **标注质检** — 一键扫描数据集，报告越界框/超小框/重复框/异类重叠/近似名/分组不一致等问题，支持双击跳图、右键忽略、右键删除异类重叠框
-- **多类型标注** — 水平检测框、分割多边形、姿态关键点、旋转框（OBB），LabelMe 格式 JSON 输出，16 色自动分配
+- **语义区域放置** — 在画布上绘制语义区域（矩形），随机贴图时贴图完整落在区域内，使合成样本符合画面语义
+- **标注质检** — 一键扫描数据集，报告越界框/小目标（不可检出、需放大）/重复框/异类重叠/近似名/分组不一致等问题，支持双击跳图、右键忽略、右键删除异类重叠框
+- **模型推理** — 加载 YOLOv5 / YOLOv8 / YOLO11 / YOLO26 ONNX 检测模型，一键推理当前图片或从当前图连续推理到末尾；模型参数行可随时调阈值与输入尺寸（立即生效、无需重新加载），关闭该行即停用推理，结果写入 LabelMe 标注（保留人工标注，整批一次撤销）；输出格式自动识别（含带辅助头的第三方导出），没有类别表的模型会提示手填并记住
+- **推理范围** — 可选全图（默认）/ 滑窗 / 区域：大图按窗口尺寸与重叠切分逐窗推理后合并去重；区域用画布上画好的矩形（只保留框中心落在区域内的结果）；范围不持久化，重启回到全图
+- **视频抽帧** — 选视频按「每秒抽几帧」等比导出图片（显示分辨率/帧率/帧数/时长，帧率上限为源帧率），输出目录固定在视频同级并附映射清单 `video_manifest.json`，可直接当图片数据集加载
+- **图片合成视频** — 把图片序列合成视频；目录里带清单就按清单时长、没有则按你填的每秒几帧。可勾选「叠加标签框」把标注画进画面（可选类别，「类别名」「置信度」两个开关独立），框的颜色/线宽/字号与编辑器一致，没标注的图按原画面写入并汇总提示
+- **多类型标注** — 水平检测框、分割多边形、姿态关键点、旋转框（OBB），LabelMe 格式 JSON 输出，30 色自动分配
 - **分组标注** — 关键点等形状可分配 `group_id`，标签列表显示 `label [分组号]`，支持按任务 / 按分组筛选
 - **贴图/标注模式切换** — 切换鼠标交互优先级（悬停高亮 + 点击优先级反转）
 - **标签管理** — 全局标签列表，支持增删改，级联更新所有图片 JSON
@@ -37,7 +43,7 @@ PasteLabel 是一个基于 PyQt5 的图像标注工具，支持**贴图合成**�
 - **自动保存** — 切图时静默保存合成图 + JSON
 
 ### 编辑能力
-- **网格辅助线** — 可调间距/线宽/透明度，深色主题下自动适配
+- **网格辅助线** — 可调线宽/透明度，深色主题下自动适配
 - **背景缩放** — 滚轮缩放（0.5x ~ 3.0x），Ctrl+F 适应视图
 - **标注十字线** — 标注模式下背景图显示后出现，可调粗细、透明度与颜色
 - **右键菜单** — 画布/贴图/检测框各有独立右键操作
@@ -57,11 +63,11 @@ PasteLabel 是一个基于 PyQt5 的图像标注工具，支持**贴图合成**�
 - **中英文切换** — 全界面 + 弹窗按钮同步本地化
 - **快捷键自定义** — 设置中列出的动作和缓存槽快捷键可修改
 - **一键恢复默认设置** — 设置窗口左下角可一键清除全部自定义配置并还原出厂默认
-- **命令行启动** — 支持 `PasteLabel.exe [目录] [--labels 文件]` 直接打开指定目录并导入标签
+- **命令行启动** — 支持 `LabelForge.exe [目录] [--labels 文件]` 直接打开指定目录并导入标签
 - **标签统计** — 背景图标签与贴图标签合并到同一窗口，用标签页切换（左侧）；贴图统计覆盖整个数据集（磁盘已保存 + 当前会话）；支持颜色替换，颜色按钮显示当前 HTML色值
 - **数据集健康** — 标签统计弹窗右侧内嵌诊断区，展示类别分布 / 尺寸直方图 / 长宽比分布 / IoU 重叠分布，并自动给出「该多合成哪类」的文字建议；4 个面板可拖拽交换位置、可拉伸调整大小
 - **独立滚轮缩放步长** — 检测框缩放步长只控制检测框滚轮缩放，贴图缩放步长只控制贴图滚轮缩放
-- **全局异常捕获** — 未处理异常和 Qt 消息自动写入 `~/pastelabel.log`（与 `~/.pastelabel.json` 同目录）
+- **全局异常捕获** — 未处理异常和 Qt 消息自动写入 `~/labelforge.log`（与 `~/.labelforge.json` 同目录）
 
 ---
 
@@ -83,6 +89,11 @@ PasteLabel 是一个基于 PyQt5 的图像标注工具，支持**贴图合成**�
 pip install -r requirements.txt
 ```
 
+`requirements.txt` 含 `onnxruntime`（CPU）。需要 GPU 推理时用 `onnxruntime-gpu` 替换该行，
+并确保 CUDA/cuDNN 版本匹配；两个包都导入为 `onnxruntime`，不要同时安装。
+
+视频编解码依赖默认使用 `opencv-python-headless`。它与 `opencv-python`、contrib 版本共用 `cv2` 命名空间，同一环境只安装一种；已有可用官方 OpenCV 的环境可直接复用，安装依赖前应避免再装另一种发行包。
+
 Windows 深色标题栏依赖 `ffi.dll`。使用 `conda` 环境时，该文件通常在：
 
 ```text
@@ -92,7 +103,7 @@ Windows 深色标题栏依赖 `ffi.dll`。使用 `conda` 环境时，该文件�
 ### 运行
 
 ```bash
-python pastelabel/main.py
+python labelforge/main.py
 ```
 
 ## 文档导航
@@ -109,15 +120,23 @@ python pastelabel/main.py
 bash build.sh
 ```
 
-自动检测平台，调用 PyInstaller 打包为单文件 exe，输出 `dist/PasteLabel.exe`。Windows 下自动处理 ffi.dll 依赖。
+自动检测平台，调用 PyInstaller 打包为单文件 exe，输出 `dist/LabelForge.exe`。Windows 下自动处理 ffi.dll 依赖。
+
+构建脚本默认取 PATH 里的 `python`。打包前会自检 `cv2` / `PySide6` / `numpy` / `onnxruntime` 四项依赖，缺哪个就直接失败并打印当前解释器路径。用别的解释器构建请显式指定：
+
+```bash
+PYTHON=/path/to/python bash build.sh
+```
+
+Windows 上还会统一包内的 MSVC 运行库版本：Qt（PySide6）与 onnxruntime 各自带着一份版本不同的 `msvcp140.dll` / `vcruntime140*.dll`，版本不一致会让 ONNX Runtime 在初始化时崩溃。构建脚本按文件取所有候选里版本最新的那一份替换（见 `labelforge/build_support.py`），Linux 上该步骤为空操作。
 
 ### 使用 spec 文件（手动）
 
 ```bash
-pyinstaller pastelabel/PasteLabel.spec
+pyinstaller labelforge/LabelForge.spec
 ```
 
-输出 `dist/PasteLabel.exe`。需确保已安装全部依赖并手动处理 ffi.dll。
+输出 `dist/LabelForge.exe`。需确保已安装全部依赖并手动处理 ffi.dll。
 
 ---
 
@@ -130,8 +149,8 @@ pytest tests/ -v
 
 ## 许可证
 
-MIT License
+本项目采用 [GNU Lesser General Public License v3.0](./LICENSE)（`LGPL-3.0-only`）。
 
 Copyright (c) 2026 Zomcxj
 
-参考项目：[X-AnyLabeling](https://github.com/CVHub520/X-AnyLabeling)
+本项目通过 PySide6 使用 Qt，Qt 按 LGPL-3.0 授权；第三方组件清单与 Qt 源码获取方式见 [THIRD-PARTY.md](./THIRD-PARTY.md)。

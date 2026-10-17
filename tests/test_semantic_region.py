@@ -3,19 +3,20 @@
 覆盖区域绘制、拖动/缩放、固定锁定、删除与命中，以及贴图引擎的
 区域中心采样（_sample_center_in_regions / random_paste_images）。
 
-conftest 已 mock 整个 PyQt5，故此处通过假对象（duck typing）直接
+conftest 已 mock 整个 PySide6，故此处通过假对象（duck typing）直接
 调用真实 mixin 逻辑，不实例化真实 Qt 控件。
 """
 import random
 
 import pytest
 
-from pastelabel.canvas.canvas_interaction import CanvasInteractionMixin
-from pastelabel.canvas.canvas_menu import CanvasMenuMixin
-from pastelabel.engine.shape_io import point_in_polygon
-from pastelabel.engine.paste_engine import PasteEngineMixin
-from pastelabel.engine import paste_engine as paste_engine_module
-from pastelabel.core.config import REGION_CONFIG
+from labelforge.canvas.canvas_interaction import CanvasInteractionMixin
+from labelforge.canvas.canvas_renderer import CanvasRendererMixin
+from labelforge.canvas.canvas_menu import CanvasMenuMixin
+from labelforge.engine.shape_io import point_in_polygon
+from labelforge.engine.paste_engine import PasteEngineMixin
+from labelforge.engine import paste_engine as paste_engine_module
+from labelforge.core.config import REGION_CONFIG
 
 
 class Point:
@@ -93,19 +94,79 @@ class Editor:
         self.current_background_index = 0
         self.detection_boxes = []
         self.detection_boxes_dict = {}
-        self.region_boxes = []
-        self.region_fixed = False
+        # 第 10 轮把区域拆成两份：标注模式看 `region_boxes`（推理范围），
+        # 贴图模式看 `paste_region_boxes`（贴图落点）。假 Editor 用一个
+        # `region_boxes` 属性把两者统一起来（见下），测试里 `e.region_boxes`
+        # 始终表示「当前模式下那份区域」，不必每处都判模式。
+        self._inference_regions = []
+        self._paste_regions = []
+        self._inference_fixed = False
+        self._paste_fixed = False
+        self._scope_panel_open = False
         self.selected_item = None
+
+    @property
+    def region_fixed(self):
+        """当前模式那份区域的固定开关（测试统一入口，与 `region_boxes` 配套）。"""
+        return (self._paste_fixed if self.edit_mode == 'paste'
+                else self._inference_fixed)
+
+    @region_fixed.setter
+    def region_fixed(self, value):
+        if self.edit_mode == 'paste':
+            self._paste_fixed = bool(value)
+        else:
+            self._inference_fixed = bool(value)
+
+    @property
+    def paste_region_fixed(self):
+        return self._paste_fixed
+
+    @paste_region_fixed.setter
+    def paste_region_fixed(self, value):
+        self._paste_fixed = bool(value)
+
+    @property
+    def region_boxes(self):
+        """当前模式那份区域（测试统一入口）。"""
+        return (self._paste_regions if self.edit_mode == 'paste'
+                else self._inference_regions)
+
+    @region_boxes.setter
+    def region_boxes(self, value):
+        if self.edit_mode == 'paste':
+            self._paste_regions = list(value or [])
+        else:
+            self._inference_regions = list(value or [])
+
+    @property
+    def paste_region_boxes(self):
+        return self._paste_regions
+
+    @paste_region_boxes.setter
+    def paste_region_boxes(self, value):
+        self._paste_regions = list(value or [])
 
     def save_undo_state(self):
         pass
 
 
 class Canvas(CanvasInteractionMixin):
-    def __init__(self, regions=None, fixed=False):
+    def __init__(self, regions=None, fixed=False, mode='paste'):
         self._editor = Editor()
-        self._editor.region_boxes = list(regions) if regions else []
-        self._editor.region_fixed = fixed
+        self._editor.edit_mode = mode
+        # `regions=` 落到**当前模式**那份上：贴图模式给 `paste_region_boxes`，
+        # 标注模式给 `region_boxes`。测试因此不必关心"两份"这件事，它表达的
+        # 始终是「我这个模式下有哪些区域」。
+        if mode == 'paste':
+            self._editor.paste_region_boxes = list(regions) if regions else []
+            self._editor.paste_region_fixed = fixed
+        else:
+            self._editor.region_boxes = list(regions) if regions else []
+            self._editor.region_fixed = fixed
+        # 面板开着才允许编辑区域。第 11 轮去掉贴图区域面板后，贴图模式
+        # 恒允许编辑（右键就是它的入口），标注模式仍要求范围面板开着。
+        self._editor._scope_panel_open = True
         self.background_scale = 1
         self.mouse_pos = None
         self.draw_start_pos = None
@@ -223,7 +284,10 @@ class Engine(PasteEngineMixin):
         self.paste_count_spin = Spin(5)
         self.min_size_spin = Spin(30)
         self.max_size_spin = Spin(60)
-        self.region_boxes = list(regions) if regions else []
+        # 第 10 轮起贴图落点看的是**贴图那份**区域（`paste_region_boxes`），
+        # 不再是推理那份。测试里的 `regions=` 表达的就是「贴图区域」。
+        self.paste_region_boxes = list(regions) if regions else []
+        self.region_boxes = []
         self.canvas = CanvasUpdate()
         self._paste_labels = []
 
@@ -243,8 +307,12 @@ def _sample(regions, new_w=40, new_h=40, bg_w=400, bg_h=300, rng=None):
 
 
 def test_config_constants():
+    from labelforge.core.config import DETECTION_BOX_CONFIG
+
     assert REGION_CONFIG['min_size'] == 10
-    assert REGION_CONFIG['handle_size'] == 8
+    # 第 12 轮：区域句柄 = 检测框 + 1（用户要求），所以跟着检测框走，
+    # 不再写死数字——否则改检测框时这里会骗人。
+    assert REGION_CONFIG['handle_size'] == DETECTION_BOX_CONFIG['resize_handle_size'] + 1
 
 
 def test_sample_center_single_region_500_all_inside():
@@ -536,8 +604,8 @@ def test_wheel_region_can_fill_background():
 
 def test_wheel_scales_selected_box_not_region_in_annotate_mode():
     """回归：标注模式下悬停区域不得吞掉滚轮，选中的检测框仍要缩放。"""
-    canvas = Canvas(regions=[{'x': 100.0, 'y': 100.0, 'width': 100.0, 'height': 100.0}])
-    canvas._editor.edit_mode = 'annotate'
+    canvas = Canvas(regions=[{'x': 100.0, 'y': 100.0, 'width': 100.0, 'height': 100.0}],
+                    mode='annotate')
     canvas._editor.detection_boxes = [
         {'label': 'cat', 'x': 120.0, 'y': 120.0, 'width': 60.0, 'height': 60.0},
     ]
@@ -587,6 +655,57 @@ def test_is_paste_mode():
     assert canvas._is_paste_mode() is False
     canvas._editor.edit_mode = 'paste'
     canvas._editor._is_delete_view = True
+    assert canvas._is_paste_mode() is False
+
+
+class RegionCanvas(CanvasInteractionMixin, CanvasRendererMixin):
+    """同时带交互与渲染 mixin：`_show_regions` 定义在渲染 mixin 上。"""
+
+    def __init__(self, regions=None, fixed=False):
+        Canvas.__init__(self, regions=regions, fixed=fixed)
+        self._editor.edit_mode = 'paste'
+        self._editor._is_delete_view = False
+
+
+def test_show_regions_follows_paste_mode_by_default():
+    """默认只在贴图模式画区域轮廓（不设范围时行为不变）。"""
+    canvas = RegionCanvas()
+    assert canvas._show_regions() is True
+    canvas._editor.edit_mode = 'annotate'
+    assert canvas._show_regions() is False
+
+
+def test_show_regions_in_annotate_mode_when_scope_uses_roi():
+    """推理范围选了区域时，标注模式也画区域轮廓。
+
+    否则用户看不到范围，不知道框为什么只出现在某块地方。编辑仍只在
+    贴图模式：`_is_paste_mode()` 保持 False，贴图交互不受影响。
+    """
+    canvas = RegionCanvas()
+    canvas._editor.edit_mode = 'annotate'
+    canvas._editor._show_scope_regions = True
+
+    assert canvas._show_regions() is True
+    assert canvas._is_paste_mode() is False, "编辑权限不能被放宽"
+
+
+def test_show_regions_stays_off_without_scope_flag():
+    """没设范围标志时不显示（默认属性缺失也不能崩）。"""
+    canvas = RegionCanvas()
+    canvas._editor.edit_mode = 'annotate'
+
+    assert canvas._show_regions() is False
+    assert getattr(canvas._editor, '_show_scope_regions', False) is False
+
+
+def test_show_regions_ignores_delete_view():
+    """删除视图下 `_is_paste_mode()` 为假，但范围显示按自己的判断走。"""
+    canvas = RegionCanvas()
+    canvas._editor.edit_mode = 'annotate'
+    canvas._editor._is_delete_view = True
+    canvas._editor._show_scope_regions = True
+
+    assert canvas._show_regions() is True
     assert canvas._is_paste_mode() is False
 
 # ==================== 多边形区域 ====================
@@ -915,7 +1034,7 @@ def test_sample_center_all_regions_too_small_returns_none():
 def test_temp_region_box_rendered_during_drag():
     """矩形区域拖动时必须实时渲染预览（回归：曾漏 _draw_temp_region_box 分支）。"""
     import inspect
-    from pastelabel.canvas.canvas_renderer import CanvasRendererMixin
+    from labelforge.canvas.canvas_renderer import CanvasRendererMixin
 
     source = inspect.getsource(CanvasRendererMixin._draw_temp_region_box)
     assert "temp_draw_box" in source
@@ -926,7 +1045,7 @@ def test_temp_region_box_rendered_during_drag():
 def test_paint_scene_dispatches_region_rect_preview():
     """paintEvent 必须在 is_drawing_region 时调用 _draw_temp_region_box。"""
     import inspect
-    from pastelabel.canvas.canvas_renderer import CanvasRendererMixin
+    from labelforge.canvas.canvas_renderer import CanvasRendererMixin
     source = inspect.getsource(CanvasRendererMixin._paint_scene)
     assert "is_drawing_region" in source
     assert "_draw_temp_region_box" in source
